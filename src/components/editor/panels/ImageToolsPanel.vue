@@ -6,7 +6,7 @@ import { removeBackground } from '../../../services/backgroundRemovalApi'
 import { upscaleImage } from '../../../services/upscaleApi'
 import { useApiConfigStore } from '../../../stores/apiConfig'
 
-const emit = defineEmits<{ (e: 'insert', url: string) }>()
+const emit = defineEmits<{ (e: 'insert', url: string): void }>()
 const apiConfigStore = useApiConfigStore()
 
 const fileInput = ref<HTMLInputElement>()

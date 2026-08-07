@@ -1,5 +1,5 @@
 <script setup lang="ts">
-const emit = defineEmits<{ (e: 'pick', color: string) }>()
+const emit = defineEmits<{ (e: 'pick', color: string): void }>()
 
 const COLORS = [
   '#ffffff', '#f5f5f5', '#fef3c7', '#fde68a', '#fecaca', '#fca5a5',

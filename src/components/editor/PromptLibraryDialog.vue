@@ -4,7 +4,7 @@ import { ElMessage } from 'element-plus'
 import { PROMPT_LIBRARY } from '../../data/promptLibrary'
 
 const props = defineProps<{ modelValue: boolean }>()
-const emit = defineEmits<{ (e: 'update:modelValue', v: boolean); (e: 'use', text: string) }>()
+const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void; (e: 'use', text: string): void }>()
 
 const activeCategory = ref(PROMPT_LIBRARY[0].category)
 

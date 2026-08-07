@@ -4,7 +4,7 @@ import { translateText } from '../../../../services/translateApi'
 import { useApiConfigStore } from '../../../../stores/apiConfig'
 
 const props = defineProps<{ selectedText: string | null }>()
-const emit = defineEmits<{ (e: 'insert', text: string); (e: 'replace-selected', text: string) }>()
+const emit = defineEmits<{ (e: 'insert', text: string): void; (e: 'replace-selected', text: string): void }>()
 const apiConfigStore = useApiConfigStore()
 
 const LANGS = ['英语', '日语', '韩语', '法语', '德语', '中文']

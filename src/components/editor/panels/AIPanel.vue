@@ -7,9 +7,9 @@ import AIVideoTab from './ai/AIVideoTab.vue'
 
 defineProps<{ selectedText: string | null }>()
 const emit = defineEmits<{
-  (e: 'insert-image', url: string)
-  (e: 'insert-text', text: string)
-  (e: 'replace-selected-text', text: string)
+  (e: 'insert-image', url: string): void
+  (e: 'insert-text', text: string): void
+  (e: 'replace-selected-text', text: string): void
 }>()
 
 type TabKey = 'image' | 'write' | 'translate' | 'video'

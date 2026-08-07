@@ -5,7 +5,7 @@ import { useGenerationStore, STYLE_PRESETS } from '../../../../stores/generation
 import { useApiConfigStore } from '../../../../stores/apiConfig'
 import PromptLibraryDialog from '../../PromptLibraryDialog.vue'
 
-const emit = defineEmits<{ (e: 'insert', url: string) }>()
+const emit = defineEmits<{ (e: 'insert', url: string): void }>()
 const store = useGenerationStore()
 const apiConfigStore = useApiConfigStore()
 const promptLibraryOpen = ref(false)

@@ -4,9 +4,9 @@ import type { SelectionInfo } from './CanvasStage.vue'
 
 const props = defineProps<{ selection: SelectionInfo }>()
 const emit = defineEmits<{
-  (e: 'text-prop', prop: 'fontSize' | 'fill' | 'fontWeight' | 'textAlign', value: string | number)
-  (e: 'replace-image')
-  (e: 'delete')
+  (e: 'text-prop', prop: 'fontSize' | 'fill' | 'fontWeight' | 'textAlign', value: string | number): void
+  (e: 'replace-image'): void
+  (e: 'delete'): void
 }>()
 
 const TEXT_COLORS = ['#1f2937', '#dc2626', '#ea580c', '#16a34a', '#2563eb', '#7c3aed', '#ffffff']

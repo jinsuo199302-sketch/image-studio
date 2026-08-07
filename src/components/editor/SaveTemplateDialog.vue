@@ -6,7 +6,7 @@ import { useTemplateStore } from '../../stores/templates'
 import type CanvasStage from './CanvasStage.vue'
 
 const props = defineProps<{ modelValue: boolean; stage: InstanceType<typeof CanvasStage> | undefined }>()
-const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void; (e: 'saved', id: string) }>()
+const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void; (e: 'saved', id: string): void }>()
 
 const templateStore = useTemplateStore()
 const saving = ref(false)

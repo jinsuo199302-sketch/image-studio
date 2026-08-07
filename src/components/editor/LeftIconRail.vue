@@ -4,7 +4,7 @@ import { Files, Picture, Collection, Brush, MagicStick, Upload, Grid, EditPen } 
 export type RailKey = 'template' | 'image' | 'material' | 'background' | 'shape' | 'upload' | 'ai'
 
 const props = defineProps<{ active: RailKey }>()
-const emit = defineEmits<{ (e: 'select', key: RailKey); (e: 'add-text') }>()
+const emit = defineEmits<{ (e: 'select', key: RailKey): void; (e: 'add-text'): void }>()
 
 const ITEMS: { key: RailKey; label: string; icon: any; ready: boolean }[] = [
   { key: 'template', label: '模板', icon: Files, ready: true },

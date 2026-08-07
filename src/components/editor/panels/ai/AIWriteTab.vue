@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { generateCopy, TYPE_LABEL, type CopyType } from '../../../../services/writingApi'
 import { useApiConfigStore } from '../../../../stores/apiConfig'
 
-const emit = defineEmits<{ (e: 'insert', text: string) }>()
+const emit = defineEmits<{ (e: 'insert', text: string): void }>()
 const apiConfigStore = useApiConfigStore()
 
 const topic = ref('')

@@ -5,7 +5,7 @@ import { CATEGORIES } from '../../../data/templates'
 import { useTemplateStore } from '../../../stores/templates'
 
 const props = defineProps<{ activeId: string }>()
-const emit = defineEmits<{ (e: 'switch', id: string) }>()
+const emit = defineEmits<{ (e: 'switch', id: string): void }>()
 
 const templateStore = useTemplateStore()
 const keyword = ref('')

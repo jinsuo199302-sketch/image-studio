@@ -2,7 +2,7 @@
 import { reactive, watch } from 'vue'
 
 const props = defineProps<{ modelValue: boolean; width: number; height: number }>()
-const emit = defineEmits<{ (e: 'update:modelValue', v: boolean); (e: 'resize', width: number, height: number) }>()
+const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void; (e: 'resize', width: number, height: number): void }>()
 
 const PRESETS = [
   { label: '正方形 1:1', w: 800, h: 800 },

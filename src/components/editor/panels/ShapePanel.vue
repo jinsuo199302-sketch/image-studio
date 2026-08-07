@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import QRCode from 'qrcode'
 import { ElMessage } from 'element-plus'
 
-const emit = defineEmits<{ (e: 'add', color: string); (e: 'add-image', url: string) }>()
+const emit = defineEmits<{ (e: 'add', color: string): void; (e: 'add-image', url: string): void }>()
 
 const SWATCHES = ['#1f2937', '#dc2626', '#ea580c', '#16a34a', '#2563eb', '#7c3aed']
 

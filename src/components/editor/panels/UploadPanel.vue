@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import { UploadFilled } from '@element-plus/icons-vue'
 
-const emit = defineEmits<{ (e: 'add', dataUrl: string) }>()
+const emit = defineEmits<{ (e: 'add', dataUrl: string): void }>()
 const fileInput = ref<HTMLInputElement>()
 const recent = ref<string[]>([])
 
