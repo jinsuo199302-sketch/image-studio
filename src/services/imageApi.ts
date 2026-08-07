@@ -48,7 +48,7 @@ async function realGenerate(config: ApiConfig, params: GenerationParams): Promis
       Authorization: `Bearer ${config.apiKey}`,
     },
     body: JSON.stringify({
-      model: 'gpt-image-1',
+      model: 'GPT-image-2',
       prompt: params.prompt,
       n: params.batchSize,
       size: sizeFromAspectRatio(params.aspectRatio),
