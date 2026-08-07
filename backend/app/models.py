@@ -1,0 +1,20 @@
+from datetime import datetime
+
+from sqlalchemy import Column, DateTime, Integer, JSON, String, Text
+
+from app.database import Base
+
+
+class Template(Base):
+    __tablename__ = "templates"
+
+    id = Column(String, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    category = Column(String, nullable=False, index=True)
+    canvas_width = Column(Integer, nullable=False)
+    canvas_height = Column(Integer, nullable=False)
+    background = Column(String, nullable=False, default="#ffffff")
+    thumbnail = Column(Text, nullable=False)
+    elements = Column(JSON, nullable=False)
+    is_official = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
