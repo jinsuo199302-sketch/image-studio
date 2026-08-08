@@ -7,21 +7,55 @@ const emit = defineEmits<{ (e: 'add', color: string): void; (e: 'add-image', url
 
 const SWATCHES = ['#1f2937', '#dc2626', '#ea580c', '#16a34a', '#2563eb', '#7c3aed']
 
+type QrMode = 'text' | 'card'
+const qrMode = ref<QrMode>('text')
 const qrText = ref('')
 const qrColor = ref('#1f2937')
 const generating = ref(false)
 
+const cardName = ref('')
+const cardPhone = ref('')
+const cardOrg = ref('')
+const cardAddress = ref('')
+
+/** 微信扫一扫不支持直接展示纯文本内容（会提示"暂不支持展示文本内容"），
+ * 但支持识别 vCard 电子名片格式，扫完能弹出"保存到通讯录"。 */
+function buildVCard(): string {
+  const name = cardName.value.trim()
+  const lines = [
+    'BEGIN:VCARD',
+    'VERSION:3.0',
+    `N:;${name};;;`,
+    `FN:${name}`,
+  ]
+  if (cardOrg.value.trim()) lines.push(`ORG:${cardOrg.value.trim()}`)
+  if (cardPhone.value.trim()) lines.push(`TEL;TYPE=CELL:${cardPhone.value.trim()}`)
+  if (cardAddress.value.trim()) lines.push(`ADR;TYPE=WORK:;;${cardAddress.value.trim()};;;;`)
+  lines.push('END:VCARD')
+  return lines.join('\n')
+}
+
 async function generateQrcode() {
-  const text = qrText.value.trim()
-  if (!text) {
-    ElMessage.warning('请输入链接或文本内容')
-    return
+  let content = ''
+  if (qrMode.value === 'text') {
+    content = qrText.value.trim()
+    if (!content) {
+      ElMessage.warning('请输入链接或文本内容')
+      return
+    }
+  } else {
+    if (!cardName.value.trim() || !cardPhone.value.trim()) {
+      ElMessage.warning('请至少填写姓名和电话')
+      return
+    }
+    content = buildVCard()
   }
   generating.value = true
   try {
-    const dataUrl = await QRCode.toDataURL(text, {
+    const dataUrl = await QRCode.toDataURL(content, {
       width: 400,
-      margin: 1,
+      margin: 4,
+      errorCorrectionLevel: 'M',
       color: { dark: qrColor.value, light: '#ffffff' },
     })
     emit('add-image', dataUrl)
@@ -50,12 +84,45 @@ async function generateQrcode() {
 
     <div class="mt-5 border-t border-gray-100 pt-4">
       <p class="mb-2 text-xs font-medium text-gray-600">二维码生成</p>
-      <el-input
-        v-model="qrText"
-        type="textarea"
-        :rows="2"
-        placeholder="输入网址或文字内容，生成后可直接拖拽调整大小"
-      />
+
+      <div class="mb-2 flex gap-1.5">
+        <button
+          class="rounded-full border px-2.5 py-0.5 text-[11px] transition"
+          :class="qrMode === 'text' ? 'border-violet-500 bg-violet-50 text-violet-600' : 'border-gray-200 text-gray-500'"
+          @click="qrMode = 'text'"
+        >
+          网址 / 文本
+        </button>
+        <button
+          class="rounded-full border px-2.5 py-0.5 text-[11px] transition"
+          :class="qrMode === 'card' ? 'border-violet-500 bg-violet-50 text-violet-600' : 'border-gray-200 text-gray-500'"
+          @click="qrMode = 'card'"
+        >
+          名片（电话/地址）
+        </button>
+      </div>
+
+      <template v-if="qrMode === 'text'">
+        <el-input
+          v-model="qrText"
+          type="textarea"
+          :rows="2"
+          placeholder="输入网址或文字内容，生成后可直接拖拽调整大小"
+        />
+        <p class="mt-1 text-[11px] text-amber-600">
+          提示：微信扫一扫不支持展示纯文本内容，只有网址链接能正常跳转；电话/地址请用上面的"名片"模式。
+        </p>
+      </template>
+      <template v-else>
+        <div class="space-y-1.5">
+          <el-input v-model="cardName" placeholder="姓名（必填）" size="small" />
+          <el-input v-model="cardPhone" placeholder="电话（必填）" size="small" />
+          <el-input v-model="cardOrg" placeholder="公司 / 门店名（选填）" size="small" />
+          <el-input v-model="cardAddress" placeholder="地址（选填）" size="small" />
+        </div>
+        <p class="mt-1 text-[11px] text-gray-400">生成后用微信扫一扫，会提示"保存到通讯录"</p>
+      </template>
+
       <div class="mt-2 flex items-center gap-2">
         <span class="text-xs text-gray-500">颜色</span>
         <input v-model="qrColor" type="color" class="h-6 w-8 cursor-pointer rounded border border-gray-200" />
