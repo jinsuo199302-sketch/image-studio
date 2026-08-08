@@ -43,6 +43,16 @@ function klingCompatBase(baseUrl: string): string {
   }
 }
 
+/** 安全解析响应体：不是合法 JSON 时把状态码 + 原始内容片段带进报错里，方便定位问题 */
+async function parseJsonOrThrow(res: Response, label: string): Promise<any> {
+  const text = await res.text()
+  try {
+    return JSON.parse(text)
+  } catch {
+    throw new Error(`${label}：${res.status} 返回内容不是 JSON，前 200 字符：${text.slice(0, 200)}`)
+  }
+}
+
 /**
  * 按异步任务模式实现（提交任务 -> 轮询状态 -> 取回内容），字段名是按常见
  * 视频生成接口格式的推测，未经真实联调验证——如果调用报错，把报错信息
@@ -65,23 +75,23 @@ async function realGenerate(config: ApiConfig, params: VideoParams): Promise<str
       size: ratioToSize(params.ratio),
     }),
   })
+  const task = await parseJsonOrThrow(submitRes, '视频生成接口请求失败')
   if (!submitRes.ok) {
-    throw new Error(`视频生成接口请求失败：${submitRes.status} ${await submitRes.text()}`)
+    throw new Error(`视频生成接口请求失败：${submitRes.status} ${JSON.stringify(task)}`)
   }
-  const task = await submitRes.json()
   const taskId = task.id
 
   for (let i = 0; i < 60; i++) {
     await delay(3000)
     const statusRes = await fetch(`${base}/videos/${taskId}`, { headers })
+    const statusData = await parseJsonOrThrow(statusRes, '视频任务状态查询失败')
     if (!statusRes.ok) {
-      throw new Error(`视频任务状态查询失败：${statusRes.status} ${await statusRes.text()}`)
+      throw new Error(`视频任务状态查询失败：${statusRes.status} ${JSON.stringify(statusData)}`)
     }
-    const statusData = await statusRes.json()
     if (statusData.status === 'completed') {
       const contentRes = await fetch(`${base}/videos/${taskId}/content`, { headers })
       if (!contentRes.ok) {
-        throw new Error(`视频内容下载失败：${contentRes.status}`)
+        throw new Error(`视频内容下载失败：${contentRes.status} ${await contentRes.text()}`)
       }
       const blob = await contentRes.blob()
       return URL.createObjectURL(blob)
