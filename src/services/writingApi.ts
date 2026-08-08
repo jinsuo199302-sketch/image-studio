@@ -49,7 +49,7 @@ async function realGenerate(config: ApiConfig, params: WritingParams): Promise<s
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` },
     body: JSON.stringify({
-      model: 'gpt-4o-mini',
+      model: 'gemini-3-flash-preview',
       messages: [
         {
           role: 'user',

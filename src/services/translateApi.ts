@@ -37,7 +37,7 @@ async function realTranslate(config: ApiConfig, params: TranslateParams): Promis
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` },
     body: JSON.stringify({
-      model: 'gpt-4o-mini',
+      model: 'gemini-3-flash-preview',
       messages: [{ role: 'user', content: `将以下内容翻译成${params.targetLang}，只返回译文，不要任何多余说明：\n${params.text}` }],
     }),
   })

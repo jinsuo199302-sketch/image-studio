@@ -45,7 +45,7 @@ async function realGenerate(config: ApiConfig, params: VideoParams): Promise<str
     method: 'POST',
     headers,
     body: JSON.stringify({
-      model: 'sora-2',
+      model: 'kling-3.0-turbo',
       prompt: params.prompt,
       seconds: String(params.duration),
       size: ratioToSize(params.ratio),
