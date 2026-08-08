@@ -31,17 +31,31 @@ function ratioToSize(ratio: VideoParams['ratio']): string {
 }
 
 /**
- * 按 OpenAI Sora 风格的异步任务模式实现（提交任务 -> 轮询状态 -> 取回内容），
- * 模型名 'sora-2' 和字段名都是按官方文档格式的推测，未经真实联调验证——
- * 如果调用报错（比如模型名不对/字段名不对），把报错信息发给我，按实际接口调整。
+ * kling-3.0-turbo 是可灵专属模型，openlux 要求走 /kling-compat/v1/videos/*
+ * 这个独立路径（不能走通用的 /v1/videos），所以这里用 origin 重新拼接，
+ * 不能直接在 config.baseUrl 后面追加。
+ */
+function klingCompatBase(baseUrl: string): string {
+  try {
+    return `${new URL(baseUrl).origin}/kling-compat/v1`
+  } catch {
+    return baseUrl.replace(/\/v1\/?$/, '') + '/kling-compat/v1'
+  }
+}
+
+/**
+ * 按异步任务模式实现（提交任务 -> 轮询状态 -> 取回内容），字段名是按常见
+ * 视频生成接口格式的推测，未经真实联调验证——如果调用报错，把报错信息
+ * 发给我，按实际接口调整。
  */
 async function realGenerate(config: ApiConfig, params: VideoParams): Promise<string> {
   const headers = {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${config.apiKey}`,
   }
+  const base = klingCompatBase(config.baseUrl)
 
-  const submitRes = await fetch(`${config.baseUrl}/videos`, {
+  const submitRes = await fetch(`${base}/videos`, {
     method: 'POST',
     headers,
     body: JSON.stringify({
@@ -59,13 +73,13 @@ async function realGenerate(config: ApiConfig, params: VideoParams): Promise<str
 
   for (let i = 0; i < 60; i++) {
     await delay(3000)
-    const statusRes = await fetch(`${config.baseUrl}/videos/${taskId}`, { headers })
+    const statusRes = await fetch(`${base}/videos/${taskId}`, { headers })
     if (!statusRes.ok) {
       throw new Error(`视频任务状态查询失败：${statusRes.status} ${await statusRes.text()}`)
     }
     const statusData = await statusRes.json()
     if (statusData.status === 'completed') {
-      const contentRes = await fetch(`${config.baseUrl}/videos/${taskId}/content`, { headers })
+      const contentRes = await fetch(`${base}/videos/${taskId}/content`, { headers })
       if (!contentRes.ok) {
         throw new Error(`视频内容下载失败：${contentRes.status}`)
       }
