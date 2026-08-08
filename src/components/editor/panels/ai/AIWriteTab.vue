@@ -32,8 +32,8 @@ async function generate() {
       apiConfigStore.isTextConfigured ? apiConfigStore.text : null,
       { topic: topic.value.trim(), type: type.value, tone: tone.value },
     )
-  } catch {
-    error.value = '生成失败，请重试'
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '生成失败，请重试'
   } finally {
     loading.value = false
   }

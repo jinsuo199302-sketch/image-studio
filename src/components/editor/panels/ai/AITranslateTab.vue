@@ -39,8 +39,8 @@ async function translate() {
       apiConfigStore.isTextConfigured ? apiConfigStore.text : null,
       { text: sourceText.value.trim(), targetLang: targetLang.value },
     )
-  } catch {
-    error.value = '翻译失败，请重试'
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '翻译失败，请重试'
   } finally {
     loading.value = false
   }

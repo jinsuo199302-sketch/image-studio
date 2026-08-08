@@ -25,8 +25,8 @@ async function generate() {
       apiConfigStore.isVideoConfigured ? apiConfigStore.video : null,
       { prompt: prompt.value.trim(), duration: duration.value, ratio: ratio.value },
     )
-  } catch {
-    error.value = '生成失败，请重试'
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '生成失败，请重试'
   } finally {
     loading.value = false
   }
