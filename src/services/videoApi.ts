@@ -99,10 +99,13 @@ async function realGenerate(config: ApiConfig, params: VideoParams): Promise<str
     return null
   }
 
-  for (let i = 0; i < 60; i++) {
+  /** 轮询 8 分钟（160 次 * 3 秒）：视频生成（尤其 10 秒+带配乐）可能比之前预留的 3 分钟慢 */
+  let lastStatusData: any = null
+  for (let i = 0; i < 160; i++) {
     await delay(3000)
     const statusRes = await fetch(`${base}/ent/v2/tasks/${taskId}/creations`, { headers })
     const statusData = await parseJsonOrThrow(statusRes, '视频任务状态查询失败')
+    lastStatusData = statusData
     if (!statusRes.ok) {
       throw new Error(`视频任务状态查询失败：${statusRes.status} ${JSON.stringify(statusData)}`)
     }
@@ -119,7 +122,7 @@ async function realGenerate(config: ApiConfig, params: VideoParams): Promise<str
       throw new Error(`视频生成失败：${JSON.stringify(response)}`)
     }
   }
-  throw new Error('视频生成超时，请重试')
+  throw new Error(`视频生成超时，请重试。最后一次查询到的状态：${JSON.stringify(lastStatusData)}`)
 }
 
 export async function generateVideo(config: ApiConfig | null, params: VideoParams): Promise<string> {
