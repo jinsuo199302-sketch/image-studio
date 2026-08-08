@@ -33,11 +33,18 @@ export interface HistorySession {
 
 export interface WritingSession {
   id: string
-  topic: string
-  type: string
-  tone: string
+  message: string
   createdAt: number
   results: string[]
+}
+
+export interface VideoSession {
+  id: string
+  prompt: string
+  duration: 5 | 10
+  ratio: '16:9' | '9:16' | '1:1'
+  createdAt: number
+  url: string
 }
 
 export interface ApiConfig {

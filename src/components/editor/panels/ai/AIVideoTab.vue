@@ -1,35 +1,21 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { generateVideo, type VideoParams } from '../../../../services/videoApi'
+import type { VideoParams } from '../../../../services/videoApi'
 import { useApiConfigStore } from '../../../../stores/apiConfig'
+import { useVideoStore } from '../../../../stores/video'
 
 const apiConfigStore = useApiConfigStore()
+const store = useVideoStore()
 
 const prompt = ref('')
 const duration = ref<VideoParams['duration']>(5)
 const ratio = ref<VideoParams['ratio']>('16:9')
 const videoUrl = ref('')
-const loading = ref(false)
-const error = ref('')
 
 async function generate() {
-  if (!prompt.value.trim()) {
-    error.value = '请先输入视频描述'
-    return
-  }
-  error.value = ''
-  loading.value = true
   videoUrl.value = ''
-  try {
-    videoUrl.value = await generateVideo(
-      apiConfigStore.isVideoConfigured ? apiConfigStore.video : null,
-      { prompt: prompt.value.trim(), duration: duration.value, ratio: ratio.value },
-    )
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : '生成失败，请重试'
-  } finally {
-    loading.value = false
-  }
+  const url = await store.generate({ prompt: prompt.value.trim(), duration: duration.value, ratio: ratio.value })
+  if (url) videoUrl.value = url
 }
 
 function download() {
@@ -88,9 +74,9 @@ function download() {
         </div>
       </div>
 
-      <p v-if="error" class="text-xs text-red-500">{{ error }}</p>
+      <p v-if="store.error" class="text-xs text-red-500">{{ store.error }}</p>
 
-      <div v-if="loading" class="flex aspect-video items-center justify-center rounded-lg bg-gray-100 text-xs text-gray-400">
+      <div v-if="store.isGenerating" class="flex aspect-video items-center justify-center rounded-lg bg-gray-100 text-xs text-gray-400">
         视频生成中，请稍候…
       </div>
       <div v-else-if="videoUrl" class="space-y-2">
@@ -103,10 +89,10 @@ function download() {
       <el-button
         type="primary"
         class="!w-full !bg-gradient-to-r !from-violet-500 !to-fuchsia-500 !border-none"
-        :loading="loading"
+        :loading="store.isGenerating"
         @click="generate"
       >
-        {{ loading ? '生成中…' : '生成视频' }}
+        {{ store.isGenerating ? '生成中…' : '生成视频' }}
       </el-button>
     </div>
   </div>

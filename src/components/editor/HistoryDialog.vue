@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { StarFilled, Star } from '@element-plus/icons-vue'
 import { useGenerationStore } from '../../stores/generation'
 import { useWritingStore } from '../../stores/writing'
-import { TYPE_LABEL, type CopyType } from '../../services/writingApi'
+import { useVideoStore } from '../../stores/video'
 
 const props = defineProps<{ modelValue: boolean }>()
 const emit = defineEmits<{
@@ -14,7 +14,8 @@ const emit = defineEmits<{
 
 const generationStore = useGenerationStore()
 const writingStore = useWritingStore()
-const activeTab = ref<'image' | 'text'>('image')
+const videoStore = useVideoStore()
+const activeTab = ref<'image' | 'text' | 'video'>('image')
 
 function formatTime(ts: number) {
   const d = new Date(ts)
@@ -44,6 +45,7 @@ function pickText(text: string) {
         v-for="tab in [
           { key: 'image', label: `生图 (${generationStore.history.length})` },
           { key: 'text', label: `写作 (${writingStore.sessions.length})` },
+          { key: 'video', label: `视频 (${videoStore.history.length})` },
         ]"
         :key="tab.key"
         class="px-4 py-2 text-sm transition"
@@ -52,7 +54,7 @@ function pickText(text: string) {
             ? 'border-b-2 border-violet-500 font-medium text-violet-600'
             : 'text-gray-500 hover:text-gray-700'
         "
-        @click="activeTab = tab.key as 'image' | 'text'"
+        @click="activeTab = tab.key as 'image' | 'text' | 'video'"
       >
         {{ tab.label }}
       </button>
@@ -88,16 +90,14 @@ function pickText(text: string) {
         </div>
       </div>
 
-      <div v-else>
+      <div v-else-if="activeTab === 'text'">
         <div v-if="!writingStore.sessions.length" class="py-10 text-center text-sm text-gray-400">
-          还没有写作记录，去"写作"里发第一条主题吧
+          还没有写作记录，去"写作"里发第一条消息吧
         </div>
         <div v-else class="space-y-4">
           <div v-for="session in [...writingStore.sessions].reverse()" :key="session.id">
             <div class="mb-1.5 flex items-baseline justify-between">
-              <p class="text-xs text-gray-600">
-                写{{ TYPE_LABEL[session.type as CopyType] ?? session.type }}，主题：{{ session.topic }}，语气：{{ session.tone }}
-              </p>
+              <p class="truncate text-xs text-gray-600" :title="session.message">{{ session.message }}</p>
               <span class="shrink-0 pl-2 text-[11px] text-gray-400">{{ formatTime(session.createdAt) }}</span>
             </div>
             <div class="space-y-1.5">
@@ -110,6 +110,22 @@ function pickText(text: string) {
                 {{ r }}
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-else>
+        <div v-if="!videoStore.history.length" class="py-10 text-center text-sm text-gray-400">
+          还没有视频记录，去"视频"里生成第一条吧
+        </div>
+        <div v-else class="grid grid-cols-2 gap-4">
+          <div v-for="session in videoStore.history" :key="session.id" class="space-y-1.5">
+            <video :src="session.url" controls class="aspect-video w-full rounded-md bg-black" />
+            <div class="flex items-baseline justify-between">
+              <p class="truncate text-xs text-gray-600" :title="session.prompt">{{ session.prompt }}</p>
+              <span class="shrink-0 pl-2 text-[11px] text-gray-400">{{ formatTime(session.createdAt) }}</span>
+            </div>
+            <p class="text-[11px] text-gray-400">{{ session.duration }}秒 · {{ session.ratio }}</p>
           </div>
         </div>
       </div>

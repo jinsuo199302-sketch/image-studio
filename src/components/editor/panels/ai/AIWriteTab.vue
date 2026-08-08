@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
-import { TYPE_LABEL, type CopyType } from '../../../../services/writingApi'
 import { useApiConfigStore } from '../../../../stores/apiConfig'
 import { useWritingStore } from '../../../../stores/writing'
 
@@ -8,12 +7,7 @@ const emit = defineEmits<{ (e: 'insert', text: string): void }>()
 const apiConfigStore = useApiConfigStore()
 const store = useWritingStore()
 
-const topic = ref('')
-const type = ref<CopyType>('headline')
-const tone = ref('专业')
-
-const TONES = ['专业', '活泼', '温馨', '简约']
-
+const message = ref('')
 const threadRef = ref<HTMLDivElement>()
 
 function scrollToBottom() {
@@ -24,18 +18,14 @@ function scrollToBottom() {
 
 watch(() => store.sessions.length, scrollToBottom)
 
-function pickType(key: string) {
-  type.value = key as CopyType
-}
-
 async function send() {
-  if (!topic.value.trim()) {
-    store.error = '请先输入主题或产品名称'
+  if (!message.value.trim()) {
+    store.error = '请先输入想写的内容'
     return
   }
-  const t = topic.value.trim()
-  topic.value = ''
-  await store.generate({ topic: t, type: type.value, tone: tone.value })
+  const text = message.value.trim()
+  message.value = ''
+  await store.generate(text)
 }
 </script>
 
@@ -52,13 +42,13 @@ async function send() {
 
     <div ref="threadRef" class="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
       <div v-if="!store.sessions.length && !store.isGenerating" class="flex h-full items-center justify-center text-center text-xs text-gray-400">
-        像聊天一样：填好主题和类型，发送后 AI 的回复会显示在这里，历史会一直保留
+        像聊天一样描述你想要的文案，例如"写一条促销标题，语气专业一点"
       </div>
 
       <template v-for="session in store.sessions" :key="session.id">
         <div class="flex justify-end">
           <div class="max-w-[85%] rounded-lg rounded-tr-sm bg-violet-500 px-2.5 py-1.5 text-xs text-white">
-            写{{ TYPE_LABEL[session.type as CopyType] ?? session.type }}，主题：{{ session.topic }}，语气：{{ session.tone }}
+            {{ session.message }}
           </div>
         </div>
         <div class="flex justify-start">
@@ -84,44 +74,20 @@ async function send() {
 
     <p v-if="store.error" class="px-3 text-xs text-red-500">{{ store.error }}</p>
 
-    <div class="space-y-2 border-t border-gray-100 p-3">
-      <div class="flex flex-wrap gap-1.5">
-        <button
-          v-for="(label, key) in TYPE_LABEL"
-          :key="key"
-          class="rounded-full border px-2.5 py-0.5 text-[11px] transition"
-          :class="type === key ? 'border-violet-500 bg-violet-50 text-violet-600' : 'border-gray-200 text-gray-500'"
-          @click="pickType(key)"
-        >
-          {{ label }}
-        </button>
-        <span class="mx-0.5 w-px bg-gray-100" />
-        <button
-          v-for="t in TONES"
-          :key="t"
-          class="rounded-full border px-2.5 py-0.5 text-[11px] transition"
-          :class="tone === t ? 'border-violet-500 bg-violet-50 text-violet-600' : 'border-gray-200 text-gray-500'"
-          @click="tone = t"
-        >
-          {{ t }}
-        </button>
-      </div>
-
-      <div class="flex gap-2">
-        <el-input
-          v-model="topic"
-          placeholder="输入主题 / 产品名称，例如：秋季新品连衣裙"
-          @keyup.enter="send"
-        />
-        <el-button
-          type="primary"
-          class="!shrink-0 !bg-gradient-to-r !from-violet-500 !to-fuchsia-500 !border-none"
-          :loading="store.isGenerating"
-          @click="send"
-        >
-          发送
-        </el-button>
-      </div>
+    <div class="flex gap-2 border-t border-gray-100 p-3">
+      <el-input
+        v-model="message"
+        placeholder="发消息，例如：写一条秋季新品连衣裙的标题"
+        @keyup.enter="send"
+      />
+      <el-button
+        type="primary"
+        class="!shrink-0 !bg-gradient-to-r !from-violet-500 !to-fuchsia-500 !border-none"
+        :loading="store.isGenerating"
+        @click="send"
+      >
+        发送
+      </el-button>
     </div>
   </div>
 </template>

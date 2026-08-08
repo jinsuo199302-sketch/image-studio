@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import type { WritingSession } from '../types'
-import { generateCopy, type CopyType } from '../services/writingApi'
+import { generateCopy } from '../services/writingApi'
 import { useApiConfigStore } from './apiConfig'
 
 const STORAGE_KEY = 'image-studio.writingSessions'
@@ -31,24 +31,20 @@ export const useWritingStore = defineStore('writing', {
     error: '' as string,
   }),
   actions: {
-    async generate(params: { topic: string; type: CopyType; tone: string }) {
-      if (!params.topic.trim()) {
-        this.error = '请先输入主题或产品名称'
+    async generate(message: string) {
+      const text = message.trim()
+      if (!text) {
+        this.error = '请先输入想写的内容'
         return
       }
       this.error = ''
       this.isGenerating = true
       try {
         const apiConfigStore = useApiConfigStore()
-        const results = await generateCopy(
-          apiConfigStore.isTextConfigured ? apiConfigStore.text : null,
-          { topic: params.topic.trim(), type: params.type, tone: params.tone },
-        )
+        const results = await generateCopy(apiConfigStore.isTextConfigured ? apiConfigStore.text : null, text)
         this.sessions.push({
           id: `writing-${Date.now()}`,
-          topic: params.topic.trim(),
-          type: params.type,
-          tone: params.tone,
+          message: text,
           createdAt: Date.now(),
           results,
         })
