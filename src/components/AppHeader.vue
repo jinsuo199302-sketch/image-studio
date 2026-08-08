@@ -22,7 +22,7 @@ const settingsOpen = ref(false)
     <nav class="hidden items-center gap-6 text-sm text-gray-600 md:flex">
       <span class="cursor-pointer hover:text-violet-600">使用教程</span>
       <span class="cursor-pointer hover:text-violet-600">模板中心</span>
-      <span class="cursor-pointer hover:text-violet-600">AI 工具</span>
+      <span class="cursor-pointer hover:text-violet-600" @click="router.push({ name: 'ai-tools' })">AI 工具</span>
     </nav>
 
     <div class="flex items-center gap-3">

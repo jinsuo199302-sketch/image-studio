@@ -14,7 +14,6 @@ import BackgroundPanel from '../components/editor/panels/BackgroundPanel.vue'
 import ShapePanel from '../components/editor/panels/ShapePanel.vue'
 import UploadPanel from '../components/editor/panels/UploadPanel.vue'
 import ImageToolsPanel from '../components/editor/panels/ImageToolsPanel.vue'
-import AIPanel from '../components/editor/panels/AIPanel.vue'
 import PlaceholderPanel from '../components/editor/panels/PlaceholderPanel.vue'
 import type { Template } from '../data/templates'
 import { useTemplateStore } from '../stores/templates'
@@ -60,6 +59,14 @@ const historyDialogOpen = ref(false)
 function switchTemplate(id: string) {
   currentId.value = id
   router.replace(`/design/${id}`)
+}
+
+function selectPanel(key: RailKey) {
+  if (key === 'ai') {
+    window.open(router.resolve({ name: 'ai-tools' }).href, '_blank', 'noopener')
+    return
+  }
+  activePanel.value = key
 }
 
 function onTextProp(prop: 'fontSize' | 'fill' | 'fontWeight' | 'textAlign', value: string | number) {
@@ -134,7 +141,7 @@ function onSaved(newId: string) {
     </div>
 
     <div v-else class="flex flex-1 overflow-hidden">
-      <LeftIconRail :active="activePanel" @select="activePanel = $event" @add-text="stageRef?.addText()" />
+      <LeftIconRail :active="activePanel" @select="selectPanel" @add-text="stageRef?.addText()" />
 
       <div class="w-72 shrink-0 overflow-hidden border-r border-gray-200 bg-white">
         <TemplateSwitchPanel v-if="activePanel === 'template'" :active-id="currentId" @switch="switchTemplate" />
@@ -146,13 +153,6 @@ function onSaved(newId: string) {
           @add-image="(url) => stageRef?.addImage(url)"
         />
         <UploadPanel v-else-if="activePanel === 'upload'" @add="(url) => stageRef?.addImage(url)" />
-        <AIPanel
-          v-else-if="activePanel === 'ai'"
-          :selected-text="selection?.type === 'text' ? (selection.text ?? '') : null"
-          @insert-image="(url) => stageRef?.addImage(url)"
-          @insert-text="(text) => stageRef?.addText(text)"
-          @replace-selected-text="(text) => stageRef?.setSelectedText(text)"
-        />
         <PlaceholderPanel v-else label="素材图片库" />
       </div>
 
