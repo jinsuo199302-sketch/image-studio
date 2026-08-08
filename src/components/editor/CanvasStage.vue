@@ -13,6 +13,7 @@ export interface SelectionInfo {
   type: 'text' | 'image' | 'rect' | 'other'
   fontSize?: number
   fill?: string
+  fontFamily?: string
   fontWeight?: string
   fontStyle?: string
   underline?: boolean
@@ -22,6 +23,7 @@ export interface SelectionInfo {
   hasShadow?: boolean
   hasStroke?: boolean
   strokeWidth?: number
+  strokeColor?: string
   text?: string
   src?: string
 }
@@ -143,6 +145,7 @@ function describeSelection(obj: FabricObject | undefined): SelectionInfo | null 
       type: 'text',
       fontSize: obj.fontSize,
       fill: String(obj.fill ?? '#000000'),
+      fontFamily: String(obj.fontFamily ?? 'sans-serif'),
       fontWeight: String(obj.fontWeight ?? 'normal'),
       fontStyle: String(obj.fontStyle ?? 'normal'),
       underline: !!obj.underline,
@@ -152,6 +155,7 @@ function describeSelection(obj: FabricObject | undefined): SelectionInfo | null 
       hasShadow: !!obj.shadow,
       hasStroke: !!(obj.stroke && (obj.strokeWidth ?? 0) > 0),
       strokeWidth: obj.strokeWidth ?? 0,
+      strokeColor: String(obj.stroke ?? '#ffffff'),
       text: obj.text ?? '',
     }
   }
@@ -200,6 +204,7 @@ function addText(initialText = '双击编辑文字') {
     originY: 'top',
     fontSize: 28,
     fill: '#1f2329',
+    fontFamily: 'sans-serif',
   })
   canvas.add(text)
   canvas.setActiveObject(text)
@@ -266,6 +271,7 @@ function commitSelectedImageAdjust() {
 type TextPropKey =
   | 'fontSize'
   | 'fill'
+  | 'fontFamily'
   | 'fontWeight'
   | 'fontStyle'
   | 'underline'
@@ -313,6 +319,16 @@ function setSelectedTextStrokeWidth(width: number) {
   const active = canvas.getActiveObject()
   if (!(active instanceof IText)) return
   active.set({ strokeWidth: width, paintFirst: 'stroke' })
+  canvas.requestRenderAll()
+  pushHistory()
+  emit('selection', describeSelection(active))
+}
+
+function setSelectedTextStrokeColor(color: string) {
+  if (!canvas) return
+  const active = canvas.getActiveObject()
+  if (!(active instanceof IText)) return
+  active.set({ stroke: color, paintFirst: 'stroke' })
   canvas.requestRenderAll()
   pushHistory()
   emit('selection', describeSelection(active))
@@ -471,6 +487,7 @@ defineExpose({
   setSelectedTextShadow,
   setSelectedTextStroke,
   setSelectedTextStrokeWidth,
+  setSelectedTextStrokeColor,
   setSelectedImageAdjust,
   commitSelectedImageAdjust,
   getSelectedText,

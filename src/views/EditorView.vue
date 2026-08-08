@@ -77,7 +77,16 @@ function selectPanel(key: RailKey) {
 }
 
 function onTextProp(
-  prop: 'fontSize' | 'fill' | 'fontWeight' | 'fontStyle' | 'underline' | 'textAlign' | 'lineHeight' | 'charSpacing',
+  prop:
+    | 'fontSize'
+    | 'fill'
+    | 'fontFamily'
+    | 'fontWeight'
+    | 'fontStyle'
+    | 'underline'
+    | 'textAlign'
+    | 'lineHeight'
+    | 'charSpacing',
   value: string | number | boolean,
 ) {
   stageRef.value?.setSelectedTextProp(prop, value)
@@ -199,6 +208,7 @@ async function onRemoveBackground() {
             @text-shadow="(enabled) => stageRef?.setSelectedTextShadow(enabled)"
             @text-stroke="(enabled) => stageRef?.setSelectedTextStroke(enabled)"
             @text-stroke-width="(width) => stageRef?.setSelectedTextStrokeWidth(width)"
+            @text-stroke-color="(color) => stageRef?.setSelectedTextStrokeColor(color)"
             @replace-image="replaceViaUpload"
             @remove-background="onRemoveBackground"
             @adjust-image="adjustDialogOpen = true"

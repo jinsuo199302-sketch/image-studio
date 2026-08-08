@@ -2,7 +2,24 @@
 import { Delete, Picture, Plus, Minus, MagicStick, Brush } from '@element-plus/icons-vue'
 import type { SelectionInfo } from './CanvasStage.vue'
 
-type TextProp = 'fontSize' | 'fill' | 'fontWeight' | 'fontStyle' | 'underline' | 'textAlign' | 'lineHeight' | 'charSpacing'
+type TextProp =
+  | 'fontSize'
+  | 'fill'
+  | 'fontFamily'
+  | 'fontWeight'
+  | 'fontStyle'
+  | 'underline'
+  | 'textAlign'
+  | 'lineHeight'
+  | 'charSpacing'
+
+const FONT_OPTIONS = [
+  { label: '默认', value: 'sans-serif' },
+  { label: '思源黑体', value: '"Noto Sans SC", sans-serif' },
+  { label: '思源宋体', value: '"Noto Serif SC", serif' },
+  { label: '站酷快乐体', value: '"ZCOOL KuaiLe", sans-serif' },
+  { label: '站酷小薇', value: '"ZCOOL XiaoWei", serif' },
+]
 
 const props = defineProps<{ selection: SelectionInfo; removingBackground?: boolean }>()
 const emit = defineEmits<{
@@ -10,6 +27,7 @@ const emit = defineEmits<{
   (e: 'text-shadow', enabled: boolean): void
   (e: 'text-stroke', enabled: boolean): void
   (e: 'text-stroke-width', width: number): void
+  (e: 'text-stroke-color', color: string): void
   (e: 'replace-image'): void
   (e: 'remove-background'): void
   (e: 'adjust-image'): void
@@ -42,6 +60,17 @@ function bumpStrokeWidth(delta: number) {
 <template>
   <div class="flex max-w-[640px] flex-wrap items-center gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-md">
     <template v-if="selection.type === 'text'">
+      <el-select
+        :model-value="selection.fontFamily"
+        size="small"
+        class="!w-28"
+        @update:model-value="(v: string) => emit('text-prop', 'fontFamily', v)"
+      >
+        <el-option v-for="f in FONT_OPTIONS" :key="f.value" :label="f.label" :value="f.value" :style="{ fontFamily: f.value }" />
+      </el-select>
+
+      <div class="h-4 w-px bg-gray-200" />
+
       <div class="flex items-center gap-1">
         <button class="flex h-6 w-6 items-center justify-center rounded hover:bg-gray-100" @click="bump(-2)">
           <el-icon :size="12"><Minus /></el-icon>
@@ -141,6 +170,16 @@ function bumpStrokeWidth(delta: number) {
         <button class="flex h-6 w-6 items-center justify-center rounded hover:bg-gray-100" @click="bumpStrokeWidth(0.5)">
           <el-icon :size="12"><Plus /></el-icon>
         </button>
+      </div>
+      <div v-if="selection.hasStroke" class="flex items-center gap-1" title="描边颜色">
+        <button
+          v-for="c in TEXT_COLORS"
+          :key="c"
+          class="h-5 w-5 rounded-full border-2"
+          :style="{ background: c }"
+          :class="selection.strokeColor === c ? 'border-violet-500' : 'border-gray-200'"
+          @click="emit('text-stroke-color', c)"
+        />
       </div>
       <button
         class="rounded px-2 py-1 text-xs transition"
