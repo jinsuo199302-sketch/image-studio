@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { Canvas, FabricImage, IText, Rect, Shadow, type FabricObject } from 'fabric'
+import { Canvas, FabricImage, IText, Rect, Shadow, filters, type FabricObject } from 'fabric'
 import type { CanvasElement, Template } from '../../data/templates'
 
 const props = defineProps<{ template: Template }>()
@@ -237,6 +237,30 @@ async function replaceSelectedImage(url: string) {
   pushHistory()
 }
 
+interface ImageAdjust {
+  brightness: number
+  contrast: number
+  saturation: number
+}
+
+/** 实时调色：每次滑块变化都重建 filters 数组并应用，不做防抖以保证预览跟手 */
+function setSelectedImageAdjust({ brightness, contrast, saturation }: ImageAdjust) {
+  if (!canvas) return
+  const active = canvas.getActiveObject()
+  if (!(active instanceof FabricImage)) return
+  active.filters = [
+    new filters.Brightness({ brightness }),
+    new filters.Contrast({ contrast }),
+    new filters.Saturation({ saturation }),
+  ]
+  active.applyFilters()
+  canvas.requestRenderAll()
+}
+
+function commitSelectedImageAdjust() {
+  pushHistory()
+}
+
 type TextPropKey =
   | 'fontSize'
   | 'fill'
@@ -429,6 +453,8 @@ defineExpose({
   setSelectedTextProp,
   setSelectedTextShadow,
   setSelectedTextStroke,
+  setSelectedImageAdjust,
+  commitSelectedImageAdjust,
   getSelectedText,
   setSelectedText,
   deleteSelected,

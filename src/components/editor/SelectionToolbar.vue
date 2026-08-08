@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Delete, Picture, Plus, Minus, MagicStick } from '@element-plus/icons-vue'
+import { Delete, Picture, Plus, Minus, MagicStick, Brush } from '@element-plus/icons-vue'
 import type { SelectionInfo } from './CanvasStage.vue'
 
 type TextProp = 'fontSize' | 'fill' | 'fontWeight' | 'fontStyle' | 'underline' | 'textAlign' | 'lineHeight' | 'charSpacing'
@@ -11,6 +11,7 @@ const emit = defineEmits<{
   (e: 'text-stroke', enabled: boolean): void
   (e: 'replace-image'): void
   (e: 'remove-background'): void
+  (e: 'adjust-image'): void
   (e: 'delete'): void
 }>()
 
@@ -148,6 +149,11 @@ function bumpCharSpacing(delta: number) {
       >
         <el-icon :size="14"><MagicStick /></el-icon>
         {{ removingBackground ? '抠图中…' : 'AI 抠图' }}
+      </button>
+
+      <button class="flex items-center gap-1 rounded px-2 py-1 text-xs text-gray-600 hover:bg-gray-100" @click="emit('adjust-image')">
+        <el-icon :size="14"><Brush /></el-icon>
+        调色
       </button>
     </template>
 

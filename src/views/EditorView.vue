@@ -10,6 +10,7 @@ import SelectionToolbar from '../components/editor/SelectionToolbar.vue'
 import SaveTemplateDialog from '../components/editor/SaveTemplateDialog.vue'
 import ResizeDialog from '../components/editor/ResizeDialog.vue'
 import HistoryDialog from '../components/editor/HistoryDialog.vue'
+import ImageAdjustDialog from '../components/editor/ImageAdjustDialog.vue'
 import TemplateSwitchPanel from '../components/editor/panels/TemplateSwitchPanel.vue'
 import BackgroundPanel from '../components/editor/panels/BackgroundPanel.vue'
 import ShapePanel from '../components/editor/panels/ShapePanel.vue'
@@ -60,6 +61,7 @@ const saveDialogOpen = ref(false)
 const resizeDialogOpen = ref(false)
 const historyDialogOpen = ref(false)
 const removingBackground = ref(false)
+const adjustDialogOpen = ref(false)
 
 function switchTemplate(id: string) {
   currentId.value = id
@@ -198,6 +200,7 @@ async function onRemoveBackground() {
             @text-stroke="(enabled) => stageRef?.setSelectedTextStroke(enabled)"
             @replace-image="replaceViaUpload"
             @remove-background="onRemoveBackground"
+            @adjust-image="adjustDialogOpen = true"
             @delete="stageRef?.deleteSelected()"
           />
         </div>
@@ -216,6 +219,11 @@ async function onRemoveBackground() {
       v-model="historyDialogOpen"
       @insert-image="(url) => stageRef?.addImage(url)"
       @insert-text="(text) => stageRef?.addText(text)"
+    />
+    <ImageAdjustDialog
+      v-model="adjustDialogOpen"
+      @change="(v) => stageRef?.setSelectedImageAdjust(v)"
+      @commit="stageRef?.commitSelectedImageAdjust()"
     />
   </div>
 </template>
