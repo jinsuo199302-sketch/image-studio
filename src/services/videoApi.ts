@@ -110,15 +110,13 @@ async function realGenerate(config: ApiConfig, params: VideoParams): Promise<str
       throw new Error(`视频任务状态查询失败：${statusRes.status} ${JSON.stringify(statusData)}`)
     }
     const response = statusData.Response ?? statusData
-    const status = response.Status ?? response.status
-    if (status === 'FINISH' || status === 'FINISHED' || status === 'SUCCESS' || status === 'success') {
-      const videoUrl = findVideoUrl(response)
-      if (!videoUrl) {
-        throw new Error(`视频生成完成但找不到视频地址字段，完整返回：${JSON.stringify(statusData)}`)
-      }
+    /** 实测 Vidu 查询接口不返回 status/Status 字段，视频地址出现就代表完成，优先按这个判断 */
+    const videoUrl = findVideoUrl(response)
+    if (videoUrl) {
       return videoUrl
     }
-    if (status === 'FAILED' || status === 'failed') {
+    const status = response.Status ?? response.status ?? response.state
+    if (status === 'FAILED' || status === 'failed' || status === 'ERROR' || status === 'error') {
       throw new Error(`视频生成失败：${JSON.stringify(response)}`)
     }
   }
