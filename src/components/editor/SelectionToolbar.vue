@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { Delete, Picture, Plus, Minus } from '@element-plus/icons-vue'
+import { Delete, Picture, Plus, Minus, MagicStick } from '@element-plus/icons-vue'
 import type { SelectionInfo } from './CanvasStage.vue'
 
-const props = defineProps<{ selection: SelectionInfo }>()
+const props = defineProps<{ selection: SelectionInfo; removingBackground?: boolean }>()
 const emit = defineEmits<{
   (e: 'text-prop', prop: 'fontSize' | 'fill' | 'fontWeight' | 'textAlign', value: string | number): void
   (e: 'replace-image'): void
+  (e: 'remove-background'): void
   (e: 'delete'): void
 }>()
 
@@ -69,6 +70,15 @@ function bump(delta: number) {
       <button class="flex items-center gap-1 rounded px-2 py-1 text-xs text-gray-600 hover:bg-gray-100" @click="emit('replace-image')">
         <el-icon :size="14"><Picture /></el-icon>
         替换图片
+      </button>
+
+      <button
+        class="flex items-center gap-1 rounded px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+        :disabled="removingBackground"
+        @click="emit('remove-background')"
+      >
+        <el-icon :size="14"><MagicStick /></el-icon>
+        {{ removingBackground ? '抠图中…' : 'AI 抠图' }}
       </button>
     </template>
 

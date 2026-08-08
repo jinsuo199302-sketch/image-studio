@@ -16,11 +16,13 @@ onMounted(() => templateStore.ensureLoaded())
 
 const TOOL_TABS = [
   { key: 'template', label: '模板库', desc: '海量模板', enabled: true },
-  { key: 'ai-write', label: 'AI 写作', desc: '一键出文案', enabled: false },
-  { key: 'ai-translate', label: 'AI 翻译', desc: '多语言互译', enabled: false },
+  { key: 'ai-image', label: 'AI 生图', desc: '文字生成图片', enabled: true, route: '/ai-tools?tab=image' },
+  { key: 'ai-write', label: 'AI 写作', desc: '一键出文案', enabled: true, route: '/ai-tools?tab=write' },
+  { key: 'ai-translate', label: 'AI 翻译', desc: '多语言互译', enabled: true, route: '/ai-tools?tab=translate' },
+  { key: 'ai-video', label: 'AI 视频', desc: '文字生成视频', enabled: true, route: '/ai-tools?tab=video' },
+  { key: 'pdf-tools', label: 'PDF 工具', desc: '合并 / 拆分', enabled: true, route: '/ai-tools?tab=pdf' },
   { key: 'collage', label: '图片拼贴', desc: '多图合成一张', enabled: false },
   { key: 'vectorize', label: '位图转矢量', desc: '照片转矢量图', enabled: false },
-  { key: 'pdf-tools', label: 'PDF 工具', desc: '合并 / 拆分', enabled: true, route: '/pdf-tools' },
 ]
 const activeTool = ref('template')
 
@@ -58,12 +60,12 @@ function pickTool(tool: (typeof TOOL_TABS)[number]) {
         <section class="bg-gradient-to-b from-violet-50 to-white px-8 pb-8 pt-10 text-center">
           <h1 class="mb-6 text-3xl font-bold text-gray-800">更好用的 AI 设计助手</h1>
 
-          <div class="mx-auto max-w-3xl rounded-2xl border border-violet-100 bg-white p-3 shadow-sm">
-            <div class="mb-3 flex gap-2">
+          <div class="mx-auto max-w-4xl rounded-2xl border border-violet-100 bg-white p-3 shadow-sm">
+            <div class="mb-3 grid grid-cols-4 gap-2">
               <button
                 v-for="tool in TOOL_TABS"
                 :key="tool.key"
-                class="flex flex-1 flex-col items-center gap-0.5 rounded-xl border px-2 py-2.5 text-sm transition"
+                class="flex flex-col items-center gap-0.5 rounded-xl border px-2 py-2.5 text-sm transition"
                 :class="[
                   activeTool === tool.key
                     ? 'border-violet-400 bg-violet-50 text-violet-600'
@@ -90,7 +92,7 @@ function pickTool(tool: (typeof TOOL_TABS)[number]) {
             </el-input>
           </div>
 
-          <div class="mx-auto mt-5 flex max-w-3xl flex-wrap justify-center gap-2">
+          <div class="mx-auto mt-5 flex max-w-4xl flex-wrap justify-center gap-2">
             <button
               v-for="c in CATEGORIES"
               :key="c"

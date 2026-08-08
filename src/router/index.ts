@@ -2,7 +2,6 @@ import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 import EditorView from '../views/EditorView.vue'
 import AIToolsView from '../views/AIToolsView.vue'
-import PDFToolsView from '../views/PDFToolsView.vue'
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -10,6 +9,7 @@ export const router = createRouter({
     { path: '/', name: 'home', component: HomeView },
     { path: '/design/:id', name: 'editor', component: EditorView, props: true },
     { path: '/ai-tools', name: 'ai-tools', component: AIToolsView },
-    { path: '/pdf-tools', name: 'pdf-tools', component: PDFToolsView },
+    // PDF 合并/拆分已并入工具箱页面，旧链接重定向过去，避免已分享的 /pdf-tools 链接失效
+    { path: '/pdf-tools', redirect: { path: '/ai-tools', query: { tab: 'pdf' } } },
   ],
 })

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { ArrowLeft, RefreshLeft, RefreshRight, Download, Collection, Crop, Clock } from '@element-plus/icons-vue'
 import AppHeader from '../components/AppHeader.vue'
 import CanvasStage, { type SelectionInfo } from '../components/editor/CanvasStage.vue'
@@ -17,11 +18,14 @@ import ImageToolsPanel from '../components/editor/panels/ImageToolsPanel.vue'
 import PlaceholderPanel from '../components/editor/panels/PlaceholderPanel.vue'
 import type { Template } from '../data/templates'
 import { useTemplateStore } from '../stores/templates'
+import { useApiConfigStore } from '../stores/apiConfig'
+import { removeBackground } from '../services/backgroundRemovalApi'
 
 const props = defineProps<{ id: string }>()
 const route = useRoute()
 const router = useRouter()
 const templateStore = useTemplateStore()
+const apiConfigStore = useApiConfigStore()
 
 const currentId = ref(props.id || (route.params.id as string))
 const template = ref<Template | null>(null)
@@ -55,6 +59,7 @@ const history = ref({ canUndo: false, canRedo: false })
 const saveDialogOpen = ref(false)
 const resizeDialogOpen = ref(false)
 const historyDialogOpen = ref(false)
+const removingBackground = ref(false)
 
 function switchTemplate(id: string) {
   currentId.value = id
@@ -99,6 +104,22 @@ function download() {
 function onSaved(newId: string) {
   saveDialogOpen.value = false
   router.push(`/design/${newId}`)
+}
+
+async function onRemoveBackground() {
+  if (!selection.value?.src || removingBackground.value) return
+  removingBackground.value = true
+  try {
+    const result = await removeBackground(
+      apiConfigStore.isImageConfigured ? apiConfigStore.image : null,
+      selection.value.src,
+    )
+    await stageRef.value?.replaceSelectedImage(result)
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '抠图失败，请重试')
+  } finally {
+    removingBackground.value = false
+  }
 }
 </script>
 
@@ -168,8 +189,10 @@ function onSaved(newId: string) {
         <div v-if="selection" class="absolute left-1/2 top-4 -translate-x-1/2">
           <SelectionToolbar
             :selection="selection"
+            :removing-background="removingBackground"
             @text-prop="onTextProp"
             @replace-image="replaceViaUpload"
+            @remove-background="onRemoveBackground"
             @delete="stageRef?.deleteSelected()"
           />
         </div>

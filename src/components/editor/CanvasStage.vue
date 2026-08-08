@@ -16,6 +16,7 @@ export interface SelectionInfo {
   fontWeight?: string
   textAlign?: string
   text?: string
+  src?: string
 }
 
 const canvasEl = ref<HTMLCanvasElement>()
@@ -140,7 +141,7 @@ function describeSelection(obj: FabricObject | undefined): SelectionInfo | null 
       text: obj.text ?? '',
     }
   }
-  if (obj instanceof FabricImage) return { type: 'image' }
+  if (obj instanceof FabricImage) return { type: 'image', src: obj.getSrc() }
   if (obj instanceof Rect) return { type: 'rect', fill: String(obj.fill ?? '#000000') }
   return { type: 'other' }
 }

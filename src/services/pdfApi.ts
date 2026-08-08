@@ -3,13 +3,18 @@ import axios from 'axios'
 const http = axios.create({ baseURL: '/api/pdf' })
 
 async function extractErrorMessage(error: unknown, fallback: string): Promise<string> {
-  if (axios.isAxiosError(error) && error.response?.data instanceof Blob) {
-    try {
-      const text = await error.response.data.text()
-      const parsed = JSON.parse(text)
-      if (parsed?.detail) return parsed.detail
-    } catch {
-      // 返回内容不是 JSON 时用兜底文案
+  if (axios.isAxiosError(error)) {
+    if (error.response?.status === 413) {
+      return '文件太大，超过了服务器允许的上传体积上限'
+    }
+    if (error.response?.data instanceof Blob) {
+      try {
+        const text = await error.response.data.text()
+        const parsed = JSON.parse(text)
+        if (parsed?.detail) return parsed.detail
+      } catch {
+        // 返回内容不是 JSON 时用兜底文案
+      }
     }
   }
   return fallback
