@@ -24,10 +24,13 @@ async function mockGenerate(_params: VideoParams): Promise<string> {
   return SAMPLE_VIDEOS[Math.floor(Math.random() * SAMPLE_VIDEOS.length)]
 }
 
-function ratioToSize(ratio: VideoParams['ratio']): string {
-  if (ratio === '9:16') return '720x1280'
-  if (ratio === '1:1') return '720x720'
-  return '1280x720'
+/** kling 文生视频专属路径，跟 config.baseUrl 不在同一层级，需要用 origin 重新拼接 */
+function klingBase(baseUrl: string): string {
+  try {
+    return new URL(baseUrl).origin
+  } catch {
+    return baseUrl.replace(/\/v1\/?$/, '')
+  }
 }
 
 /** 安全解析响应体：不是合法 JSON 时把状态码 + 原始内容片段带进报错里 */
@@ -41,53 +44,55 @@ async function parseJsonOrThrow(res: Response, label: string): Promise<any> {
 }
 
 /**
- * 用 veo-3.1-fast-generate-preview 的「OpenAI 视频格式」兼容接口 /v1/videos 实现
- * （提交任务 -> 轮询状态 -> 取回内容），字段结构参照 OpenAI 官方视频生成接口约定。
- * 未经真实联调验证——如果调用报错，把报错信息发给我，按实际接口调整。
+ * 按 openlux 文档「文生视频」POST /kling/v1/videos/text2video 实现，
+ * 查询任务状态的 GET 接口路径是参照 Kling 官方 API 惯例推测的
+ * （官方文档：https://app.klingai.com/cn/dev/document-api），未经真实联调验证——
+ * 如果查询这步报错，把报错信息发给我，按实际接口调整。
  */
 async function realGenerate(config: ApiConfig, params: VideoParams): Promise<string> {
   const headers = {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${config.apiKey}`,
   }
+  const base = klingBase(config.baseUrl)
+  const createUrl = `${base}/kling/v1/videos/text2video`
 
-  const submitRes = await fetch(`${config.baseUrl}/videos`, {
+  const submitRes = await fetch(createUrl, {
     method: 'POST',
     headers,
     body: JSON.stringify({
-      model: 'veo-3.1-fast-generate-preview',
+      model_name: 'kling-v2-5-turbo',
       prompt: params.prompt,
-      seconds: String(params.duration),
-      size: ratioToSize(params.ratio),
+      negative_prompt: '',
+      cfg_scale: 0.5,
+      mode: 'std',
+      aspect_ratio: params.ratio,
+      duration: params.duration,
     }),
   })
-  const task = await parseJsonOrThrow(submitRes, '视频生成接口请求失败')
-  if (!submitRes.ok) {
-    throw new Error(`视频生成接口请求失败：${submitRes.status} ${JSON.stringify(task)}`)
+  const submitData = await parseJsonOrThrow(submitRes, '视频生成接口请求失败')
+  if (!submitRes.ok || submitData.code !== 0) {
+    throw new Error(`视频生成接口请求失败：${submitRes.status} ${JSON.stringify(submitData)}`)
   }
-  const taskId = task.id ?? task.data?.id ?? task.data?.task_id
+  const taskId = submitData.data.task_id
 
   for (let i = 0; i < 60; i++) {
     await delay(3000)
-    const statusRes = await fetch(`${config.baseUrl}/videos/${taskId}`, { headers })
+    const statusRes = await fetch(`${createUrl}/${taskId}`, { headers })
     const statusData = await parseJsonOrThrow(statusRes, '视频任务状态查询失败')
-    if (!statusRes.ok) {
+    if (!statusRes.ok || statusData.code !== 0) {
       throw new Error(`视频任务状态查询失败：${statusRes.status} ${JSON.stringify(statusData)}`)
     }
-    const status = statusData.status ?? statusData.data?.status
-    if (status === 'completed' || status === 'succeeded' || status === 'succeed') {
-      const directUrl = statusData.url ?? statusData.data?.url ?? statusData.data?.video_url
-      if (directUrl) return directUrl
-
-      const contentRes = await fetch(`${config.baseUrl}/videos/${taskId}/content`, { headers })
-      if (!contentRes.ok) {
-        throw new Error(`视频内容下载失败：${contentRes.status} ${await contentRes.text()}`)
+    const taskStatus = statusData.data.task_status
+    if (taskStatus === 'succeed' || taskStatus === 'success' || taskStatus === 'completed') {
+      const videoUrl = statusData.data.task_result?.videos?.[0]?.url
+      if (!videoUrl) {
+        throw new Error(`视频生成完成但取不到视频地址：${JSON.stringify(statusData.data)}`)
       }
-      const blob = await contentRes.blob()
-      return URL.createObjectURL(blob)
+      return videoUrl
     }
-    if (status === 'failed') {
-      throw new Error(`视频生成失败：${statusData.error?.message ?? statusData.message ?? '未知错误'}`)
+    if (taskStatus === 'failed') {
+      throw new Error(`视频生成失败：${statusData.data.task_status_msg ?? statusData.message ?? '未知错误'}`)
     }
   }
   throw new Error('视频生成超时，请重试')
