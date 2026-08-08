@@ -9,6 +9,13 @@ const emit = defineEmits<{ (e: 'insert', url: string): void }>()
 const store = useGenerationStore()
 const apiConfigStore = useApiConfigStore()
 const promptLibraryOpen = ref(false)
+
+const ASPECT_RATIOS = ['1:1', '3:4', '4:3', '9:16', '16:9'] as const
+
+function ratioStyle(ratio: string) {
+  const [w, h] = ratio.split(':')
+  return { aspectRatio: `${w} / ${h}` }
+}
 </script>
 
 <template>
@@ -55,6 +62,25 @@ const promptLibraryOpen = ref(false)
       </div>
 
       <div>
+        <label class="mb-1 block text-xs font-medium text-gray-600">画面比例</label>
+        <div class="flex flex-wrap gap-1.5">
+          <button
+            v-for="r in ASPECT_RATIOS"
+            :key="r"
+            class="rounded-full border px-2.5 py-0.5 text-[11px] transition"
+            :class="
+              store.params.aspectRatio === r
+                ? 'border-violet-500 bg-violet-50 text-violet-600'
+                : 'border-gray-200 text-gray-500'
+            "
+            @click="store.params.aspectRatio = r"
+          >
+            {{ r }}
+          </button>
+        </div>
+      </div>
+
+      <div>
         <label class="mb-1 block text-xs font-medium text-gray-600">数量</label>
         <div class="flex gap-1.5">
           <button
@@ -78,14 +104,20 @@ const promptLibraryOpen = ref(false)
       <div v-if="store.currentResults.length || store.isGenerating">
         <p class="mb-1.5 text-xs font-medium text-gray-600">点击插入画布</p>
         <div v-if="store.isGenerating" class="grid grid-cols-2 gap-2">
-          <div v-for="n in store.params.batchSize" :key="n" class="aspect-square animate-pulse rounded-md bg-gray-200" />
+          <div
+            v-for="n in store.params.batchSize"
+            :key="n"
+            class="animate-pulse rounded-md bg-gray-200"
+            :style="ratioStyle(store.params.aspectRatio)"
+          />
         </div>
         <div v-else class="grid grid-cols-2 gap-2">
           <img
             v-for="img in store.currentResults"
             :key="img.id"
             :src="img.url"
-            class="aspect-square cursor-pointer rounded-md object-cover transition hover:opacity-80"
+            class="w-full cursor-pointer rounded-md object-cover transition hover:opacity-80"
+            :style="ratioStyle(img.aspectRatio)"
             @click="emit('insert', img.url)"
           />
         </div>
