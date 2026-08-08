@@ -24,8 +24,8 @@ async function mockGenerate(_params: VideoParams): Promise<string> {
   return SAMPLE_VIDEOS[Math.floor(Math.random() * SAMPLE_VIDEOS.length)]
 }
 
-/** kling 文生视频专属路径，跟 config.baseUrl 不在同一层级，需要用 origin 重新拼接 */
-function klingBase(baseUrl: string): string {
+/** Vidu 接口路径跟 config.baseUrl 不在同一层级，需要用 origin 重新拼接 */
+function origin(baseUrl: string): string {
   try {
     return new URL(baseUrl).origin
   } catch {
@@ -44,55 +44,79 @@ async function parseJsonOrThrow(res: Response, label: string): Promise<any> {
 }
 
 /**
- * 按 openlux 文档「文生视频」POST /kling/v1/videos/text2video 实现，
- * 查询任务状态的 GET 接口路径是参照 Kling 官方 API 惯例推测的
- * （官方文档：https://app.klingai.com/cn/dev/document-api），未经真实联调验证——
- * 如果查询这步报错，把报错信息发给我，按实际接口调整。
+ * 按 openlux 文档「Vidu 文生视频」实现：
+ * 创建任务 POST /ent/v2/text2video（模型 viduq3-turbo，bgm:true 自动配背景音乐）
+ * 查询任务 GET /vidu-native/video/generations/{task_id}
+ * 未经真实联调验证——如果调用报错，把报错信息发给我，按实际接口调整。
  */
 async function realGenerate(config: ApiConfig, params: VideoParams): Promise<string> {
+  const base = origin(config.baseUrl)
   const headers = {
     'Content-Type': 'application/json',
+    Accept: 'application/json',
     Authorization: `Bearer ${config.apiKey}`,
   }
-  const base = klingBase(config.baseUrl)
-  const createUrl = `${base}/kling/v1/videos/text2video`
 
-  const submitRes = await fetch(createUrl, {
+  const submitRes = await fetch(`${base}/ent/v2/text2video`, {
     method: 'POST',
     headers,
     body: JSON.stringify({
-      model_name: 'kling-v2-5-turbo',
+      model: 'viduq3-turbo',
       prompt: params.prompt,
-      negative_prompt: '',
-      cfg_scale: 0.5,
-      mode: 'std',
-      aspect_ratio: params.ratio,
       duration: params.duration,
+      aspect_ratio: params.ratio,
+      bgm: true,
     }),
   })
   const submitData = await parseJsonOrThrow(submitRes, '视频生成接口请求失败')
-  if (!submitRes.ok || submitData.code !== 0) {
+  if (!submitRes.ok) {
     throw new Error(`视频生成接口请求失败：${submitRes.status} ${JSON.stringify(submitData)}`)
   }
-  const taskId = submitData.data.task_id
+  const taskId = submitData.task_id
+  if (!taskId) {
+    throw new Error(`视频生成接口未返回 task_id：${JSON.stringify(submitData)}`)
+  }
+
+  /** 视频地址可能藏在几种不同字段名下，按可能性依次找 */
+  function findVideoUrl(node: any): string | null {
+    if (!node || typeof node !== 'object') return null
+    for (const key of ['video_url', 'url', 'videoUrl']) {
+      if (typeof node[key] === 'string') return node[key]
+    }
+    for (const key of ['creations', 'Creations', 'videos', 'Videos']) {
+      const arr = node[key]
+      if (Array.isArray(arr) && arr.length) {
+        const found = findVideoUrl(arr[0])
+        if (found) return found
+      }
+    }
+    for (const value of Object.values(node)) {
+      if (value && typeof value === 'object') {
+        const found = findVideoUrl(value)
+        if (found) return found
+      }
+    }
+    return null
+  }
 
   for (let i = 0; i < 60; i++) {
     await delay(3000)
-    const statusRes = await fetch(`${createUrl}/${taskId}`, { headers })
+    const statusRes = await fetch(`${base}/ent/v2/tasks/${taskId}/creations`, { headers })
     const statusData = await parseJsonOrThrow(statusRes, '视频任务状态查询失败')
-    if (!statusRes.ok || statusData.code !== 0) {
+    if (!statusRes.ok) {
       throw new Error(`视频任务状态查询失败：${statusRes.status} ${JSON.stringify(statusData)}`)
     }
-    const taskStatus = statusData.data.task_status
-    if (taskStatus === 'succeed' || taskStatus === 'success' || taskStatus === 'completed') {
-      const videoUrl = statusData.data.task_result?.videos?.[0]?.url
+    const response = statusData.Response ?? statusData
+    const status = response.Status ?? response.status
+    if (status === 'FINISH' || status === 'FINISHED' || status === 'SUCCESS' || status === 'success') {
+      const videoUrl = findVideoUrl(response)
       if (!videoUrl) {
-        throw new Error(`视频生成完成但取不到视频地址：${JSON.stringify(statusData.data)}`)
+        throw new Error(`视频生成完成但找不到视频地址字段，完整返回：${JSON.stringify(statusData)}`)
       }
       return videoUrl
     }
-    if (taskStatus === 'failed') {
-      throw new Error(`视频生成失败：${statusData.data.task_status_msg ?? statusData.message ?? '未知错误'}`)
+    if (status === 'FAILED' || status === 'failed') {
+      throw new Error(`视频生成失败：${JSON.stringify(response)}`)
     }
   }
   throw new Error('视频生成超时，请重试')
