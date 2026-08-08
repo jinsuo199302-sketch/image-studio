@@ -74,7 +74,10 @@ function selectPanel(key: RailKey) {
   activePanel.value = key
 }
 
-function onTextProp(prop: 'fontSize' | 'fill' | 'fontWeight' | 'textAlign', value: string | number) {
+function onTextProp(
+  prop: 'fontSize' | 'fill' | 'fontWeight' | 'fontStyle' | 'underline' | 'textAlign' | 'lineHeight' | 'charSpacing',
+  value: string | number | boolean,
+) {
   stageRef.value?.setSelectedTextProp(prop, value)
 }
 
@@ -191,6 +194,8 @@ async function onRemoveBackground() {
             :selection="selection"
             :removing-background="removingBackground"
             @text-prop="onTextProp"
+            @text-shadow="(enabled) => stageRef?.setSelectedTextShadow(enabled)"
+            @text-stroke="(enabled) => stageRef?.setSelectedTextStroke(enabled)"
             @replace-image="replaceViaUpload"
             @remove-background="onRemoveBackground"
             @delete="stageRef?.deleteSelected()"

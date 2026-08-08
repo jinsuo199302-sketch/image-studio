@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { Canvas, FabricImage, IText, Rect, type FabricObject } from 'fabric'
+import { Canvas, FabricImage, IText, Rect, Shadow, type FabricObject } from 'fabric'
 import type { CanvasElement, Template } from '../../data/templates'
 
 const props = defineProps<{ template: Template }>()
@@ -14,7 +14,13 @@ export interface SelectionInfo {
   fontSize?: number
   fill?: string
   fontWeight?: string
+  fontStyle?: string
+  underline?: boolean
   textAlign?: string
+  lineHeight?: number
+  charSpacing?: number
+  hasShadow?: boolean
+  hasStroke?: boolean
   text?: string
   src?: string
 }
@@ -137,7 +143,13 @@ function describeSelection(obj: FabricObject | undefined): SelectionInfo | null 
       fontSize: obj.fontSize,
       fill: String(obj.fill ?? '#000000'),
       fontWeight: String(obj.fontWeight ?? 'normal'),
+      fontStyle: String(obj.fontStyle ?? 'normal'),
+      underline: !!obj.underline,
       textAlign: obj.textAlign,
+      lineHeight: obj.lineHeight ?? 1.16,
+      charSpacing: obj.charSpacing ?? 0,
+      hasShadow: !!obj.shadow,
+      hasStroke: !!(obj.stroke && (obj.strokeWidth ?? 0) > 0),
       text: obj.text ?? '',
     }
   }
@@ -225,13 +237,44 @@ async function replaceSelectedImage(url: string) {
   pushHistory()
 }
 
-function setSelectedTextProp(prop: 'fontSize' | 'fill' | 'fontWeight' | 'textAlign', value: string | number) {
+type TextPropKey =
+  | 'fontSize'
+  | 'fill'
+  | 'fontWeight'
+  | 'fontStyle'
+  | 'underline'
+  | 'textAlign'
+  | 'lineHeight'
+  | 'charSpacing'
+
+function setSelectedTextProp(prop: TextPropKey, value: string | number | boolean) {
   if (!canvas) return
   const active = canvas.getActiveObject()
   if (!(active instanceof IText)) return
   active.set(prop, value)
   canvas.requestRenderAll()
   pushHistory()
+  emit('selection', describeSelection(active))
+}
+
+function setSelectedTextShadow(enabled: boolean) {
+  if (!canvas) return
+  const active = canvas.getActiveObject()
+  if (!(active instanceof IText)) return
+  active.set('shadow', enabled ? new Shadow({ color: 'rgba(0,0,0,0.35)', blur: 6, offsetX: 2, offsetY: 2 }) : null)
+  canvas.requestRenderAll()
+  pushHistory()
+  emit('selection', describeSelection(active))
+}
+
+function setSelectedTextStroke(enabled: boolean) {
+  if (!canvas) return
+  const active = canvas.getActiveObject()
+  if (!(active instanceof IText)) return
+  active.set({ stroke: enabled ? '#ffffff' : undefined, strokeWidth: enabled ? 1.5 : 0 })
+  canvas.requestRenderAll()
+  pushHistory()
+  emit('selection', describeSelection(active))
 }
 
 function getSelectedText(): string | null {
@@ -384,6 +427,8 @@ defineExpose({
   addImage,
   replaceSelectedImage,
   setSelectedTextProp,
+  setSelectedTextShadow,
+  setSelectedTextStroke,
   getSelectedText,
   setSelectedText,
   deleteSelected,
