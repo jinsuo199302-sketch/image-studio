@@ -22,7 +22,7 @@ async function generate() {
   videoUrl.value = ''
   try {
     videoUrl.value = await generateVideo(
-      apiConfigStore.isConfigured ? apiConfigStore.config : null,
+      apiConfigStore.isVideoConfigured ? apiConfigStore.video : null,
       { prompt: prompt.value.trim(), duration: duration.value, ratio: ratio.value },
     )
   } catch {
@@ -47,8 +47,8 @@ function download() {
   <div class="flex h-full flex-col">
     <div class="flex-1 space-y-4 overflow-y-auto p-3">
       <el-alert
-        :title="apiConfigStore.isConfigured ? '已接入视频生成接口' : '演示模式：生成结果为示例视频，接口接入后自动切换'"
-        :type="apiConfigStore.isConfigured ? 'success' : 'info'"
+        :title="apiConfigStore.isVideoConfigured ? '已接入视频生成接口' : '演示模式：生成结果为示例视频，接口接入后自动切换'"
+        :type="apiConfigStore.isVideoConfigured ? 'success' : 'info'"
         :closable="false"
         show-icon
       />

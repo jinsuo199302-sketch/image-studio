@@ -33,7 +33,7 @@ async function runRemoveBg() {
   processing.value = 'bg'
   try {
     workingImage.value = await removeBackground(
-      apiConfigStore.isConfigured ? apiConfigStore.config : null,
+      apiConfigStore.isImageConfigured ? apiConfigStore.image : null,
       workingImage.value,
     )
   } catch {
@@ -48,7 +48,7 @@ async function runUpscale() {
   processing.value = 'upscale'
   try {
     workingImage.value = await upscaleImage(
-      apiConfigStore.isConfigured ? apiConfigStore.config : null,
+      apiConfigStore.isImageConfigured ? apiConfigStore.image : null,
       workingImage.value,
     )
   } catch {
@@ -63,8 +63,8 @@ async function runUpscale() {
   <div class="flex h-full flex-col">
     <div class="flex-1 space-y-4 overflow-y-auto p-3">
       <el-alert
-        :title="apiConfigStore.isConfigured ? '已接入图片处理接口' : '演示模式：处理结果为原图占位，接口接入后自动切换'"
-        :type="apiConfigStore.isConfigured ? 'success' : 'info'"
+        :title="apiConfigStore.isImageConfigured ? '已接入图片处理接口' : '演示模式：处理结果为原图占位，接口接入后自动切换'"
+        :type="apiConfigStore.isImageConfigured ? 'success' : 'info'"
         :closable="false"
         show-icon
       />

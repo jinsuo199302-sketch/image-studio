@@ -36,7 +36,7 @@ async function translate() {
   result.value = ''
   try {
     result.value = await translateText(
-      apiConfigStore.isConfigured ? apiConfigStore.config : null,
+      apiConfigStore.isTextConfigured ? apiConfigStore.text : null,
       { text: sourceText.value.trim(), targetLang: targetLang.value },
     )
   } catch {
@@ -51,8 +51,8 @@ async function translate() {
   <div class="flex h-full flex-col">
     <div class="flex-1 space-y-4 overflow-y-auto p-3">
       <el-alert
-        :title="apiConfigStore.isConfigured ? '已接入翻译接口' : '演示模式：译文为占位标记，接口接入后自动切换'"
-        :type="apiConfigStore.isConfigured ? 'success' : 'info'"
+        :title="apiConfigStore.isTextConfigured ? '已接入翻译接口' : '演示模式：译文为占位标记，接口接入后自动切换'"
+        :type="apiConfigStore.isTextConfigured ? 'success' : 'info'"
         :closable="false"
         show-icon
       />

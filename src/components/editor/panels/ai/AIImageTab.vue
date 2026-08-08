@@ -15,8 +15,8 @@ const promptLibraryOpen = ref(false)
   <div class="flex h-full flex-col">
     <div class="flex-1 space-y-4 overflow-y-auto p-3">
       <el-alert
-        :title="apiConfigStore.isConfigured ? '已接入生成接口' : '演示模式：生成结果为占位图，接口接入后自动切换'"
-        :type="apiConfigStore.isConfigured ? 'success' : 'info'"
+        :title="apiConfigStore.isImageConfigured ? '已接入生成接口' : '演示模式：生成结果为占位图，接口接入后自动切换'"
+        :type="apiConfigStore.isImageConfigured ? 'success' : 'info'"
         :closable="false"
         show-icon
       />

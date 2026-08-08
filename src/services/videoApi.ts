@@ -24,20 +24,59 @@ async function mockGenerate(_params: VideoParams): Promise<string> {
   return SAMPLE_VIDEOS[Math.floor(Math.random() * SAMPLE_VIDEOS.length)]
 }
 
+function ratioToSize(ratio: VideoParams['ratio']): string {
+  if (ratio === '9:16') return '720x1280'
+  if (ratio === '1:1') return '720x720'
+  return '1280x720'
+}
+
 /**
- * TODO: 接入第三方中转接口后在此实现。视频生成通常是异步任务：
- * 先提交任务拿到 task_id，再轮询任务状态直到拿到最终视频 url。
- *
- * const submit = await fetch(`${config.baseUrl}/v1/videos/generations`, {
- *   method: 'POST',
- *   headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` },
- *   body: JSON.stringify({ prompt: params.prompt, duration: params.duration, ratio: params.ratio }),
- * })
- * const { task_id } = await submit.json()
- * // 轮询 GET `${config.baseUrl}/v1/videos/generations/${task_id}` 直到 status === 'succeeded'
+ * 按 OpenAI Sora 风格的异步任务模式实现（提交任务 -> 轮询状态 -> 取回内容），
+ * 模型名 'sora-2' 和字段名都是按官方文档格式的推测，未经真实联调验证——
+ * 如果调用报错（比如模型名不对/字段名不对），把报错信息发给我，按实际接口调整。
  */
-async function realGenerate(_config: ApiConfig, _params: VideoParams): Promise<string> {
-  throw new Error('尚未接入真实视频生成接口')
+async function realGenerate(config: ApiConfig, params: VideoParams): Promise<string> {
+  const headers = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${config.apiKey}`,
+  }
+
+  const submitRes = await fetch(`${config.baseUrl}/videos`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      model: 'sora-2',
+      prompt: params.prompt,
+      seconds: String(params.duration),
+      size: ratioToSize(params.ratio),
+    }),
+  })
+  if (!submitRes.ok) {
+    throw new Error(`视频生成接口请求失败：${submitRes.status} ${await submitRes.text()}`)
+  }
+  const task = await submitRes.json()
+  const taskId = task.id
+
+  for (let i = 0; i < 60; i++) {
+    await delay(3000)
+    const statusRes = await fetch(`${config.baseUrl}/videos/${taskId}`, { headers })
+    if (!statusRes.ok) {
+      throw new Error(`视频任务状态查询失败：${statusRes.status} ${await statusRes.text()}`)
+    }
+    const statusData = await statusRes.json()
+    if (statusData.status === 'completed') {
+      const contentRes = await fetch(`${config.baseUrl}/videos/${taskId}/content`, { headers })
+      if (!contentRes.ok) {
+        throw new Error(`视频内容下载失败：${contentRes.status}`)
+      }
+      const blob = await contentRes.blob()
+      return URL.createObjectURL(blob)
+    }
+    if (statusData.status === 'failed') {
+      throw new Error(`视频生成失败：${statusData.error?.message ?? '未知错误'}`)
+    }
+  }
+  throw new Error('视频生成超时，请重试')
 }
 
 export async function generateVideo(config: ApiConfig | null, params: VideoParams): Promise<string> {

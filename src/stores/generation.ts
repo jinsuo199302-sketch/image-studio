@@ -39,7 +39,7 @@ export const useGenerationStore = defineStore('generation', {
       try {
         const apiConfigStore = useApiConfigStore()
         const images = await generateImages(
-          apiConfigStore.isConfigured ? apiConfigStore.config : null,
+          apiConfigStore.isImageConfigured ? apiConfigStore.image : null,
           this.params,
         )
         this.currentResults = images
