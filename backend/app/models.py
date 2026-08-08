@@ -18,3 +18,11 @@ class Template(Base):
     elements = Column(JSON, nullable=False)
     is_official = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class TextSnippet(Base):
+    __tablename__ = "text_snippets"
+
+    id = Column(String, primary_key=True, index=True)
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)

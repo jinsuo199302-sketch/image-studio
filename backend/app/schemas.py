@@ -42,3 +42,15 @@ class TemplateListResponse(BaseModel):
 
 class DeleteResponse(BaseModel):
     deleted: bool
+
+
+class SnippetCreate(BaseModel):
+    content: str
+
+
+class SnippetItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    content: str
+    created_at: datetime

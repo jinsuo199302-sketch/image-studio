@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import QRCode from 'qrcode'
 import { ElMessage } from 'element-plus'
+import { createSnippet } from '../../../services/snippetApi'
 
 const emit = defineEmits<{ (e: 'add', color: string): void; (e: 'add-image', url: string): void }>()
 
@@ -38,10 +39,24 @@ function buildVCard(): string {
 async function generateQrcode() {
   let content = ''
   if (qrMode.value === 'text') {
-    content = qrText.value.trim()
-    if (!content) {
+    const input = qrText.value.trim()
+    if (!input) {
       ElMessage.warning('请输入链接或文本内容')
       return
+    }
+    if (/^https?:\/\//i.test(input)) {
+      content = input
+    } else {
+      // 微信扫一扫不展示纯文本，把内容存到后端，二维码里放一个短链接代替
+      generating.value = true
+      try {
+        const snippet = await createSnippet(input)
+        content = `${window.location.origin}/s/${snippet.id}`
+      } catch (e) {
+        ElMessage.error(e instanceof Error ? e.message : '内容保存失败，请重试')
+        generating.value = false
+        return
+      }
     }
   } else {
     if (!cardName.value.trim() || !cardPhone.value.trim()) {

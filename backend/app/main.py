@@ -9,6 +9,8 @@ from app.database import Base, SessionLocal, engine, get_db
 from app.pdf_tools import router as pdf_router
 from app.schemas import (
     DeleteResponse,
+    SnippetCreate,
+    SnippetItem,
     TemplateCreate,
     TemplateItem,
     TemplateListResponse,
@@ -66,6 +68,24 @@ def delete_template(template_id: str, db: Session = Depends(get_db)):
     if not deleted:
         raise HTTPException(status_code=404, detail="模板不存在")
     return {"deleted": deleted}
+
+
+@app.post("/api/snippets", response_model=SnippetItem)
+def create_snippet(payload: SnippetCreate, db: Session = Depends(get_db)):
+    content = payload.content.strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="内容不能为空")
+    if len(content) > 2000:
+        raise HTTPException(status_code=400, detail="内容太长，最多 2000 字")
+    return crud.create_snippet(db, content)
+
+
+@app.get("/api/snippets/{snippet_id}", response_model=SnippetItem)
+def get_snippet(snippet_id: str, db: Session = Depends(get_db)):
+    snippet = crud.get_snippet(db, snippet_id)
+    if not snippet:
+        raise HTTPException(status_code=404, detail="内容不存在或已被删除")
+    return snippet
 
 
 @app.get("/api/health")

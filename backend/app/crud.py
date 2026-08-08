@@ -53,3 +53,15 @@ def delete_template(db: Session, template_id: str):
     db.delete(template)
     db.commit()
     return True
+
+
+def create_snippet(db: Session, content: str):
+    snippet = models.TextSnippet(id=uuid.uuid4().hex[:10], content=content)
+    db.add(snippet)
+    db.commit()
+    db.refresh(snippet)
+    return snippet
+
+
+def get_snippet(db: Session, snippet_id: str):
+    return db.query(models.TextSnippet).filter(models.TextSnippet.id == snippet_id).first()
