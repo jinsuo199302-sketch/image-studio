@@ -12,6 +12,27 @@ export const STYLE_PRESETS = [
   { key: 'cyberpunk', label: '赛博朋克' },
 ]
 
+const HISTORY_STORAGE_KEY = 'image-studio.imageHistory'
+const MAX_HISTORY_SESSIONS = 50
+
+function loadHistory(): HistorySession[] {
+  try {
+    const raw = localStorage.getItem(HISTORY_STORAGE_KEY)
+    if (raw) return JSON.parse(raw)
+  } catch {
+    // ignore corrupt storage
+  }
+  return []
+}
+
+function saveHistory(history: HistorySession[]) {
+  try {
+    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history.slice(0, MAX_HISTORY_SESSIONS)))
+  } catch {
+    // 存储配额超限时放弃持久化，不影响当前会话使用
+  }
+}
+
 export const useGenerationStore = defineStore('generation', {
   state: () => ({
     params: {
@@ -23,7 +44,7 @@ export const useGenerationStore = defineStore('generation', {
       referenceImage: null,
     } as GenerationParams,
     currentResults: [] as GeneratedImage[],
-    history: [] as HistorySession[],
+    history: loadHistory(),
     isGenerating: false,
     error: '' as string,
   }),
@@ -49,6 +70,8 @@ export const useGenerationStore = defineStore('generation', {
           createdAt: Date.now(),
           images,
         })
+        this.history = this.history.slice(0, MAX_HISTORY_SESSIONS)
+        saveHistory(this.history)
       } catch (e) {
         this.error = e instanceof Error ? e.message : '生成失败，请重试'
       } finally {
@@ -62,6 +85,7 @@ export const useGenerationStore = defineStore('generation', {
       }
       const cur = this.currentResults.find((i) => i.id === imageId)
       if (cur) cur.starred = !cur.starred
+      saveHistory(this.history)
     },
     useAsReference(url: string) {
       this.params.referenceImage = url

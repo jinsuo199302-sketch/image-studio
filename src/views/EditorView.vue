@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, RefreshLeft, RefreshRight, Download, Collection, Crop } from '@element-plus/icons-vue'
+import { ArrowLeft, RefreshLeft, RefreshRight, Download, Collection, Crop, Clock } from '@element-plus/icons-vue'
 import AppHeader from '../components/AppHeader.vue'
 import CanvasStage, { type SelectionInfo } from '../components/editor/CanvasStage.vue'
 import LeftIconRail, { type RailKey } from '../components/editor/LeftIconRail.vue'
 import SelectionToolbar from '../components/editor/SelectionToolbar.vue'
 import SaveTemplateDialog from '../components/editor/SaveTemplateDialog.vue'
 import ResizeDialog from '../components/editor/ResizeDialog.vue'
+import HistoryDialog from '../components/editor/HistoryDialog.vue'
 import TemplateSwitchPanel from '../components/editor/panels/TemplateSwitchPanel.vue'
 import BackgroundPanel from '../components/editor/panels/BackgroundPanel.vue'
 import ShapePanel from '../components/editor/panels/ShapePanel.vue'
@@ -54,6 +55,7 @@ const selection = ref<SelectionInfo | null>(null)
 const history = ref({ canUndo: false, canRedo: false })
 const saveDialogOpen = ref(false)
 const resizeDialogOpen = ref(false)
+const historyDialogOpen = ref(false)
 
 function switchTemplate(id: string) {
   currentId.value = id
@@ -107,6 +109,7 @@ function onSaved(newId: string) {
         <el-button text :icon="RefreshLeft" :disabled="!history.canUndo" @click="stageRef?.undo()" />
         <el-button text :icon="RefreshRight" :disabled="!history.canRedo" @click="stageRef?.redo()" />
         <el-button :icon="Crop" :disabled="!template" @click="resizeDialogOpen = true">尺寸调整</el-button>
+        <el-button :icon="Clock" @click="historyDialogOpen = true">历史记录</el-button>
         <el-button :icon="Collection" :disabled="!template" @click="saveDialogOpen = true">
           另存为模板
         </el-button>
@@ -180,6 +183,11 @@ function onSaved(newId: string) {
       :width="template.canvasWidth"
       :height="template.canvasHeight"
       @resize="(w, h) => stageRef?.resizeCanvas(w, h)"
+    />
+    <HistoryDialog
+      v-model="historyDialogOpen"
+      @insert-image="(url) => stageRef?.addImage(url)"
+      @insert-text="(text) => stageRef?.addText(text)"
     />
   </div>
 </template>

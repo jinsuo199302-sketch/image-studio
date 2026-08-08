@@ -31,6 +31,15 @@ export interface HistorySession {
   images: GeneratedImage[]
 }
 
+export interface WritingSession {
+  id: string
+  topic: string
+  type: string
+  tone: string
+  createdAt: number
+  results: string[]
+}
+
 export interface ApiConfig {
   baseUrl: string
   apiKey: string
