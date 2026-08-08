@@ -61,7 +61,7 @@ async function realGenerate(config: ApiConfig, params: VideoParams): Promise<str
     method: 'POST',
     headers,
     body: JSON.stringify({
-      model_name: 'kling-3.0-turbo',
+      model_name: 'kling-v2-5-turbo',
       prompt: params.prompt,
       negative_prompt: '',
       cfg_scale: 0.5,
