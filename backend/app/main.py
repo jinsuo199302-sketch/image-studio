@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app import crud
 from app.database import Base, SessionLocal, engine, get_db
+from app.pdf_tools import router as pdf_router
 from app.schemas import (
     DeleteResponse,
     TemplateCreate,
@@ -28,6 +29,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(pdf_router)
 
 
 @app.get("/api/templates", response_model=TemplateListResponse)

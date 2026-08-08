@@ -20,6 +20,7 @@ const TOOL_TABS = [
   { key: 'ai-translate', label: 'AI 翻译', desc: '多语言互译', enabled: false },
   { key: 'collage', label: '图片拼贴', desc: '多图合成一张', enabled: false },
   { key: 'vectorize', label: '位图转矢量', desc: '照片转矢量图', enabled: false },
+  { key: 'pdf-tools', label: 'PDF 工具', desc: '合并 / 拆分', enabled: true, route: '/pdf-tools' },
 ]
 const activeTool = ref('template')
 
@@ -37,6 +38,10 @@ function openTemplate(id: string) {
 
 function pickTool(tool: (typeof TOOL_TABS)[number]) {
   if (!tool.enabled) return
+  if ('route' in tool && tool.route) {
+    router.push(tool.route)
+    return
+  }
   activeTool.value = tool.key
 }
 </script>
