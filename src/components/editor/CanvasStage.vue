@@ -21,6 +21,7 @@ export interface SelectionInfo {
   charSpacing?: number
   hasShadow?: boolean
   hasStroke?: boolean
+  strokeWidth?: number
   text?: string
   src?: string
 }
@@ -150,6 +151,7 @@ function describeSelection(obj: FabricObject | undefined): SelectionInfo | null 
       charSpacing: obj.charSpacing ?? 0,
       hasShadow: !!obj.shadow,
       hasStroke: !!(obj.stroke && (obj.strokeWidth ?? 0) > 0),
+      strokeWidth: obj.strokeWidth ?? 0,
       text: obj.text ?? '',
     }
   }
@@ -291,11 +293,26 @@ function setSelectedTextShadow(enabled: boolean) {
   emit('selection', describeSelection(active))
 }
 
+/** paintFirst: 'stroke' 让描边先画、填充后画，描边只露出字形外沿，不会把细笔画的内部吃掉 */
 function setSelectedTextStroke(enabled: boolean) {
   if (!canvas) return
   const active = canvas.getActiveObject()
   if (!(active instanceof IText)) return
-  active.set({ stroke: enabled ? '#ffffff' : undefined, strokeWidth: enabled ? 1.5 : 0 })
+  active.set({
+    stroke: enabled ? '#ffffff' : undefined,
+    strokeWidth: enabled ? 1 : 0,
+    paintFirst: 'stroke',
+  })
+  canvas.requestRenderAll()
+  pushHistory()
+  emit('selection', describeSelection(active))
+}
+
+function setSelectedTextStrokeWidth(width: number) {
+  if (!canvas) return
+  const active = canvas.getActiveObject()
+  if (!(active instanceof IText)) return
+  active.set({ strokeWidth: width, paintFirst: 'stroke' })
   canvas.requestRenderAll()
   pushHistory()
   emit('selection', describeSelection(active))
@@ -453,6 +470,7 @@ defineExpose({
   setSelectedTextProp,
   setSelectedTextShadow,
   setSelectedTextStroke,
+  setSelectedTextStrokeWidth,
   setSelectedImageAdjust,
   commitSelectedImageAdjust,
   getSelectedText,

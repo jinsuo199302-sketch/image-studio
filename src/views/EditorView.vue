@@ -198,6 +198,7 @@ async function onRemoveBackground() {
             @text-prop="onTextProp"
             @text-shadow="(enabled) => stageRef?.setSelectedTextShadow(enabled)"
             @text-stroke="(enabled) => stageRef?.setSelectedTextStroke(enabled)"
+            @text-stroke-width="(width) => stageRef?.setSelectedTextStrokeWidth(width)"
             @replace-image="replaceViaUpload"
             @remove-background="onRemoveBackground"
             @adjust-image="adjustDialogOpen = true"

@@ -9,6 +9,7 @@ const emit = defineEmits<{
   (e: 'text-prop', prop: TextProp, value: string | number | boolean): void
   (e: 'text-shadow', enabled: boolean): void
   (e: 'text-stroke', enabled: boolean): void
+  (e: 'text-stroke-width', width: number): void
   (e: 'replace-image'): void
   (e: 'remove-background'): void
   (e: 'adjust-image'): void
@@ -30,6 +31,11 @@ function bumpLineHeight(delta: number) {
 function bumpCharSpacing(delta: number) {
   const cs = Math.max(-100, (props.selection.charSpacing ?? 0) + delta)
   emit('text-prop', 'charSpacing', cs)
+}
+
+function bumpStrokeWidth(delta: number) {
+  const w = Math.min(6, Math.max(0.5, (props.selection.strokeWidth ?? 1) + delta))
+  emit('text-stroke-width', Math.round(w * 10) / 10)
 }
 </script>
 
@@ -127,6 +133,15 @@ function bumpCharSpacing(delta: number) {
       >
         描边
       </button>
+      <div v-if="selection.hasStroke" class="flex items-center gap-1" title="描边粗细">
+        <button class="flex h-6 w-6 items-center justify-center rounded hover:bg-gray-100" @click="bumpStrokeWidth(-0.5)">
+          <el-icon :size="12"><Minus /></el-icon>
+        </button>
+        <span class="w-6 text-center text-xs text-gray-600">{{ selection.strokeWidth }}</span>
+        <button class="flex h-6 w-6 items-center justify-center rounded hover:bg-gray-100" @click="bumpStrokeWidth(0.5)">
+          <el-icon :size="12"><Plus /></el-icon>
+        </button>
+      </div>
       <button
         class="rounded px-2 py-1 text-xs transition"
         :class="selection.hasShadow ? 'bg-violet-50 text-violet-600' : 'text-gray-600 hover:bg-gray-100'"
