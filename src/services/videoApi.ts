@@ -24,26 +24,16 @@ async function mockGenerate(_params: VideoParams): Promise<string> {
   return SAMPLE_VIDEOS[Math.floor(Math.random() * SAMPLE_VIDEOS.length)]
 }
 
-function ratioToSize(ratio: VideoParams['ratio']): string {
-  if (ratio === '9:16') return '720x1280'
-  if (ratio === '1:1') return '720x720'
-  return '1280x720'
-}
-
-/**
- * kling-3.0-turbo 是可灵专属模型，openlux 要求走 /kling-compat/v1/videos/*
- * 这个独立路径（不能走通用的 /v1/videos），所以这里用 origin 重新拼接，
- * 不能直接在 config.baseUrl 后面追加。
- */
-function klingCompatBase(baseUrl: string): string {
+/** kling 文生视频专属路径，跟 config.baseUrl 不在同一层级，需要用 origin 重新拼接 */
+function klingBase(baseUrl: string): string {
   try {
-    return `${new URL(baseUrl).origin}/kling-compat/v1`
+    return new URL(baseUrl).origin
   } catch {
-    return baseUrl.replace(/\/v1\/?$/, '') + '/kling-compat/v1'
+    return baseUrl.replace(/\/v1\/?$/, '')
   }
 }
 
-/** 安全解析响应体：不是合法 JSON 时把状态码 + 原始内容片段带进报错里，方便定位问题 */
+/** 安全解析响应体：不是合法 JSON 时把状态码 + 原始内容片段带进报错里 */
 async function parseJsonOrThrow(res: Response, label: string): Promise<any> {
   const text = await res.text()
   try {
@@ -54,50 +44,55 @@ async function parseJsonOrThrow(res: Response, label: string): Promise<any> {
 }
 
 /**
- * 按异步任务模式实现（提交任务 -> 轮询状态 -> 取回内容），字段名是按常见
- * 视频生成接口格式的推测，未经真实联调验证——如果调用报错，把报错信息
- * 发给我，按实际接口调整。
+ * 按 openlux 文档「文生视频」POST /kling/v1/videos/text2video 实现，
+ * 查询任务状态的 GET 接口路径是参照 Kling 官方 API 惯例推测的
+ * （官方文档：https://app.klingai.com/cn/dev/document-api），未经真实联调验证——
+ * 如果查询这步报错，把报错信息发给我，按实际接口调整。
  */
 async function realGenerate(config: ApiConfig, params: VideoParams): Promise<string> {
   const headers = {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${config.apiKey}`,
   }
-  const base = klingCompatBase(config.baseUrl)
+  const base = klingBase(config.baseUrl)
+  const createUrl = `${base}/kling/v1/videos/text2video`
 
-  const submitRes = await fetch(`${base}/videos`, {
+  const submitRes = await fetch(createUrl, {
     method: 'POST',
     headers,
     body: JSON.stringify({
-      model: 'kling-3.0-turbo',
+      model_name: 'kling-3.0-turbo',
       prompt: params.prompt,
-      seconds: String(params.duration),
-      size: ratioToSize(params.ratio),
+      negative_prompt: '',
+      cfg_scale: 0.5,
+      mode: 'std',
+      aspect_ratio: params.ratio,
+      duration: params.duration,
     }),
   })
-  const task = await parseJsonOrThrow(submitRes, '视频生成接口请求失败')
-  if (!submitRes.ok) {
-    throw new Error(`视频生成接口请求失败：${submitRes.status} ${JSON.stringify(task)}`)
+  const submitData = await parseJsonOrThrow(submitRes, '视频生成接口请求失败')
+  if (!submitRes.ok || submitData.code !== 0) {
+    throw new Error(`视频生成接口请求失败：${submitRes.status} ${JSON.stringify(submitData)}`)
   }
-  const taskId = task.id
+  const taskId = submitData.data.task_id
 
   for (let i = 0; i < 60; i++) {
     await delay(3000)
-    const statusRes = await fetch(`${base}/videos/${taskId}`, { headers })
+    const statusRes = await fetch(`${createUrl}/${taskId}`, { headers })
     const statusData = await parseJsonOrThrow(statusRes, '视频任务状态查询失败')
-    if (!statusRes.ok) {
+    if (!statusRes.ok || statusData.code !== 0) {
       throw new Error(`视频任务状态查询失败：${statusRes.status} ${JSON.stringify(statusData)}`)
     }
-    if (statusData.status === 'completed') {
-      const contentRes = await fetch(`${base}/videos/${taskId}/content`, { headers })
-      if (!contentRes.ok) {
-        throw new Error(`视频内容下载失败：${contentRes.status} ${await contentRes.text()}`)
+    const taskStatus = statusData.data.task_status
+    if (taskStatus === 'succeed' || taskStatus === 'success' || taskStatus === 'completed') {
+      const videoUrl = statusData.data.task_result?.videos?.[0]?.url
+      if (!videoUrl) {
+        throw new Error(`视频生成完成但取不到视频地址：${JSON.stringify(statusData.data)}`)
       }
-      const blob = await contentRes.blob()
-      return URL.createObjectURL(blob)
+      return videoUrl
     }
-    if (statusData.status === 'failed') {
-      throw new Error(`视频生成失败：${statusData.error?.message ?? '未知错误'}`)
+    if (taskStatus === 'failed') {
+      throw new Error(`视频生成失败：${statusData.data.task_status_msg ?? statusData.message ?? '未知错误'}`)
     }
   }
   throw new Error('视频生成超时，请重试')
