@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { Canvas, FabricImage, IText, Rect, Shadow, filters, type FabricObject } from 'fabric'
+import { Canvas, FabricImage, Gradient, Group, IText, Rect, Shadow, filters, type FabricObject } from 'fabric'
 import type { CanvasElement, Template } from '../../data/templates'
 
 const props = defineProps<{ template: Template }>()
@@ -24,6 +24,10 @@ export interface SelectionInfo {
   hasStroke?: boolean
   strokeWidth?: number
   strokeColor?: string
+  hasTextBackground?: boolean
+  textBackgroundColor?: string
+  opacity?: number
+  blendMode?: string
   text?: string
   src?: string
 }
@@ -156,12 +160,18 @@ function describeSelection(obj: FabricObject | undefined): SelectionInfo | null 
       hasStroke: !!(obj.stroke && (obj.strokeWidth ?? 0) > 0),
       strokeWidth: obj.strokeWidth ?? 0,
       strokeColor: String(obj.stroke ?? '#ffffff'),
+      hasTextBackground: !!obj.textBackgroundColor,
+      textBackgroundColor: obj.textBackgroundColor || '#fde047',
+      opacity: obj.opacity ?? 1,
+      blendMode: obj.globalCompositeOperation ?? 'source-over',
       text: obj.text ?? '',
     }
   }
-  if (obj instanceof FabricImage) return { type: 'image', src: obj.getSrc() }
-  if (obj instanceof Rect) return { type: 'rect', fill: String(obj.fill ?? '#000000') }
-  return { type: 'other' }
+  if (obj instanceof FabricImage)
+    return { type: 'image', src: obj.getSrc(), opacity: obj.opacity ?? 1, blendMode: obj.globalCompositeOperation ?? 'source-over' }
+  if (obj instanceof Rect)
+    return { type: 'rect', fill: String(obj.fill ?? '#000000'), opacity: obj.opacity ?? 1, blendMode: obj.globalCompositeOperation ?? 'source-over' }
+  return { type: 'other', opacity: obj.opacity ?? 1, blendMode: obj.globalCompositeOperation ?? 'source-over' }
 }
 
 onMounted(async () => {
@@ -248,18 +258,23 @@ interface ImageAdjust {
   brightness: number
   contrast: number
   saturation: number
+  preset?: 'none' | 'grayscale' | 'sepia'
 }
 
 /** 实时调色：每次滑块变化都重建 filters 数组并应用，不做防抖以保证预览跟手 */
-function setSelectedImageAdjust({ brightness, contrast, saturation }: ImageAdjust) {
+function setSelectedImageAdjust({ brightness, contrast, saturation, preset }: ImageAdjust) {
   if (!canvas) return
   const active = canvas.getActiveObject()
   if (!(active instanceof FabricImage)) return
-  active.filters = [
+  const stack = []
+  if (preset === 'grayscale') stack.push(new filters.Grayscale())
+  if (preset === 'sepia') stack.push(new filters.Sepia())
+  stack.push(
     new filters.Brightness({ brightness }),
     new filters.Contrast({ contrast }),
     new filters.Saturation({ saturation }),
-  ]
+  )
+  active.filters = stack
   active.applyFilters()
   canvas.requestRenderAll()
 }
@@ -334,6 +349,88 @@ function setSelectedTextStrokeColor(color: string) {
   emit('selection', describeSelection(active))
 }
 
+function setSelectedTextGradient(colors: [string, string]) {
+  if (!canvas) return
+  const active = canvas.getActiveObject()
+  if (!(active instanceof IText)) return
+  const gradient = new Gradient({
+    type: 'linear',
+    coords: { x1: 0, y1: 0, x2: active.width ?? 200, y2: 0 },
+    colorStops: [
+      { offset: 0, color: colors[0] },
+      { offset: 1, color: colors[1] },
+    ],
+  })
+  active.set('fill', gradient)
+  canvas.requestRenderAll()
+  pushHistory()
+  emit('selection', describeSelection(active))
+}
+
+function setSelectedTextBackground(enabled: boolean, color?: string) {
+  if (!canvas) return
+  const active = canvas.getActiveObject()
+  if (!(active instanceof IText)) return
+  active.set('textBackgroundColor', enabled ? color ?? active.textBackgroundColor ?? '#fde047' : '')
+  canvas.requestRenderAll()
+  pushHistory()
+  emit('selection', describeSelection(active))
+}
+
+function setSelectedOpacity(value: number) {
+  if (!canvas) return
+  const active = canvas.getActiveObject()
+  if (!active) return
+  active.set('opacity', value)
+  canvas.requestRenderAll()
+  emit('selection', describeSelection(active))
+}
+
+function commitSelectedOpacity() {
+  pushHistory()
+}
+
+function setSelectedBlendMode(mode: string) {
+  if (!canvas) return
+  const active = canvas.getActiveObject()
+  if (!active) return
+  active.set('globalCompositeOperation', mode)
+  canvas.requestRenderAll()
+  pushHistory()
+  emit('selection', describeSelection(active))
+}
+
+function bringSelectedForward() {
+  if (!canvas) return
+  const active = canvas.getActiveObject()
+  if (!active) return
+  canvas.bringObjectForward(active)
+  canvas.requestRenderAll()
+  pushHistory()
+}
+
+function sendSelectedBackward() {
+  if (!canvas) return
+  const active = canvas.getActiveObject()
+  if (!active) return
+  canvas.sendObjectBackwards(active)
+  canvas.requestRenderAll()
+  pushHistory()
+}
+
+async function duplicateSelected() {
+  if (!canvas) return
+  const active = canvas.getActiveObject()
+  if (!active) return
+  const clone = await active.clone()
+  clone.set({ left: (active.left ?? 0) + 20, top: (active.top ?? 0) + 20 })
+  canvas.add(clone)
+  canvas.setActiveObject(clone)
+  canvas.requestRenderAll()
+  pushHistory()
+  emit('selection', describeSelection(clone))
+}
+
 function getSelectedText(): string | null {
   const active = canvas?.getActiveObject()
   return active instanceof IText ? (active.text ?? '') : null
@@ -365,6 +462,113 @@ function addRect(fill: string) {
   canvas.add(rect)
   canvas.setActiveObject(rect)
   canvas.requestRenderAll()
+}
+
+/** 插入一个简单柱状图组件（示例数据，插入后可以像普通图层一样拖拽、编辑里面的文字） */
+function addBarChart() {
+  if (!canvas) return
+  const data = [
+    { label: 'A', value: 60, color: '#8b5cf6' },
+    { label: 'B', value: 90, color: '#ec4899' },
+    { label: 'C', value: 45, color: '#38bdf8' },
+    { label: 'D', value: 75, color: '#22c55e' },
+  ]
+  const chartH = 160
+  const barW = 40
+  const gap = 20
+  const maxVal = Math.max(...data.map((d) => d.value))
+  const children: FabricObject[] = [
+    new Rect({ left: 0, top: chartH, width: data.length * (barW + gap), height: 2, fill: '#d1d5db' }),
+  ]
+  data.forEach((d, i) => {
+    const h = (d.value / maxVal) * (chartH - 30)
+    const x = i * (barW + gap) + 10
+    children.push(new Rect({ left: x, top: chartH - h, width: barW, height: h, fill: d.color, rx: 4, ry: 4 }))
+    children.push(
+      new IText(String(d.value), { left: x, top: chartH - h - 22, fontSize: 14, fill: '#374151', width: barW, textAlign: 'center' }),
+    )
+    children.push(
+      new IText(d.label, { left: x, top: chartH + 8, fontSize: 13, fill: '#6b7280', width: barW, textAlign: 'center' }),
+    )
+  })
+  const chartW = data.length * (barW + gap) + 20
+  const group = new Group(children, {
+    left: canvasSize.width / 2 - chartW / 2,
+    top: canvasSize.height / 2 - chartH / 2,
+  })
+  canvas.add(group)
+  canvas.setActiveObject(group)
+  canvas.requestRenderAll()
+  pushHistory()
+}
+
+/** 插入一个色块+文字的图例组件 */
+function addLegend() {
+  if (!canvas) return
+  const items = [
+    { label: '系列一', color: '#8b5cf6' },
+    { label: '系列二', color: '#ec4899' },
+    { label: '系列三', color: '#38bdf8' },
+  ]
+  const children: FabricObject[] = []
+  items.forEach((it, i) => {
+    const y = i * 26
+    children.push(new Rect({ left: 0, top: y, width: 14, height: 14, fill: it.color, rx: 3, ry: 3 }))
+    children.push(new IText(it.label, { left: 22, top: y - 2, fontSize: 14, fill: '#374151' }))
+  })
+  const group = new Group(children, {
+    left: canvasSize.width / 2 - 60,
+    top: canvasSize.height / 2 - 40,
+  })
+  canvas.add(group)
+  canvas.setActiveObject(group)
+  canvas.requestRenderAll()
+  pushHistory()
+}
+
+/** 插入一个 3 列 x 3 行的数据表格组件（首行是表头样式） */
+function addDataTable() {
+  if (!canvas) return
+  const cols = 3
+  const rows = 3
+  const cellW = 90
+  const cellH = 36
+  const children: FabricObject[] = []
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const x = c * cellW
+      const y = r * cellH
+      children.push(
+        new Rect({
+          left: x,
+          top: y,
+          width: cellW,
+          height: cellH,
+          fill: r === 0 ? '#8b5cf6' : r % 2 === 0 ? '#f9fafb' : '#ffffff',
+          stroke: '#e5e7eb',
+          strokeWidth: 1,
+        }),
+      )
+      const text = r === 0 ? `列${c + 1}` : `内容${r}-${c + 1}`
+      children.push(
+        new IText(text, {
+          left: x + 8,
+          top: y + 9,
+          fontSize: 13,
+          fill: r === 0 ? '#ffffff' : '#374151',
+          width: cellW - 16,
+        }),
+      )
+    }
+  }
+  const group = new Group(children, {
+    left: canvasSize.width / 2 - (cols * cellW) / 2,
+    top: canvasSize.height / 2 - (rows * cellH) / 2,
+  })
+  canvas.add(group)
+  canvas.setActiveObject(group)
+  canvas.requestRenderAll()
+  pushHistory()
 }
 
 function setBackground(color: string) {
@@ -488,12 +692,23 @@ defineExpose({
   setSelectedTextStroke,
   setSelectedTextStrokeWidth,
   setSelectedTextStrokeColor,
+  setSelectedTextGradient,
+  setSelectedTextBackground,
+  setSelectedOpacity,
+  commitSelectedOpacity,
+  setSelectedBlendMode,
+  bringSelectedForward,
+  sendSelectedBackward,
+  duplicateSelected,
   setSelectedImageAdjust,
   commitSelectedImageAdjust,
   getSelectedText,
   setSelectedText,
   deleteSelected,
   addRect,
+  addBarChart,
+  addLegend,
+  addDataTable,
   setBackground,
   resizeCanvas,
   undo,

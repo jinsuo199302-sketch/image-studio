@@ -7,6 +7,8 @@ from pydantic import BaseModel, ConfigDict
 class TemplateBase(BaseModel):
     name: str
     category: str
+    scene: str = "全部场景"
+    industry: str = "通用场景"
     canvas_width: int
     canvas_height: int
     background: str = "#ffffff"
@@ -21,6 +23,8 @@ class TemplateCreate(TemplateBase):
 class TemplateUpdate(BaseModel):
     name: Optional[str] = None
     category: Optional[str] = None
+    scene: Optional[str] = None
+    industry: Optional[str] = None
     canvas_width: Optional[int] = None
     canvas_height: Optional[int] = None
     background: Optional[str] = None
@@ -54,3 +58,51 @@ class SnippetItem(BaseModel):
     id: str
     content: str
     created_at: datetime
+
+
+class UserRegister(BaseModel):
+    email: str
+    password: str
+
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+
+class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    email: str
+    created_at: datetime
+
+
+class TokenResponse(BaseModel):
+    token: str
+    user: UserOut
+
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class ChatCompletionRequest(BaseModel):
+    model: str = "gemini-3-flash-preview"
+    messages: List[ChatMessage]
+
+
+class ImageGenerationRequest(BaseModel):
+    model: str = "gpt-image-2"
+    prompt: str
+    n: int = 1
+    size: str = "1024x1024"
+
+
+class VideoGenerateRequest(BaseModel):
+    model: str = "viduq3-turbo"
+    prompt: str
+    duration: int = 5
+    aspect_ratio: str = "9:16"
+    bgm: bool = True

@@ -4,10 +4,10 @@ import { ElMessage } from 'element-plus'
 import { UploadFilled, Delete } from '@element-plus/icons-vue'
 import { removeBackground } from '../../../services/backgroundRemovalApi'
 import { upscaleImage } from '../../../services/upscaleApi'
-import { useApiConfigStore } from '../../../stores/apiConfig'
+import { useAuthStore } from '../../../stores/auth'
 
 const emit = defineEmits<{ (e: 'insert', url: string): void }>()
-const apiConfigStore = useApiConfigStore()
+const authStore = useAuthStore()
 
 const fileInput = ref<HTMLInputElement>()
 const workingImage = ref<string | null>(null)
@@ -32,10 +32,7 @@ async function runRemoveBg() {
   if (!workingImage.value) return
   processing.value = 'bg'
   try {
-    workingImage.value = await removeBackground(
-      apiConfigStore.isImageConfigured ? apiConfigStore.image : null,
-      workingImage.value,
-    )
+    workingImage.value = await removeBackground(authStore.isAuthenticated, workingImage.value)
   } catch {
     ElMessage.error('抠图失败，请重试')
   } finally {
@@ -47,10 +44,7 @@ async function runUpscale() {
   if (!workingImage.value) return
   processing.value = 'upscale'
   try {
-    workingImage.value = await upscaleImage(
-      apiConfigStore.isImageConfigured ? apiConfigStore.image : null,
-      workingImage.value,
-    )
+    workingImage.value = await upscaleImage(authStore.isAuthenticated, workingImage.value)
   } catch {
     ElMessage.error('放大失败，请重试')
   } finally {
@@ -63,8 +57,8 @@ async function runUpscale() {
   <div class="flex h-full flex-col">
     <div class="flex-1 space-y-4 overflow-y-auto p-3">
       <el-alert
-        :title="apiConfigStore.isImageConfigured ? '已接入图片处理接口' : '演示模式：处理结果为原图占位，接口接入后自动切换'"
-        :type="apiConfigStore.isImageConfigured ? 'success' : 'info'"
+        :title="authStore.isAuthenticated ? '已登录，使用真实图片处理接口' : '演示模式：处理结果为原图占位，登录后自动切换'"
+        :type="authStore.isAuthenticated ? 'success' : 'info'"
         :closable="false"
         show-icon
       />

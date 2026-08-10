@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import type { GenerationParams, GeneratedImage, HistorySession } from '../types'
 import { generateImages } from '../services/imageApi'
-import { useApiConfigStore } from './apiConfig'
+import { useAuthStore } from './auth'
 
 export const STYLE_PRESETS = [
   { key: 'photo', label: '真实摄影' },
@@ -58,11 +58,8 @@ export const useGenerationStore = defineStore('generation', {
       this.isGenerating = true
       this.currentResults = []
       try {
-        const apiConfigStore = useApiConfigStore()
-        const images = await generateImages(
-          apiConfigStore.isImageConfigured ? apiConfigStore.image : null,
-          this.params,
-        )
+        const authStore = useAuthStore()
+        const images = await generateImages(authStore.isAuthenticated, this.params)
         this.currentResults = images
         this.history.unshift({
           id: `session-${Date.now()}`,

@@ -1,5 +1,3 @@
-import type { ApiConfig } from '../types'
-
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -14,25 +12,16 @@ async function mockRemoveBackground(imageDataUrl: string): Promise<string> {
 }
 
 /**
- * TODO: 接入真实抠图接口后在此实现，常见服务如 remove.bg：
- *
- * const form = new FormData()
- * form.append('image_file_b64', imageDataUrl.split(',')[1])
- * const res = await fetch(`${config.baseUrl}/removebg`, {
- *   method: 'POST',
- *   headers: { 'X-Api-Key': config.apiKey },
- *   body: form,
- * })
- * const blob = await res.blob()
- * return URL.createObjectURL(blob)
+ * TODO: 接入真实抠图接口后在此实现，常见服务如 remove.bg，需要先在后端 ai_proxy.py 里加一个转发路由
+ * （参考 images/edits 那个路由的写法），前端这里再改成调用 authPostForm('/background-removal', ...)
  */
-async function realRemoveBackground(_config: ApiConfig, _imageDataUrl: string): Promise<string> {
+async function realRemoveBackground(_imageDataUrl: string): Promise<string> {
   throw new Error('尚未接入真实抠图接口')
 }
 
-export async function removeBackground(config: ApiConfig | null, imageDataUrl: string): Promise<string> {
-  if (config && config.baseUrl && config.apiKey) {
-    return realRemoveBackground(config, imageDataUrl)
+export async function removeBackground(authenticated: boolean, imageDataUrl: string): Promise<string> {
+  if (authenticated) {
+    return realRemoveBackground(imageDataUrl)
   }
   return mockRemoveBackground(imageDataUrl)
 }

@@ -12,6 +12,8 @@ SEED_TEMPLATES = [
         "id": "tpl-poster-sale",
         "name": "促销海报",
         "category": "广告设计",
+        "scene": "促销活动",
+        "industry": "电商零售",
         "canvas_width": 600,
         "canvas_height": 800,
         "background": "#fef3c7",
@@ -28,6 +30,8 @@ SEED_TEMPLATES = [
         "id": "tpl-flyer-open",
         "name": "开业宣传单",
         "category": "宣传海报",
+        "scene": "开业宣传",
+        "industry": "餐饮美食",
         "canvas_width": 600,
         "canvas_height": 800,
         "background": "#dbeafe",
@@ -43,6 +47,8 @@ SEED_TEMPLATES = [
         "id": "tpl-print-menu",
         "name": "菜单印刷",
         "category": "印刷制品",
+        "scene": "门店物料",
+        "industry": "餐饮美食",
         "canvas_width": 600,
         "canvas_height": 800,
         "background": "#fff7ed",
@@ -60,6 +66,8 @@ SEED_TEMPLATES = [
         "id": "tpl-ecom-banner",
         "name": "电商主图",
         "category": "电商营销",
+        "scene": "促销活动",
+        "industry": "电商零售",
         "canvas_width": 800,
         "canvas_height": 800,
         "background": "#f0fdf4",
@@ -75,6 +83,8 @@ SEED_TEMPLATES = [
         "id": "tpl-social-post",
         "name": "公众号封面",
         "category": "自媒体配图",
+        "scene": "内容封面",
+        "industry": "通用场景",
         "canvas_width": 900,
         "canvas_height": 500,
         "background": "#ede9fe",
@@ -89,6 +99,8 @@ SEED_TEMPLATES = [
         "id": "tpl-card-thankyou",
         "name": "感谢卡",
         "category": "宣传海报",
+        "scene": "感恩贺卡",
+        "industry": "通用场景",
         "canvas_width": 600,
         "canvas_height": 800,
         "background": "#fce7f3",
@@ -103,6 +115,8 @@ SEED_TEMPLATES = [
         "id": "tpl-handnews-traffic",
         "name": "交通安全手抄报",
         "category": "创意手作",
+        "scene": "校园手抄报",
+        "industry": "教育培训",
         "canvas_width": 700,
         "canvas_height": 900,
         "background": "#dbeafe",
@@ -120,6 +134,8 @@ SEED_TEMPLATES = [
         "id": "tpl-handnews-reading",
         "name": "读书手抄报",
         "category": "创意手作",
+        "scene": "校园手抄报",
+        "industry": "教育培训",
         "canvas_width": 700,
         "canvas_height": 900,
         "background": "#fef9e7",
@@ -137,6 +153,8 @@ SEED_TEMPLATES = [
         "id": "tpl-office-resume",
         "name": "个人简历",
         "category": "职场文档",
+        "scene": "简历文档",
+        "industry": "企业办公",
         "canvas_width": 700,
         "canvas_height": 950,
         "background": "#ffffff",
@@ -167,6 +185,8 @@ SEED_TEMPLATES = [
         "id": "tpl-office-leave",
         "name": "请假条",
         "category": "职场文档",
+        "scene": "通知公文",
+        "industry": "企业办公",
         "canvas_width": 700,
         "canvas_height": 700,
         "background": "#ffffff",
@@ -186,6 +206,8 @@ SEED_TEMPLATES = [
         "id": "tpl-office-meeting",
         "name": "会议通知",
         "category": "职场文档",
+        "scene": "通知公文",
+        "industry": "企业办公",
         "canvas_width": 700,
         "canvas_height": 780,
         "background": "#ffffff",
@@ -208,6 +230,8 @@ SEED_TEMPLATES = [
         "id": "tpl-office-invitation",
         "name": "邀请函",
         "category": "职场文档",
+        "scene": "邀请函卡",
+        "industry": "企业办公",
         "canvas_width": 700,
         "canvas_height": 900,
         "background": "#1e293b",
@@ -233,7 +257,25 @@ SEED_TEMPLATES = [
 
 def seed_if_empty(db: Session):
     if db.query(models.Template).count() > 0:
+        backfill_scene_industry(db)
         return
     for data in SEED_TEMPLATES:
         db.add(models.Template(is_official=1, **data))
     db.commit()
+
+
+def backfill_scene_industry(db: Session):
+    """老部署的官方模板行是在 scene/industry 列加进来之前建的，migrate_schema 只能填统一默认值，
+    这里按 id 对上 SEED_TEMPLATES 把每条模板具体的 scene/industry 补齐"""
+    by_id = {t["id"]: t for t in SEED_TEMPLATES}
+    changed = False
+    for row in db.query(models.Template).filter(models.Template.is_official == 1):
+        seed = by_id.get(row.id)
+        if not seed:
+            continue
+        if row.scene != seed["scene"] or row.industry != seed["industry"]:
+            row.scene = seed["scene"]
+            row.industry = seed["industry"]
+            changed = True
+    if changed:
+        db.commit()

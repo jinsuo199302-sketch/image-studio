@@ -4,11 +4,25 @@ import { reactive, watch } from 'vue'
 const props = defineProps<{ modelValue: boolean }>()
 const emit = defineEmits<{
   (e: 'update:modelValue', v: boolean): void
-  (e: 'change', value: { brightness: number; contrast: number; saturation: number }): void
+  (
+    e: 'change',
+    value: { brightness: number; contrast: number; saturation: number; preset: 'none' | 'grayscale' | 'sepia' },
+  ): void
   (e: 'commit'): void
 }>()
 
-const form = reactive({ brightness: 0, contrast: 0, saturation: 0 })
+const PRESETS: { label: string; value: 'none' | 'grayscale' | 'sepia' }[] = [
+  { label: '原图', value: 'none' },
+  { label: '黑白', value: 'grayscale' },
+  { label: '复古', value: 'sepia' },
+]
+
+const form = reactive<{ brightness: number; contrast: number; saturation: number; preset: 'none' | 'grayscale' | 'sepia' }>({
+  brightness: 0,
+  contrast: 0,
+  saturation: 0,
+  preset: 'none',
+})
 
 watch(
   () => props.modelValue,
@@ -17,6 +31,7 @@ watch(
       form.brightness = 0
       form.contrast = 0
       form.saturation = 0
+      form.preset = 'none'
     }
   },
 )
@@ -28,6 +43,7 @@ function reset() {
   form.brightness = 0
   form.contrast = 0
   form.saturation = 0
+  form.preset = 'none'
 }
 
 function close() {
@@ -44,6 +60,22 @@ function close() {
     @update:model-value="(v: boolean) => emit('update:modelValue', v)"
   >
     <div class="space-y-4">
+      <div class="flex gap-2">
+        <button
+          v-for="p in PRESETS"
+          :key="p.value"
+          class="flex-1 rounded-lg border py-1.5 text-xs transition"
+          :class="
+            form.preset === p.value
+              ? 'border-violet-500 bg-violet-50 text-violet-600'
+              : 'border-gray-200 text-gray-600 hover:border-violet-300'
+          "
+          @click="form.preset = p.value"
+        >
+          {{ p.label }}
+        </button>
+      </div>
+
       <div>
         <div class="mb-1 flex justify-between text-xs text-gray-600">
           <span>亮度</span>

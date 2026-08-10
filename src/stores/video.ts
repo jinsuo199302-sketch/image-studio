@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import type { VideoSession } from '../types'
 import { generateVideo, type VideoParams } from '../services/videoApi'
-import { useApiConfigStore } from './apiConfig'
+import { useAuthStore } from './auth'
 
 const STORAGE_KEY = 'image-studio.videoHistory'
 const MAX_SESSIONS = 30
@@ -39,11 +39,8 @@ export const useVideoStore = defineStore('video', {
       this.error = ''
       this.isGenerating = true
       try {
-        const apiConfigStore = useApiConfigStore()
-        const url = await generateVideo(
-          apiConfigStore.isVideoConfigured ? apiConfigStore.video : null,
-          params,
-        )
+        const authStore = useAuthStore()
+        const url = await generateVideo(authStore.isAuthenticated, params)
         this.history.unshift({
           id: `video-${Date.now()}`,
           prompt: params.prompt,

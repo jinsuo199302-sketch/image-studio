@@ -7,6 +7,8 @@ interface BackendTemplate {
   id: string
   name: string
   category: string
+  scene: string
+  industry: string
   canvas_width: number
   canvas_height: number
   background: string
@@ -21,17 +23,22 @@ function toFrontend(t: BackendTemplate): Template {
     id: t.id,
     name: t.name,
     category: t.category,
+    scene: t.scene ?? '全部场景',
+    industry: t.industry ?? '通用场景',
     canvasWidth: t.canvas_width,
     canvasHeight: t.canvas_height,
     background: t.background,
     thumbnail: t.thumbnail,
     elements: t.elements,
+    createdAt: t.created_at,
   }
 }
 
 export interface CreateTemplatePayload {
   name: string
   category: string
+  scene: string
+  industry: string
   canvasWidth: number
   canvasHeight: number
   background: string
@@ -43,6 +50,8 @@ function toBackendPayload(p: CreateTemplatePayload) {
   return {
     name: p.name,
     category: p.category,
+    scene: p.scene,
+    industry: p.industry,
     canvas_width: p.canvasWidth,
     canvas_height: p.canvasHeight,
     background: p.background,

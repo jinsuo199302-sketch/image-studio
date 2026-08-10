@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Delete, Picture, Plus, Minus, MagicStick, Brush } from '@element-plus/icons-vue'
+import { Delete, Picture, Plus, Minus, MagicStick, Brush, CopyDocument, Top, Bottom } from '@element-plus/icons-vue'
 import type { SelectionInfo } from './CanvasStage.vue'
 
 type TextProp =
@@ -25,6 +25,7 @@ const FONT_OPTIONS = [
   { label: '站酷快乐体', value: '"ZCOOL KuaiLe", sans-serif' },
   { label: '站酷小薇', value: '"ZCOOL XiaoWei", serif' },
   { label: '站酷庆科黄油体', value: '"ZCOOL QingKe HuangYou", sans-serif' },
+  { label: '得意黑', value: '"smiley-sans", sans-serif' },
 ]
 
 const props = defineProps<{ selection: SelectionInfo; removingBackground?: boolean }>()
@@ -34,13 +35,40 @@ const emit = defineEmits<{
   (e: 'text-stroke', enabled: boolean): void
   (e: 'text-stroke-width', width: number): void
   (e: 'text-stroke-color', color: string): void
+  (e: 'text-gradient', colors: [string, string]): void
+  (e: 'text-background', enabled: boolean): void
+  (e: 'text-background-color', color: string): void
+  (e: 'opacity', value: number): void
+  (e: 'opacity-commit'): void
+  (e: 'blend-mode', mode: string): void
+  (e: 'bring-forward'): void
+  (e: 'send-backward'): void
+  (e: 'duplicate'): void
   (e: 'replace-image'): void
   (e: 'remove-background'): void
+  (e: 'erase-object'): void
   (e: 'adjust-image'): void
   (e: 'delete'): void
 }>()
 
 const TEXT_COLORS = ['#1f2937', '#dc2626', '#ea580c', '#16a34a', '#2563eb', '#7c3aed', '#ffffff']
+
+const BLEND_MODES = [
+  { label: '正常', value: 'source-over' },
+  { label: '正片叠底', value: 'multiply' },
+  { label: '滤色', value: 'screen' },
+  { label: '叠加', value: 'overlay' },
+  { label: '变暗', value: 'darken' },
+  { label: '变亮', value: 'lighten' },
+  { label: '差值', value: 'difference' },
+]
+
+const GRADIENT_PRESETS: [string, string][] = [
+  ['#f87171', '#fbbf24'],
+  ['#a855f7', '#ec4899'],
+  ['#38bdf8', '#22c55e'],
+  ['#facc15', '#f97316'],
+]
 
 function bump(delta: number) {
   const size = Math.max(8, (props.selection.fontSize ?? 24) + delta)
@@ -125,6 +153,18 @@ function bumpStrokeWidth(delta: number) {
 
       <div class="h-4 w-px bg-gray-200" />
 
+      <div class="flex items-center gap-1" title="渐变色">
+        <button
+          v-for="(g, i) in GRADIENT_PRESETS"
+          :key="i"
+          class="h-5 w-5 rounded-full border border-gray-200"
+          :style="{ background: `linear-gradient(90deg, ${g[0]}, ${g[1]})` }"
+          @click="emit('text-gradient', g)"
+        />
+      </div>
+
+      <div class="h-4 w-px bg-gray-200" />
+
       <button
         v-for="align in ['left', 'center', 'right', 'justify']"
         :key="align"
@@ -194,6 +234,24 @@ function bumpStrokeWidth(delta: number) {
       >
         阴影
       </button>
+
+      <button
+        class="rounded px-2 py-1 text-xs transition"
+        :class="selection.hasTextBackground ? 'bg-violet-50 text-violet-600' : 'text-gray-600 hover:bg-gray-100'"
+        @click="emit('text-background', !selection.hasTextBackground)"
+      >
+        背景色
+      </button>
+      <div v-if="selection.hasTextBackground" class="flex items-center gap-1" title="背景颜色">
+        <button
+          v-for="c in ['#fde047', '#fca5a5', '#93c5fd', '#86efac', '#e9d5ff', '#1f2937']"
+          :key="c"
+          class="h-5 w-5 rounded-full border-2"
+          :style="{ background: c }"
+          :class="selection.textBackgroundColor === c ? 'border-violet-500' : 'border-gray-200'"
+          @click="emit('text-background-color', c)"
+        />
+      </div>
     </template>
 
     <template v-else-if="selection.type === 'image'">
@@ -211,11 +269,57 @@ function bumpStrokeWidth(delta: number) {
         {{ removingBackground ? '抠图中…' : 'AI 抠图' }}
       </button>
 
+      <button class="flex items-center gap-1 rounded px-2 py-1 text-xs text-gray-600 hover:bg-gray-100" @click="emit('erase-object')">
+        <el-icon :size="14"><MagicStick /></el-icon>
+        AI 消除/去水印
+      </button>
+
       <button class="flex items-center gap-1 rounded px-2 py-1 text-xs text-gray-600 hover:bg-gray-100" @click="emit('adjust-image')">
         <el-icon :size="14"><Brush /></el-icon>
         调色
       </button>
     </template>
+
+    <div class="h-4 w-px bg-gray-200" />
+
+    <div class="flex items-center gap-1" title="透明度">
+      <span class="text-[11px] text-gray-400">透明度</span>
+      <el-slider
+        :model-value="selection.opacity ?? 1"
+        :min="0"
+        :max="1"
+        :step="0.01"
+        :show-tooltip="false"
+        style="width: 64px"
+        @input="(v: number) => emit('opacity', v)"
+        @change="emit('opacity-commit')"
+      />
+    </div>
+
+    <div class="h-4 w-px bg-gray-200" />
+
+    <el-select
+      :model-value="selection.blendMode ?? 'source-over'"
+      size="small"
+      class="!w-20"
+      title="混合模式"
+      @update:model-value="(v: string) => emit('blend-mode', v)"
+    >
+      <el-option v-for="m in BLEND_MODES" :key="m.value" :label="m.label" :value="m.value" />
+    </el-select>
+
+    <div class="h-4 w-px bg-gray-200" />
+
+    <button class="flex h-6 w-6 items-center justify-center rounded hover:bg-gray-100" title="上移一层" @click="emit('bring-forward')">
+      <el-icon :size="13"><Top /></el-icon>
+    </button>
+    <button class="flex h-6 w-6 items-center justify-center rounded hover:bg-gray-100" title="下移一层" @click="emit('send-backward')">
+      <el-icon :size="13"><Bottom /></el-icon>
+    </button>
+    <button class="flex items-center gap-1 rounded px-2 py-1 text-xs text-gray-600 hover:bg-gray-100" title="复制" @click="emit('duplicate')">
+      <el-icon :size="14"><CopyDocument /></el-icon>
+      复制
+    </button>
 
     <div class="h-4 w-px bg-gray-200" />
 

@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { translateText } from '../../../../services/translateApi'
-import { useApiConfigStore } from '../../../../stores/apiConfig'
+import { useAuthStore } from '../../../../stores/auth'
 
 const props = defineProps<{ selectedText: string | null }>()
 const emit = defineEmits<{ (e: 'insert', text: string): void; (e: 'replace-selected', text: string): void }>()
-const apiConfigStore = useApiConfigStore()
+const authStore = useAuthStore()
 
 const LANGS = ['英语', '日语', '韩语', '法语', '德语', '中文']
 
@@ -35,10 +35,10 @@ async function translate() {
   loading.value = true
   result.value = ''
   try {
-    result.value = await translateText(
-      apiConfigStore.isTextConfigured ? apiConfigStore.text : null,
-      { text: sourceText.value.trim(), targetLang: targetLang.value },
-    )
+    result.value = await translateText(authStore.isAuthenticated, {
+      text: sourceText.value.trim(),
+      targetLang: targetLang.value,
+    })
   } catch (e) {
     error.value = e instanceof Error ? e.message : '翻译失败，请重试'
   } finally {
@@ -51,8 +51,8 @@ async function translate() {
   <div class="flex h-full flex-col">
     <div class="flex-1 space-y-4 overflow-y-auto p-3">
       <el-alert
-        :title="apiConfigStore.isTextConfigured ? '已接入翻译接口' : '演示模式：译文为占位标记，接口接入后自动切换'"
-        :type="apiConfigStore.isTextConfigured ? 'success' : 'info'"
+        :title="authStore.isAuthenticated ? '已登录，使用真实翻译接口' : '演示模式：译文为占位标记，登录后自动切换'"
+        :type="authStore.isAuthenticated ? 'success' : 'info'"
         :closable="false"
         show-icon
       />

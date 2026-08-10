@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import type { WritingSession } from '../types'
 import { generateCopy } from '../services/writingApi'
-import { useApiConfigStore } from './apiConfig'
+import { useAuthStore } from './auth'
 
 const STORAGE_KEY = 'image-studio.writingSessions'
 const MAX_SESSIONS = 50
@@ -40,8 +40,8 @@ export const useWritingStore = defineStore('writing', {
       this.error = ''
       this.isGenerating = true
       try {
-        const apiConfigStore = useApiConfigStore()
-        const results = await generateCopy(apiConfigStore.isTextConfigured ? apiConfigStore.text : null, text)
+        const authStore = useAuthStore()
+        const results = await generateCopy(authStore.isAuthenticated, text)
         this.sessions.push({
           id: `writing-${Date.now()}`,
           message: text,

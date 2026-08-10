@@ -11,6 +11,8 @@ class Template(Base):
     id = Column(String, primary_key=True, index=True)
     name = Column(String, nullable=False)
     category = Column(String, nullable=False, index=True)
+    scene = Column(String, nullable=False, default="全部场景", index=True)
+    industry = Column(String, nullable=False, default="通用场景", index=True)
     canvas_width = Column(Integer, nullable=False)
     canvas_height = Column(Integer, nullable=False)
     background = Column(String, nullable=False, default="#ffffff")
@@ -25,4 +27,13 @@ class TextSnippet(Base):
 
     id = Column(String, primary_key=True, index=True)
     content = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(String, primary_key=True, index=True)
+    email = Column(String, nullable=False, unique=True, index=True)
+    password_hash = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)

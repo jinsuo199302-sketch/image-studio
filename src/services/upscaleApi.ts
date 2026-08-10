@@ -1,5 +1,3 @@
-import type { ApiConfig } from '../types'
-
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -14,23 +12,16 @@ async function mockUpscale(imageDataUrl: string): Promise<string> {
 }
 
 /**
- * TODO: 接入真实超分辨率接口后在此实现，通常传入图片 + 放大倍数：
- *
- * const res = await fetch(`${config.baseUrl}/v1/images/upscale`, {
- *   method: 'POST',
- *   headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` },
- *   body: JSON.stringify({ image: imageDataUrl, scale: 2 }),
- * })
- * const data = await res.json()
- * return data.url
+ * TODO: 接入真实超分辨率接口后在此实现，需要先在后端 ai_proxy.py 里加一个转发路由
+ * （参考 images/generations 那个路由的写法），前端这里再改成调用 authPostJson('/images/upscale', ...)
  */
-async function realUpscale(_config: ApiConfig, _imageDataUrl: string): Promise<string> {
+async function realUpscale(_imageDataUrl: string): Promise<string> {
   throw new Error('尚未接入真实高清放大接口')
 }
 
-export async function upscaleImage(config: ApiConfig | null, imageDataUrl: string): Promise<string> {
-  if (config && config.baseUrl && config.apiKey) {
-    return realUpscale(config, imageDataUrl)
+export async function upscaleImage(authenticated: boolean, imageDataUrl: string): Promise<string> {
+  if (authenticated) {
+    return realUpscale(imageDataUrl)
   }
   return mockUpscale(imageDataUrl)
 }

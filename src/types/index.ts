@@ -46,14 +46,3 @@ export interface VideoSession {
   createdAt: number
   url: string
 }
-
-export interface ApiConfig {
-  baseUrl: string
-  apiKey: string
-}
-
-export interface ApiConfigs {
-  image: ApiConfig
-  text: ApiConfig
-  video: ApiConfig
-}

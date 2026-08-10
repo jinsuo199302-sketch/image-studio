@@ -1,4 +1,4 @@
-import type { ApiConfig } from '../types'
+import { authPostJson } from './httpClient'
 
 export interface TranslateParams {
   text: string
@@ -29,28 +29,24 @@ async function mockTranslate(params: TranslateParams): Promise<string> {
 }
 
 /**
- * 按 OpenAI 兼容 chat completions 格式实现，baseUrl 约定已包含 /v1。
+ * 走后端代理 /api/ai/chat/completions，真实 key 只在服务器上。
  * 未经真实联调验证——如果调用报错，把报错信息发给我，按实际返回结构调整。
  */
-async function realTranslate(config: ApiConfig, params: TranslateParams): Promise<string> {
-  const res = await fetch(`${config.baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` },
-    body: JSON.stringify({
+async function realTranslate(params: TranslateParams): Promise<string> {
+  const data = await authPostJson<{ choices?: Array<{ message?: { content?: string } }> }>(
+    '/chat/completions',
+    {
       model: 'gemini-3-flash-preview',
       messages: [{ role: 'user', content: `将以下内容翻译成${params.targetLang}，只返回译文，不要任何多余说明：\n${params.text}` }],
-    }),
-  })
-  if (!res.ok) {
-    throw new Error(`翻译接口请求失败：${res.status} ${await res.text()}`)
-  }
-  const data = await res.json()
+    },
+    '翻译接口请求失败',
+  )
   return (data.choices?.[0]?.message?.content ?? '').trim()
 }
 
-export async function translateText(config: ApiConfig | null, params: TranslateParams): Promise<string> {
-  if (config && config.baseUrl && config.apiKey) {
-    return realTranslate(config, params)
+export async function translateText(authenticated: boolean, params: TranslateParams): Promise<string> {
+  if (authenticated) {
+    return realTranslate(params)
   }
   return mockTranslate(params)
 }

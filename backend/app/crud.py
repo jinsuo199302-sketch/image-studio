@@ -65,3 +65,19 @@ def create_snippet(db: Session, content: str):
 
 def get_snippet(db: Session, snippet_id: str):
     return db.query(models.TextSnippet).filter(models.TextSnippet.id == snippet_id).first()
+
+
+def get_user_by_email(db: Session, email: str):
+    return db.query(models.User).filter(models.User.email == email).first()
+
+
+def get_user(db: Session, user_id: str):
+    return db.query(models.User).filter(models.User.id == user_id).first()
+
+
+def create_user(db: Session, email: str, password_hash: str):
+    user = models.User(id=uuid.uuid4().hex[:16], email=email, password_hash=password_hash)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user

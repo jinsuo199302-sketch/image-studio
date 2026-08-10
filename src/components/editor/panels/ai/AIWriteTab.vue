@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
-import { useApiConfigStore } from '../../../../stores/apiConfig'
+import { useAuthStore } from '../../../../stores/auth'
 import { useWritingStore } from '../../../../stores/writing'
 
 const emit = defineEmits<{ (e: 'insert', text: string): void }>()
-const apiConfigStore = useApiConfigStore()
+const authStore = useAuthStore()
 const store = useWritingStore()
 
 const message = ref('')
@@ -33,8 +33,8 @@ async function send() {
   <div class="flex h-full flex-col">
     <div class="p-3 pb-0">
       <el-alert
-        :title="apiConfigStore.isTextConfigured ? '已接入写作接口' : '演示模式：文案为模板示例，接口接入后自动切换'"
-        :type="apiConfigStore.isTextConfigured ? 'success' : 'info'"
+        :title="authStore.isAuthenticated ? '已登录，使用真实写作接口' : '演示模式：文案为模板示例，登录后自动切换'"
+        :type="authStore.isAuthenticated ? 'success' : 'info'"
         :closable="false"
         show-icon
       />

@@ -4,13 +4,16 @@ import { useRouter } from 'vue-router'
 import { Search } from '@element-plus/icons-vue'
 import AppHeader from '../components/AppHeader.vue'
 import Sidebar from '../components/home/Sidebar.vue'
-import { CATEGORIES } from '../data/templates'
+import { CATEGORIES, INDUSTRIES, SCENES, SORT_OPTIONS } from '../data/templates'
 import { useTemplateStore } from '../stores/templates'
 
 const router = useRouter()
 const templateStore = useTemplateStore()
 const keyword = ref('')
 const activeCategory = ref('全部分类')
+const activeScene = ref('全部场景')
+const activeIndustry = ref('全部行业')
+const activeSort = ref<'hot' | 'new'>('hot')
 
 onMounted(() => templateStore.ensureLoaded())
 
@@ -26,13 +29,19 @@ const TOOL_TABS = [
 ]
 const activeTool = ref('template')
 
-const filtered = computed(() =>
-  templateStore.items.filter((t) => {
+const filtered = computed(() => {
+  const list = templateStore.items.filter((t) => {
     const matchCategory = activeCategory.value === '全部分类' || t.category === activeCategory.value
+    const matchScene = activeScene.value === '全部场景' || t.scene === activeScene.value
+    const matchIndustry = activeIndustry.value === '全部行业' || t.industry === activeIndustry.value
     const matchKeyword = !keyword.value.trim() || t.name.includes(keyword.value.trim())
-    return matchCategory && matchKeyword
-  }),
-)
+    return matchCategory && matchScene && matchIndustry && matchKeyword
+  })
+  if (activeSort.value === 'new') {
+    return [...list].sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))
+  }
+  return list
+})
 
 function openTemplate(id: string) {
   router.push(`/design/${id}`)
@@ -111,7 +120,96 @@ function pickTool(tool: (typeof TOOL_TABS)[number]) {
 
         <!-- Template grid -->
         <section class="px-8 pb-10">
-          <h2 class="mb-4 mt-2 text-base font-semibold text-gray-700">
+          <div class="mb-5 mt-2 rounded-xl border border-gray-100 bg-gray-50/60 p-4">
+            <div class="flex items-start gap-3 py-1.5">
+              <span class="mt-1 w-10 shrink-0 text-xs text-gray-400">分类</span>
+              <div class="flex flex-wrap gap-2">
+                <button
+                  v-for="c in CATEGORIES"
+                  :key="c"
+                  class="rounded-md px-2.5 py-1 text-xs transition"
+                  :class="
+                    activeCategory === c
+                      ? 'bg-violet-500 text-white'
+                      : 'text-gray-600 hover:bg-violet-50 hover:text-violet-600'
+                  "
+                  @click="activeCategory = c"
+                >
+                  {{ c }}
+                </button>
+              </div>
+            </div>
+
+            <div class="flex items-start gap-3 border-t border-gray-100 py-1.5 pt-2.5">
+              <span class="mt-1 w-10 shrink-0 text-xs text-gray-400">场景</span>
+              <div class="flex flex-wrap gap-2">
+                <button
+                  v-for="s in SCENES"
+                  :key="s"
+                  class="rounded-md px-2.5 py-1 text-xs transition"
+                  :class="
+                    activeScene === s
+                      ? 'bg-violet-500 text-white'
+                      : 'text-gray-600 hover:bg-violet-50 hover:text-violet-600'
+                  "
+                  @click="activeScene = s"
+                >
+                  {{ s }}
+                </button>
+              </div>
+            </div>
+
+            <div class="flex items-start gap-3 border-t border-gray-100 py-1.5 pt-2.5">
+              <span class="mt-1 w-10 shrink-0 text-xs text-gray-400">行业</span>
+              <div class="flex flex-wrap gap-2">
+                <button
+                  v-for="i in INDUSTRIES"
+                  :key="i"
+                  class="rounded-md px-2.5 py-1 text-xs transition"
+                  :class="
+                    activeIndustry === i
+                      ? 'bg-violet-500 text-white'
+                      : 'text-gray-600 hover:bg-violet-50 hover:text-violet-600'
+                  "
+                  @click="activeIndustry = i"
+                >
+                  {{ i }}
+                </button>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between gap-3 border-t border-gray-100 pt-2.5">
+              <div class="flex items-center gap-3">
+                <span class="w-10 shrink-0 text-xs text-gray-400">排序</span>
+                <div class="flex gap-2">
+                  <button
+                    v-for="opt in SORT_OPTIONS"
+                    :key="opt.value"
+                    class="rounded-md px-2.5 py-1 text-xs transition"
+                    :class="
+                      activeSort === opt.value
+                        ? 'bg-violet-500 text-white'
+                        : 'text-gray-600 hover:bg-violet-50 hover:text-violet-600'
+                    "
+                    @click="activeSort = opt.value"
+                  >
+                    {{ opt.label }}
+                  </button>
+                </div>
+              </div>
+
+              <el-input
+                v-model="keyword"
+                size="small"
+                placeholder="搜索模板"
+                :prefix-icon="Search"
+                class="!w-52"
+                clearable
+              />
+            </div>
+          </div>
+
+          <h2 class="mb-4 text-base font-semibold text-gray-700">
             {{ activeCategory === '全部分类' ? '推荐模板' : activeCategory }}
             <span class="ml-1 text-xs font-normal text-gray-400">({{ filtered.length }})</span>
           </h2>

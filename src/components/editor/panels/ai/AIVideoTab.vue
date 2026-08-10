@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import type { VideoParams } from '../../../../services/videoApi'
-import { useApiConfigStore } from '../../../../stores/apiConfig'
+import { useAuthStore } from '../../../../stores/auth'
 import { useVideoStore } from '../../../../stores/video'
 
-const apiConfigStore = useApiConfigStore()
+const authStore = useAuthStore()
 const store = useVideoStore()
 
 const prompt = ref('')
@@ -33,8 +33,8 @@ function download() {
   <div class="flex h-full flex-col">
     <div class="flex-1 space-y-4 overflow-y-auto p-3">
       <el-alert
-        :title="apiConfigStore.isVideoConfigured ? '已接入视频生成接口' : '演示模式：生成结果为示例视频，接口接入后自动切换'"
-        :type="apiConfigStore.isVideoConfigured ? 'success' : 'info'"
+        :title="authStore.isAuthenticated ? '已登录，使用真实视频生成接口' : '演示模式：生成结果为示例视频，登录后自动切换'"
+        :type="authStore.isAuthenticated ? 'success' : 'info'"
         :closable="false"
         show-icon
       />

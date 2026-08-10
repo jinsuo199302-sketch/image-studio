@@ -5,7 +5,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
 from app import crud
-from app.database import Base, SessionLocal, engine, get_db
+from app.ai_proxy import router as ai_proxy_router
+from app.auth_routes import router as auth_router
+from app.database import Base, SessionLocal, engine, get_db, migrate_schema
 from app.pdf_tools import router as pdf_router
 from app.schemas import (
     DeleteResponse,
@@ -19,6 +21,7 @@ from app.schemas import (
 from app.seed import seed_if_empty
 
 Base.metadata.create_all(bind=engine)
+migrate_schema()
 with SessionLocal() as _db:
     seed_if_empty(_db)
 
@@ -33,6 +36,8 @@ app.add_middleware(
 )
 
 app.include_router(pdf_router)
+app.include_router(auth_router)
+app.include_router(ai_proxy_router)
 
 
 @app.get("/api/templates", response_model=TemplateListResponse)

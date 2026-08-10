@@ -1,4 +1,5 @@
-import type { ApiConfig, AspectRatio, GenerationParams, GeneratedImage } from '../types'
+import type { AspectRatio, GenerationParams, GeneratedImage } from '../types'
+import { authPostJson } from './httpClient'
 
 const ASPECT_SIZE: Record<AspectRatio, [number, number]> = {
   '1:1': [768, 768],
@@ -37,29 +38,22 @@ function sizeFromAspectRatio(ratio: AspectRatio): string {
 }
 
 /**
- * 按 OpenAI 兼容格式实现，baseUrl 约定已包含 /v1（如 https://api.openlux.ai/v1）。
- * 未经真实联调验证——如果调用报错，把报错信息发给我，按实际返回结构调整。
+ * 走后端代理 /api/ai/images/generations，真实 key 只在服务器上，浏览器拿不到。
+ * 后端按 OpenAI 兼容格式转发给 openlux——未经真实联调验证，如果报错，把报错信息发给我按实际结构调整。
  */
-async function realGenerate(config: ApiConfig, params: GenerationParams): Promise<GeneratedImage[]> {
-  const res = await fetch(`${config.baseUrl}/images/generations`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${config.apiKey}`,
-    },
-    body: JSON.stringify({
+async function realGenerate(params: GenerationParams): Promise<GeneratedImage[]> {
+  const data = await authPostJson<{ data: Array<{ url?: string; b64_json?: string }> }>(
+    '/images/generations',
+    {
       model: 'gpt-image-2',
       prompt: params.prompt,
       n: params.batchSize,
       size: sizeFromAspectRatio(params.aspectRatio),
-    }),
-  })
-  if (!res.ok) {
-    throw new Error(`生成接口请求失败：${res.status} ${await res.text()}`)
-  }
-  const data = await res.json()
+    },
+    '生成接口请求失败',
+  )
   const now = Date.now()
-  return (data.data as Array<{ url?: string; b64_json?: string }>).map((item, i) => ({
+  return data.data.map((item, i) => ({
     id: `${now}-${i}`,
     url: item.url ?? `data:image/png;base64,${item.b64_json}`,
     prompt: params.prompt,
@@ -71,11 +65,11 @@ async function realGenerate(config: ApiConfig, params: GenerationParams): Promis
 }
 
 export async function generateImages(
-  config: ApiConfig | null,
+  authenticated: boolean,
   params: GenerationParams,
 ): Promise<GeneratedImage[]> {
-  if (config && config.baseUrl && config.apiKey) {
-    return realGenerate(config, params)
+  if (authenticated) {
+    return realGenerate(params)
   }
   return mockGenerate(params)
 }

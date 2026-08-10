@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Setting } from '@element-plus/icons-vue'
-import ApiConfigDialog from './ApiConfigDialog.vue'
+import { useAuthStore } from '../stores/auth'
+import LoginDialog from './LoginDialog.vue'
 
 const router = useRouter()
-const settingsOpen = ref(false)
+const authStore = useAuthStore()
+const loginOpen = ref(false)
+
+authStore.restoreSession()
 </script>
 
 <template>
@@ -20,19 +23,35 @@ const settingsOpen = ref(false)
     </div>
 
     <nav class="hidden items-center gap-6 text-sm text-gray-600 md:flex">
-      <span class="cursor-pointer hover:text-violet-600">使用教程</span>
+      <span class="cursor-pointer hover:text-violet-600" @click="router.push({ name: 'help' })">使用教程</span>
       <span class="cursor-pointer hover:text-violet-600">模板中心</span>
       <span class="cursor-pointer hover:text-violet-600" @click="router.push({ name: 'ai-tools' })">AI 工具</span>
     </nav>
 
     <div class="flex items-center gap-3">
-      <el-button size="small" round class="!border-amber-300 !bg-amber-50 !text-amber-600">
-        开通会员
+      <template v-if="authStore.isAuthenticated">
+        <el-button size="small" round class="!border-amber-300 !bg-amber-50 !text-amber-600">
+          开通会员
+        </el-button>
+        <el-dropdown>
+          <span class="flex cursor-pointer items-center gap-2">
+            <el-avatar :size="30" class="!bg-violet-500">
+              {{ authStore.user?.email?.[0]?.toUpperCase() }}
+            </el-avatar>
+          </span>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item disabled>{{ authStore.user?.email }}</el-dropdown-item>
+              <el-dropdown-item divided @click="authStore.logout()">退出登录</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+      </template>
+      <el-button v-else type="primary" size="small" class="!bg-violet-500 !border-none" @click="loginOpen = true">
+        登录 / 注册
       </el-button>
-      <el-avatar :size="30" class="!bg-violet-500">用</el-avatar>
-      <el-button :icon="Setting" circle size="small" title="生成接口设置" @click="settingsOpen = true" />
     </div>
 
-    <ApiConfigDialog v-model="settingsOpen" />
+    <LoginDialog v-model="loginOpen" />
   </header>
 </template>

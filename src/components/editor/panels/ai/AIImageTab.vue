@@ -2,12 +2,12 @@
 import { ref } from 'vue'
 import { Notebook } from '@element-plus/icons-vue'
 import { useGenerationStore, STYLE_PRESETS } from '../../../../stores/generation'
-import { useApiConfigStore } from '../../../../stores/apiConfig'
+import { useAuthStore } from '../../../../stores/auth'
 import PromptLibraryDialog from '../../PromptLibraryDialog.vue'
 
 const emit = defineEmits<{ (e: 'insert', url: string): void }>()
 const store = useGenerationStore()
-const apiConfigStore = useApiConfigStore()
+const authStore = useAuthStore()
 const promptLibraryOpen = ref(false)
 
 const ASPECT_RATIOS = ['1:1', '3:4', '4:3', '9:16', '16:9'] as const
@@ -22,8 +22,8 @@ function ratioStyle(ratio: string) {
   <div class="flex h-full flex-col">
     <div class="flex-1 space-y-4 overflow-y-auto p-3">
       <el-alert
-        :title="apiConfigStore.isImageConfigured ? '已接入生成接口' : '演示模式：生成结果为占位图，接口接入后自动切换'"
-        :type="apiConfigStore.isImageConfigured ? 'success' : 'info'"
+        :title="authStore.isAuthenticated ? '已登录，使用真实生成接口' : '演示模式：生成结果为占位图，登录后自动切换'"
+        :type="authStore.isAuthenticated ? 'success' : 'info'"
         :closable="false"
         show-icon
       />

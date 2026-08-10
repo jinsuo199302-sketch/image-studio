@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { CATEGORIES } from '../../data/templates'
+import { CATEGORIES, INDUSTRIES, SCENES } from '../../data/templates'
 import { useTemplateStore } from '../../stores/templates'
 import type CanvasStage from './CanvasStage.vue'
 
@@ -10,9 +10,11 @@ const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void; (e: 'save
 
 const templateStore = useTemplateStore()
 const saving = ref(false)
-const form = reactive({ name: '', category: '广告设计' })
+const form = reactive({ name: '', category: '广告设计', scene: '全部场景', industry: '通用场景' })
 
 const SAVE_CATEGORIES = CATEGORIES.filter((c) => c !== '全部分类')
+const SAVE_SCENES = SCENES.filter((s) => s !== '全部场景')
+const SAVE_INDUSTRIES = INDUSTRIES.filter((i) => i !== '全部行业')
 
 async function save() {
   if (!form.name.trim()) {
@@ -26,6 +28,8 @@ async function save() {
     const created = await templateStore.createTemplate({
       name: form.name.trim(),
       category: form.category,
+      scene: form.scene,
+      industry: form.industry,
       ...data,
     })
     ElMessage.success('已保存为新模板')
@@ -53,6 +57,16 @@ async function save() {
       <el-form-item label="分类">
         <el-select v-model="form.category" class="w-full">
           <el-option v-for="c in SAVE_CATEGORIES" :key="c" :label="c" :value="c" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="场景">
+        <el-select v-model="form.scene" class="w-full">
+          <el-option v-for="s in SAVE_SCENES" :key="s" :label="s" :value="s" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="行业">
+        <el-select v-model="form.industry" class="w-full">
+          <el-option v-for="i in SAVE_INDUSTRIES" :key="i" :label="i" :value="i" />
         </el-select>
       </el-form-item>
     </el-form>

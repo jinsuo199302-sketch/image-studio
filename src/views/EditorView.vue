@@ -11,6 +11,7 @@ import SaveTemplateDialog from '../components/editor/SaveTemplateDialog.vue'
 import ResizeDialog from '../components/editor/ResizeDialog.vue'
 import HistoryDialog from '../components/editor/HistoryDialog.vue'
 import ImageAdjustDialog from '../components/editor/ImageAdjustDialog.vue'
+import EraseDialog from '../components/editor/EraseDialog.vue'
 import TemplateSwitchPanel from '../components/editor/panels/TemplateSwitchPanel.vue'
 import BackgroundPanel from '../components/editor/panels/BackgroundPanel.vue'
 import ShapePanel from '../components/editor/panels/ShapePanel.vue'
@@ -19,14 +20,14 @@ import ImageToolsPanel from '../components/editor/panels/ImageToolsPanel.vue'
 import PlaceholderPanel from '../components/editor/panels/PlaceholderPanel.vue'
 import type { Template } from '../data/templates'
 import { useTemplateStore } from '../stores/templates'
-import { useApiConfigStore } from '../stores/apiConfig'
+import { useAuthStore } from '../stores/auth'
 import { removeBackground } from '../services/backgroundRemovalApi'
 
 const props = defineProps<{ id: string }>()
 const route = useRoute()
 const router = useRouter()
 const templateStore = useTemplateStore()
-const apiConfigStore = useApiConfigStore()
+const authStore = useAuthStore()
 
 const currentId = ref(props.id || (route.params.id as string))
 const template = ref<Template | null>(null)
@@ -62,6 +63,7 @@ const resizeDialogOpen = ref(false)
 const historyDialogOpen = ref(false)
 const removingBackground = ref(false)
 const adjustDialogOpen = ref(false)
+const eraseDialogOpen = ref(false)
 
 function switchTemplate(id: string) {
   currentId.value = id
@@ -124,10 +126,7 @@ async function onRemoveBackground() {
   if (!selection.value?.src || removingBackground.value) return
   removingBackground.value = true
   try {
-    const result = await removeBackground(
-      apiConfigStore.isImageConfigured ? apiConfigStore.image : null,
-      selection.value.src,
-    )
+    const result = await removeBackground(authStore.isAuthenticated, selection.value.src)
     await stageRef.value?.replaceSelectedImage(result)
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '抠图失败，请重试')
@@ -186,6 +185,9 @@ async function onRemoveBackground() {
           v-else-if="activePanel === 'shape'"
           @add="(c) => stageRef?.addRect(c)"
           @add-image="(url) => stageRef?.addImage(url)"
+          @add-chart="stageRef?.addBarChart()"
+          @add-legend="stageRef?.addLegend()"
+          @add-table="stageRef?.addDataTable()"
         />
         <UploadPanel v-else-if="activePanel === 'upload'" @add="(url) => stageRef?.addImage(url)" />
         <PlaceholderPanel v-else label="素材图片库" />
@@ -209,8 +211,18 @@ async function onRemoveBackground() {
             @text-stroke="(enabled) => stageRef?.setSelectedTextStroke(enabled)"
             @text-stroke-width="(width) => stageRef?.setSelectedTextStrokeWidth(width)"
             @text-stroke-color="(color) => stageRef?.setSelectedTextStrokeColor(color)"
+            @text-gradient="(colors) => stageRef?.setSelectedTextGradient(colors)"
+            @text-background="(enabled) => stageRef?.setSelectedTextBackground(enabled)"
+            @text-background-color="(color) => stageRef?.setSelectedTextBackground(true, color)"
+            @opacity="(value) => stageRef?.setSelectedOpacity(value)"
+            @opacity-commit="stageRef?.commitSelectedOpacity()"
+            @blend-mode="(mode) => stageRef?.setSelectedBlendMode(mode)"
+            @bring-forward="stageRef?.bringSelectedForward()"
+            @send-backward="stageRef?.sendSelectedBackward()"
+            @duplicate="stageRef?.duplicateSelected()"
             @replace-image="replaceViaUpload"
             @remove-background="onRemoveBackground"
+            @erase-object="eraseDialogOpen = true"
             @adjust-image="adjustDialogOpen = true"
             @delete="stageRef?.deleteSelected()"
           />
@@ -235,6 +247,11 @@ async function onRemoveBackground() {
       v-model="adjustDialogOpen"
       @change="(v) => stageRef?.setSelectedImageAdjust(v)"
       @commit="stageRef?.commitSelectedImageAdjust()"
+    />
+    <EraseDialog
+      v-model="eraseDialogOpen"
+      :image-src="selection?.src ?? ''"
+      @result="(url) => stageRef?.replaceSelectedImage(url)"
     />
   </div>
 </template>

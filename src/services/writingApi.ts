@@ -1,4 +1,4 @@
-import type { ApiConfig } from '../types'
+import { authPostJson } from './httpClient'
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -19,14 +19,13 @@ async function mockGenerate(message: string): Promise<string[]> {
 }
 
 /**
- * 按 OpenAI 兼容 chat completions 格式实现，baseUrl 约定已包含 /v1。
+ * 走后端代理 /api/ai/chat/completions，真实 key 只在服务器上。
  * 未经真实联调验证——如果调用报错或解析失败，把报错信息发给我，按实际返回结构调整。
  */
-async function realGenerate(config: ApiConfig, message: string): Promise<string[]> {
-  const res = await fetch(`${config.baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` },
-    body: JSON.stringify({
+async function realGenerate(message: string): Promise<string[]> {
+  const data = await authPostJson<{ choices?: Array<{ message?: { content?: string } }> }>(
+    '/chat/completions',
+    {
       model: 'gemini-3-flash-preview',
       messages: [
         {
@@ -34,12 +33,9 @@ async function realGenerate(config: ApiConfig, message: string): Promise<string[
           content: `${message}\n\n请给出 3 个不同的文案方案。只返回一个 JSON 字符串数组，不要任何多余说明文字，例如 ["方案1", "方案2", "方案3"]`,
         },
       ],
-    }),
-  })
-  if (!res.ok) {
-    throw new Error(`写作接口请求失败：${res.status} ${await res.text()}`)
-  }
-  const data = await res.json()
+    },
+    '写作接口请求失败',
+  )
   const content: string = data.choices?.[0]?.message?.content ?? ''
   try {
     const match = content.match(/\[[\s\S]*\]/)
@@ -51,9 +47,9 @@ async function realGenerate(config: ApiConfig, message: string): Promise<string[
   return content.split('\n').map((s) => s.trim()).filter(Boolean)
 }
 
-export async function generateCopy(config: ApiConfig | null, message: string): Promise<string[]> {
-  if (config && config.baseUrl && config.apiKey) {
-    return realGenerate(config, message)
+export async function generateCopy(authenticated: boolean, message: string): Promise<string[]> {
+  if (authenticated) {
+    return realGenerate(message)
   }
   return mockGenerate(message)
 }

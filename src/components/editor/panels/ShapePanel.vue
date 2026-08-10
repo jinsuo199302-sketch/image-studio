@@ -4,7 +4,13 @@ import QRCode from 'qrcode'
 import { ElMessage } from 'element-plus'
 import { createSnippet } from '../../../services/snippetApi'
 
-const emit = defineEmits<{ (e: 'add', color: string): void; (e: 'add-image', url: string): void }>()
+const emit = defineEmits<{
+  (e: 'add', color: string): void
+  (e: 'add-image', url: string): void
+  (e: 'add-chart'): void
+  (e: 'add-legend'): void
+  (e: 'add-table'): void
+}>()
 
 const SWATCHES = ['#1f2937', '#dc2626', '#ea580c', '#16a34a', '#2563eb', '#7c3aed']
 
@@ -95,6 +101,33 @@ async function generateQrcode() {
       >
         +
       </button>
+    </div>
+
+    <div class="mt-5 border-t border-gray-100 pt-4">
+      <p class="mb-2 text-xs font-medium text-gray-600">数据组件</p>
+      <div class="grid grid-cols-3 gap-2">
+        <button
+          class="flex flex-col items-center gap-1 rounded-md border border-gray-200 py-2.5 text-[11px] text-gray-600 hover:border-violet-300 hover:text-violet-600"
+          @click="emit('add-chart')"
+        >
+          <span class="text-lg">📊</span>
+          图表
+        </button>
+        <button
+          class="flex flex-col items-center gap-1 rounded-md border border-gray-200 py-2.5 text-[11px] text-gray-600 hover:border-violet-300 hover:text-violet-600"
+          @click="emit('add-legend')"
+        >
+          <span class="text-lg">🎨</span>
+          图例
+        </button>
+        <button
+          class="flex flex-col items-center gap-1 rounded-md border border-gray-200 py-2.5 text-[11px] text-gray-600 hover:border-violet-300 hover:text-violet-600"
+          @click="emit('add-table')"
+        >
+          <span class="text-lg">▦</span>
+          表格
+        </button>
+      </div>
     </div>
 
     <div class="mt-5 border-t border-gray-100 pt-4">
