@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Delete, Picture, Plus, Minus, MagicStick, Brush, CopyDocument, Top, Bottom } from '@element-plus/icons-vue'
+import { Delete, Picture, Plus, Minus, MagicStick, Brush, CopyDocument, Top, Bottom, Lock, Unlock } from '@element-plus/icons-vue'
 import type { SelectionInfo } from './CanvasStage.vue'
 
 type TextProp =
@@ -41,6 +41,9 @@ const emit = defineEmits<{
   (e: 'opacity', value: number): void
   (e: 'opacity-commit'): void
   (e: 'blend-mode', mode: string): void
+  (e: 'toggle-lock'): void
+  (e: 'toggle-vertical'): void
+  (e: 'list-format', kind: 'bullet' | 'number' | 'none'): void
   (e: 'bring-forward'): void
   (e: 'send-backward'): void
   (e: 'duplicate'): void
@@ -174,6 +177,27 @@ function bumpStrokeWidth(delta: number) {
       >
         {{ align === 'left' ? '左' : align === 'center' ? '中' : align === 'right' ? '右' : '两端' }}
       </button>
+
+      <button
+        class="rounded px-2 py-1 text-xs transition"
+        :class="selection.vertical ? 'bg-violet-50 text-violet-600' : 'text-gray-600 hover:bg-gray-100'"
+        title="竖排文字"
+        @click="emit('toggle-vertical')"
+      >
+        竖排
+      </button>
+
+      <div class="flex items-center gap-1" title="列表">
+        <button class="rounded px-1.5 py-1 text-xs text-gray-600 hover:bg-gray-100" @click="emit('list-format', 'bullet')">
+          • 列表
+        </button>
+        <button class="rounded px-1.5 py-1 text-xs text-gray-600 hover:bg-gray-100" @click="emit('list-format', 'number')">
+          1. 列表
+        </button>
+        <button class="rounded px-1.5 py-1 text-xs text-gray-400 hover:bg-gray-100" title="清除列表格式" @click="emit('list-format', 'none')">
+          清除
+        </button>
+      </div>
 
       <div class="h-4 w-px bg-gray-200" />
 
@@ -319,6 +343,15 @@ function bumpStrokeWidth(delta: number) {
     <button class="flex items-center gap-1 rounded px-2 py-1 text-xs text-gray-600 hover:bg-gray-100" title="复制" @click="emit('duplicate')">
       <el-icon :size="14"><CopyDocument /></el-icon>
       复制
+    </button>
+    <button
+      class="flex items-center gap-1 rounded px-2 py-1 text-xs transition"
+      :class="selection.locked ? 'bg-violet-50 text-violet-600' : 'text-gray-600 hover:bg-gray-100'"
+      :title="selection.locked ? '解锁' : '锁定'"
+      @click="emit('toggle-lock')"
+    >
+      <el-icon :size="14"><component :is="selection.locked ? Lock : Unlock" /></el-icon>
+      {{ selection.locked ? '已锁定' : '锁定' }}
     </button>
 
     <div class="h-4 w-px bg-gray-200" />

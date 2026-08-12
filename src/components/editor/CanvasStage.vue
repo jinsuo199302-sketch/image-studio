@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { Canvas, FabricImage, Gradient, Group, IText, Rect, Shadow, filters, type FabricObject } from 'fabric'
+import { Canvas, FabricImage, Gradient, Group, IText, Rect, Shadow, Textbox, filters, type FabricObject } from 'fabric'
 import type { CanvasElement, Template } from '../../data/templates'
 
 const props = defineProps<{ template: Template }>()
@@ -28,6 +28,8 @@ export interface SelectionInfo {
   textBackgroundColor?: string
   opacity?: number
   blendMode?: string
+  locked?: boolean
+  vertical?: boolean
   text?: string
   src?: string
 }
@@ -70,7 +72,7 @@ async function buildFromTemplate(template: Template) {
 
   for (const el of template.elements) {
     if (el.type === 'text') {
-      const text = new IText(el.text, {
+      const text = new Textbox(el.text, {
         left: el.x,
         top: el.y,
         originX: 'left',
@@ -81,6 +83,7 @@ async function buildFromTemplate(template: Template) {
         fill: el.color,
         textAlign: el.align ?? 'left',
         fontFamily: 'system-ui, "PingFang SC", "Microsoft YaHei", sans-serif',
+        splitByGrapheme: true,
       })
       canvas.add(text)
     } else if (el.type === 'rect') {
@@ -164,14 +167,33 @@ function describeSelection(obj: FabricObject | undefined): SelectionInfo | null 
       textBackgroundColor: obj.textBackgroundColor || '#fde047',
       opacity: obj.opacity ?? 1,
       blendMode: obj.globalCompositeOperation ?? 'source-over',
+      locked: !!obj.lockMovementX,
+      vertical: !!(obj as unknown as { isVerticalText?: boolean }).isVerticalText,
       text: obj.text ?? '',
     }
   }
   if (obj instanceof FabricImage)
-    return { type: 'image', src: obj.getSrc(), opacity: obj.opacity ?? 1, blendMode: obj.globalCompositeOperation ?? 'source-over' }
+    return {
+      type: 'image',
+      src: obj.getSrc(),
+      opacity: obj.opacity ?? 1,
+      blendMode: obj.globalCompositeOperation ?? 'source-over',
+      locked: !!obj.lockMovementX,
+    }
   if (obj instanceof Rect)
-    return { type: 'rect', fill: String(obj.fill ?? '#000000'), opacity: obj.opacity ?? 1, blendMode: obj.globalCompositeOperation ?? 'source-over' }
-  return { type: 'other', opacity: obj.opacity ?? 1, blendMode: obj.globalCompositeOperation ?? 'source-over' }
+    return {
+      type: 'rect',
+      fill: String(obj.fill ?? '#000000'),
+      opacity: obj.opacity ?? 1,
+      blendMode: obj.globalCompositeOperation ?? 'source-over',
+      locked: !!obj.lockMovementX,
+    }
+  return {
+    type: 'other',
+    opacity: obj.opacity ?? 1,
+    blendMode: obj.globalCompositeOperation ?? 'source-over',
+    locked: !!obj.lockMovementX,
+  }
 }
 
 onMounted(async () => {
@@ -207,14 +229,16 @@ watch(
 
 function addText(initialText = '双击编辑文字') {
   if (!canvas) return
-  const text = new IText(initialText, {
+  const text = new Textbox(initialText, {
     left: canvasSize.width / 2 - 80,
     top: canvasSize.height / 2,
     originX: 'left',
     originY: 'top',
+    width: 240,
     fontSize: 28,
     fill: '#1f2329',
     fontFamily: 'sans-serif',
+    splitByGrapheme: true,
   })
   canvas.add(text)
   canvas.setActiveObject(text)
@@ -395,6 +419,62 @@ function setSelectedBlendMode(mode: string) {
   const active = canvas.getActiveObject()
   if (!active) return
   active.set('globalCompositeOperation', mode)
+  canvas.requestRenderAll()
+  pushHistory()
+  emit('selection', describeSelection(active))
+}
+
+/** 锁定/解锁：锁定后禁止拖动、缩放、旋转，但仍可被选中查看属性（不锁 selectable，不然连选都选不中了） */
+function setSelectedLocked(locked: boolean) {
+  if (!canvas) return
+  const active = canvas.getActiveObject()
+  if (!active) return
+  active.set({
+    lockMovementX: locked,
+    lockMovementY: locked,
+    lockScalingX: locked,
+    lockScalingY: locked,
+    lockRotation: locked,
+    hasControls: !locked,
+  })
+  canvas.requestRenderAll()
+  pushHistory()
+  emit('selection', describeSelection(active))
+}
+
+/** 竖排文字：CJK 竖排本质是"每行只放一个字再自上而下排列"，把宽度收窄到刚好容纳一个全角字符，
+ * 靠 splitByGrapheme 的自动换行在每个字后面强制换行，实现视觉上的竖排效果 */
+function setSelectedVertical(vertical: boolean) {
+  if (!canvas) return
+  const active = canvas.getActiveObject()
+  if (!(active instanceof Textbox)) return
+  const marked = active as unknown as { isVerticalText?: boolean; _horizontalWidth?: number }
+  if (vertical) {
+    marked._horizontalWidth = active.width
+    active.set({ width: (active.fontSize ?? 24) * 1.15, textAlign: 'center' })
+  } else {
+    active.set({ width: marked._horizontalWidth ?? 200, textAlign: 'left' })
+  }
+  marked.isVerticalText = vertical
+  active.initDimensions?.()
+  canvas.requestRenderAll()
+  pushHistory()
+  emit('selection', describeSelection(active))
+}
+
+/** 给每一行手动加上项目符号/序号前缀，纯文本层面的列表格式（不是富文本，简单直接） */
+function applySelectedListFormat(kind: 'bullet' | 'number' | 'none') {
+  if (!canvas) return
+  const active = canvas.getActiveObject()
+  if (!(active instanceof IText)) return
+  const stripped = (active.text ?? '')
+    .split('\n')
+    .map((line) => line.replace(/^(\s*[•·]\s*|\s*\d+[.、]\s*)/, ''))
+  const next =
+    kind === 'none'
+      ? stripped
+      : stripped.map((line, i) => (kind === 'bullet' ? `• ${line}` : `${i + 1}. ${line}`))
+  active.set('text', next.join('\n'))
   canvas.requestRenderAll()
   pushHistory()
   emit('selection', describeSelection(active))
@@ -697,6 +777,9 @@ defineExpose({
   setSelectedOpacity,
   commitSelectedOpacity,
   setSelectedBlendMode,
+  setSelectedLocked,
+  setSelectedVertical,
+  applySelectedListFormat,
   bringSelectedForward,
   sendSelectedBackward,
   duplicateSelected,

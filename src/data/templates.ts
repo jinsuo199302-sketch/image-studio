@@ -64,6 +64,7 @@ export const SCENES = [
   '简历文档',
   '通知公文',
   '邀请函卡',
+  '宣传展板',
 ]
 
 export const INDUSTRIES = [

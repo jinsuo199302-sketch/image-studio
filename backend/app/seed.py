@@ -252,16 +252,62 @@ SEED_TEMPLATES = [
             {"type": "text", "x": 70, "y": 780, "width": 560, "text": "敬请回复", "fontSize": 16, "color": "#94a3b8"},
         ],
     },
+    {
+        "id": "tpl-board-safety-month",
+        "name": "安全生产月宣传展板",
+        "category": "广告设计",
+        "scene": "宣传展板",
+        "industry": "企业办公",
+        "canvas_width": 1200,
+        "canvas_height": 800,
+        "background": "#ffffff",
+        "thumbnail": thumb("board-safety-month", 300, 200),
+        "elements": [
+            {"type": "rect", "x": 0, "y": 0, "width": 1200, "height": 150, "fill": "#c1272d"},
+            {"type": "text", "x": 0, "y": 32, "width": 1200, "text": "全国安全生产月", "fontSize": 52, "fontWeight": "bold", "color": "#ffffff", "align": "center"},
+            {"type": "text", "x": 0, "y": 100, "width": 1200, "text": "第25个全国「安全生产月」 · 2026年6月", "fontSize": 20, "color": "#fde8e8", "align": "center"},
+            {"type": "rect", "x": 60, "y": 170, "width": 1080, "height": 70, "fill": "#fef3c7", "rx": 10},
+            {"type": "text", "x": 60, "y": 190, "width": 1080, "text": "人人讲安全、个个会应急——排查整治风险隐患", "fontSize": 26, "fontWeight": "bold", "color": "#92400e", "align": "center"},
+            {"type": "rect", "x": 60, "y": 270, "width": 530, "height": 190, "fill": "#f9fafb", "rx": 12},
+            {"type": "text", "x": 88, "y": 296, "width": 474, "text": "消防安全 · 应急逃生", "fontSize": 23, "fontWeight": "bold", "color": "#dc2626"},
+            {"type": "text", "x": 88, "y": 340, "width": 474, "text": "学习掌握火灾逃生、用电用气、电动自行车充电安全常识，清理占用疏散通道、堆放易燃物品等隐患，确保安全通道畅通无阻。", "fontSize": 17, "color": "#374151"},
+            {"type": "rect", "x": 610, "y": 270, "width": 530, "height": 190, "fill": "#f9fafb", "rx": 12},
+            {"type": "text", "x": 638, "y": 296, "width": 474, "text": "风险隐患排查整治", "fontSize": 23, "fontWeight": "bold", "color": "#ea580c"},
+            {"type": "text", "x": 638, "y": 340, "width": 474, "text": "聚焦矿山、危险化学品、建筑施工、交通运输、工贸、燃气、消防等重点行业领域，全面排查整治各类安全风险隐患。", "fontSize": 17, "color": "#374151"},
+            {"type": "rect", "x": 60, "y": 480, "width": 530, "height": 190, "fill": "#f9fafb", "rx": 12},
+            {"type": "text", "x": 88, "y": 506, "width": 474, "text": "人人会应急", "fontSize": 23, "fontWeight": "bold", "color": "#2563eb"},
+            {"type": "text", "x": 88, "y": 550, "width": 474, "text": "普及基本应急救护和避险技能，做到早发现、早报告、早处置，提升自救互救能力，筑牢身边的安全防线。", "fontSize": 17, "color": "#374151"},
+            {"type": "rect", "x": 610, "y": 480, "width": 530, "height": 190, "fill": "#f9fafb", "rx": 12},
+            {"type": "text", "x": 638, "y": 506, "width": 474, "text": "安全第一 入脑入心", "fontSize": 23, "fontWeight": "bold", "color": "#16a34a"},
+            {"type": "text", "x": 638, "y": 550, "width": 474, "text": "每个人都是安全防线，每个岗位都是安全哨点。树牢安全发展理念，把安全生产责任落实到每一个岗位、每一个环节。", "fontSize": 17, "color": "#374151"},
+            {"type": "text", "x": 0, "y": 700, "width": 1200, "text": "6 月 16 日 全国安全宣传咨询日", "fontSize": 18, "color": "#6b7280", "align": "center"},
+            {"type": "text", "x": 700, "y": 745, "width": 440, "text": "＿＿＿＿＿＿＿＿ 单位  制", "fontSize": 16, "color": "#9ca3af", "align": "right"},
+        ],
+    },
 ]
 
 
 def seed_if_empty(db: Session):
     if db.query(models.Template).count() > 0:
         backfill_scene_industry(db)
+        add_missing_official_templates(db)
         return
     for data in SEED_TEMPLATES:
         db.add(models.Template(is_official=1, **data))
     db.commit()
+
+
+def add_missing_official_templates(db: Session):
+    """老部署已经跑过 seed_if_empty 的一次性插入，之后在 SEED_TEMPLATES 里新加的官方模板
+    要靠这个按 id 补插，不会重复插入也不会动到已有数据"""
+    existing_ids = {row.id for row in db.query(models.Template.id).filter(models.Template.is_official == 1)}
+    added = False
+    for data in SEED_TEMPLATES:
+        if data["id"] not in existing_ids:
+            db.add(models.Template(is_official=1, **data))
+            added = True
+    if added:
+        db.commit()
 
 
 def backfill_scene_industry(db: Session):
