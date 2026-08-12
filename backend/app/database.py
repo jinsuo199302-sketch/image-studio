@@ -27,4 +27,6 @@ def migrate_schema():
             conn.execute(text("ALTER TABLE templates ADD COLUMN scene TEXT NOT NULL DEFAULT '全部场景'"))
         if "industry" not in existing:
             conn.execute(text("ALTER TABLE templates ADD COLUMN industry TEXT NOT NULL DEFAULT '通用场景'"))
+        if "user_id" not in existing:
+            conn.execute(text("ALTER TABLE templates ADD COLUMN user_id TEXT"))
         conn.commit()

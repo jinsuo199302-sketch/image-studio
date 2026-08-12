@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import {
   Plus,
   HomeFilled,
@@ -9,6 +10,8 @@ import {
   Location,
 } from '@element-plus/icons-vue'
 
+const route = useRoute()
+const router = useRouter()
 const active = ref('home')
 
 const NAV = [
@@ -47,7 +50,13 @@ const NAV = [
     <div class="my-2 border-t border-gray-100" />
 
     <button
-      class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-600 hover:bg-gray-100"
+      class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition"
+      :class="
+        route.path === '/mine'
+          ? 'bg-violet-50 font-medium text-violet-600'
+          : 'text-gray-600 hover:bg-gray-100'
+      "
+      @click="router.push('/mine')"
     >
       <el-icon :size="16"><UserFilled /></el-icon>
       我的

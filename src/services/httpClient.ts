@@ -1,6 +1,6 @@
 const TOKEN_KEY = 'image-studio.authToken'
 
-function authToken(): string {
+export function authToken(): string {
   return localStorage.getItem(TOKEN_KEY) ?? ''
 }
 

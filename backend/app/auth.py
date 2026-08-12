@@ -46,3 +46,14 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> models.
     if not user:
         raise HTTPException(status_code=401, detail="用户不存在")
     return user
+
+
+def get_current_user_optional(request: Request, db: Session = Depends(get_db)) -> models.User | None:
+    """跟 get_current_user 一样解析 token，但未登录/token 失效时返回 None 而不是 401，供公开列表接口区分匿名/登录访客"""
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return None
+    user_id = decode_token(auth_header[len("Bearer ") :])
+    if not user_id:
+        return None
+    return crud.get_user(db, user_id)

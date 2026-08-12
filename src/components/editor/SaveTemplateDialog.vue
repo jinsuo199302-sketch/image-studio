@@ -3,13 +3,17 @@ import { reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { CATEGORIES, INDUSTRIES, SCENES } from '../../data/templates'
 import { useTemplateStore } from '../../stores/templates'
+import { useAuthStore } from '../../stores/auth'
+import LoginDialog from '../LoginDialog.vue'
 import type CanvasStage from './CanvasStage.vue'
 
 const props = defineProps<{ modelValue: boolean; stage: InstanceType<typeof CanvasStage> | undefined }>()
 const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void; (e: 'saved', id: string): void }>()
 
 const templateStore = useTemplateStore()
+const authStore = useAuthStore()
 const saving = ref(false)
+const loginOpen = ref(false)
 const form = reactive({ name: '', category: '广告设计', scene: '全部场景', industry: '通用场景' })
 
 const SAVE_CATEGORIES = CATEGORIES.filter((c) => c !== '全部分类')
@@ -17,6 +21,10 @@ const SAVE_SCENES = SCENES.filter((s) => s !== '全部场景')
 const SAVE_INDUSTRIES = INDUSTRIES.filter((i) => i !== '全部行业')
 
 async function save() {
+  if (!authStore.isAuthenticated) {
+    loginOpen.value = true
+    return
+  }
   if (!form.name.trim()) {
     ElMessage.warning('请输入模板名称')
     return
@@ -32,7 +40,7 @@ async function save() {
       industry: form.industry,
       ...data,
     })
-    ElMessage.success('已保存为新模板')
+    ElMessage.success('已保存到"我的设计"')
     form.name = ''
     emit('saved', created.id)
   } catch {
@@ -50,6 +58,14 @@ async function save() {
     width="420px"
     @update:model-value="(v: boolean) => emit('update:modelValue', v)"
   >
+    <el-alert
+      v-if="!authStore.isAuthenticated"
+      title="登录后才能保存设计，保存的内容只有你自己能看到"
+      type="info"
+      :closable="false"
+      show-icon
+      class="mb-3"
+    />
     <el-form label-position="top">
       <el-form-item label="模板名称">
         <el-input v-model="form.name" placeholder="给这个模板起个名字" maxlength="30" />
@@ -72,7 +88,11 @@ async function save() {
     </el-form>
     <template #footer>
       <el-button @click="emit('update:modelValue', false)">取消</el-button>
-      <el-button type="primary" :loading="saving" @click="save">保存</el-button>
+      <el-button type="primary" :loading="saving" @click="save">
+        {{ authStore.isAuthenticated ? '保存' : '登录后保存' }}
+      </el-button>
     </template>
   </el-dialog>
+
+  <LoginDialog v-model="loginOpen" />
 </template>

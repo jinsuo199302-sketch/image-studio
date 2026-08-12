@@ -1,7 +1,13 @@
 import axios from 'axios'
 import type { Template } from '../data/templates'
+import { authToken } from './httpClient'
 
 const http = axios.create({ baseURL: '/api' })
+
+function authHeaders() {
+  const token = authToken()
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
 
 interface BackendTemplate {
   id: string
@@ -60,23 +66,24 @@ function toBackendPayload(p: CreateTemplatePayload) {
   }
 }
 
-export async function listTemplates(category?: string): Promise<Template[]> {
-  const res = await http.get<{ list: BackendTemplate[] }>('/templates', {
-    params: category && category !== '全部分类' ? { category } : {},
-  })
+export async function listTemplates(category?: string, mine = false): Promise<Template[]> {
+  const params: Record<string, string> = {}
+  if (category && category !== '全部分类') params.category = category
+  if (mine) params.mine = 'true'
+  const res = await http.get<{ list: BackendTemplate[] }>('/templates', { params, headers: authHeaders() })
   return res.data.list.map(toFrontend)
 }
 
 export async function getTemplate(id: string): Promise<Template> {
-  const res = await http.get<BackendTemplate>(`/templates/${id}`)
+  const res = await http.get<BackendTemplate>(`/templates/${id}`, { headers: authHeaders() })
   return toFrontend(res.data)
 }
 
 export async function createTemplate(payload: CreateTemplatePayload): Promise<Template> {
-  const res = await http.post<BackendTemplate>('/templates', toBackendPayload(payload))
+  const res = await http.post<BackendTemplate>('/templates', toBackendPayload(payload), { headers: authHeaders() })
   return toFrontend(res.data)
 }
 
 export async function deleteTemplate(id: string): Promise<void> {
-  await http.delete(`/templates/${id}`)
+  await http.delete(`/templates/${id}`, { headers: authHeaders() })
 }

@@ -19,6 +19,7 @@ class Template(Base):
     thumbnail = Column(Text, nullable=False)
     elements = Column(JSON, nullable=False)
     is_official = Column(Integer, nullable=False, default=0)
+    user_id = Column(String, nullable=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
