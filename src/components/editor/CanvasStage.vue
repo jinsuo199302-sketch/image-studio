@@ -12,7 +12,17 @@ const emit = defineEmits<{
 export interface SelectionInfo {
   type: 'text' | 'image' | 'rect' | 'other'
   /** 仅当选中的是表格组件（grid-table/borderless-table）时才有值，用来在选中面板里显示表格样式设置 */
-  tableStyle?: { theme: string; fontFamily: string; rows: number; cols: number }
+  tableStyle?: {
+    theme: string
+    fontFamily: string
+    fontSize: number
+    bold: boolean
+    italic: boolean
+    underline: boolean
+    align: 'left' | 'center' | 'right'
+    rows: number
+    cols: number
+  }
   fontSize?: number
   fill?: string
   fontFamily?: string
@@ -358,7 +368,17 @@ function describeSelection(obj: FabricObject | undefined): SelectionInfo | null 
         blendMode: obj.globalCompositeOperation ?? 'source-over',
         locked: !!obj.lockMovementX,
         tableStyle: style
-          ? { theme: style.theme, fontFamily: style.fontFamily, rows: style.rows.length, cols: style.rows[0]?.length ?? 0 }
+          ? {
+              theme: style.theme,
+              fontFamily: style.fontFamily,
+              fontSize: style.fontSize,
+              bold: style.bold,
+              italic: style.italic,
+              underline: style.underline,
+              align: style.align,
+              rows: style.rows.length,
+              cols: style.rows[0]?.length ?? 0,
+            }
           : undefined,
       }
     }
@@ -936,8 +956,22 @@ function tagComponent<T extends FabricObject>(group: T, kind: string, data: unkn
 function mkRect(opts: ConstructorParameters<typeof Rect>[0]) {
   return new Rect({ originX: 'left', originY: 'top', ...opts })
 }
-function mkText(text: string, opts: ConstructorParameters<typeof IText>[1]) {
-  return new IText(text, { originX: 'left', originY: 'top', ...opts })
+/** 用 Textbox 而不是 IText：IText 的 initDimensions() 每次都会把 width 强制改写成文字实际渲染宽度，
+ * 传进去的 width 会被立刻覆盖掉，textAlign:'center'/'right' 因此完全不起作用（表格合并单元格加了居中对齐后才暴露这个坑）。
+ * Textbox 是 IText 的子类（instanceof IText 判断不受影响），且 initDimensions() 明确不会覆盖手动设的 width。
+ * 没传 width 的调用点（跟以前 IText 自动按文字宽度收缩的行为保持一致）用一个临时 IText 量出文字的自然宽度再传给 Textbox。 */
+function mkText(text: string, opts: ConstructorParameters<typeof Textbox>[1]) {
+  let finalOpts = opts
+  if (!finalOpts || finalOpts.width === undefined) {
+    // 显式传 fontFamily: undefined 会覆盖掉 Fabric 的类默认值导致崩溃，所以量宽度时只带上真的设置过的字段
+    const probeOpts: Record<string, unknown> = {}
+    if (finalOpts?.fontSize !== undefined) probeOpts.fontSize = finalOpts.fontSize
+    if (finalOpts?.fontFamily !== undefined) probeOpts.fontFamily = finalOpts.fontFamily
+    if (finalOpts?.fontWeight !== undefined) probeOpts.fontWeight = finalOpts.fontWeight
+    const probe = new IText(text, probeOpts)
+    finalOpts = { ...finalOpts, width: probe.width }
+  }
+  return new Textbox(text, { originX: 'left', originY: 'top', splitByGrapheme: true, ...finalOpts })
 }
 function mkCircle(opts: ConstructorParameters<typeof Circle>[0]) {
   return new Circle({ originX: 'left', originY: 'top', ...opts })
@@ -1416,13 +1450,37 @@ function addDiagram(kind: 'swot' | 'timeline' | 'progress' | 'vs') {
   pushHistory()
 }
 
+interface TableMerge {
+  r1: number
+  c1: number
+  r2: number
+  c2: number
+}
 interface TableStyle {
   rows: string[][]
   /** TABLE_THEMES 里的 key，缺省/未知 key 一律按 'violet' 处理 */
   theme: string
   fontFamily: string
+  fontSize: number
+  bold: boolean
+  italic: boolean
+  underline: boolean
+  align: 'left' | 'center' | 'right'
+  /** 合并单元格范围列表，行列都是 0-indexed 闭区间；只有 (r1,c1) 这个"锚点"格子会被画出来（占满整个合并范围），
+   * 范围内其它格子的数据仍然保留在 rows 里（没丢），只是不渲染，重新拆分合并后能恢复 */
+  merges: TableMerge[]
 }
-const DEFAULT_TABLE_STYLE: TableStyle = { rows: DEFAULT_TABLE_ROWS, theme: 'violet', fontFamily: 'sans-serif' }
+const DEFAULT_TABLE_STYLE: TableStyle = {
+  rows: DEFAULT_TABLE_ROWS,
+  theme: 'violet',
+  fontFamily: 'sans-serif',
+  fontSize: 13,
+  bold: false,
+  italic: false,
+  underline: false,
+  align: 'left',
+  merges: [],
+}
 
 /** 表格配色预设：表头底色/表头文字色/隔行底色/正文文字色/边框色，插入表格、双击改主题时都读这张表 */
 const TABLE_THEMES: Record<string, { header: string; headerText: string; altRow: string; text: string; border: string }> = {
@@ -1433,8 +1491,13 @@ const TABLE_THEMES: Record<string, { header: string; headerText: string; altRow:
   blue: { header: '#2563eb', headerText: '#ffffff', altRow: '#eff6ff', text: '#1e3a8a', border: '#bfdbfe' },
 }
 
+/** 某个格子如果落在某个合并范围内，返回那个范围；不是锚点也会返回（调用方自己判断 r/c 是不是等于 r1/c1） */
+function mergeCovering(merges: TableMerge[], r: number, c: number): TableMerge | undefined {
+  return merges.find((m) => r >= m.r1 && r <= m.r2 && c >= m.c1 && c <= m.c2)
+}
+
 function buildGridTable(style: TableStyle = DEFAULT_TABLE_STYLE): FabricObject {
-  const { rows, fontFamily } = style
+  const { rows, fontFamily, fontSize, bold, italic, underline, align, merges } = style
   const t = TABLE_THEMES[style.theme] ?? TABLE_THEMES.violet
   const cellW = TABLE_CELL_W
   const cellH = TABLE_CELL_H
@@ -1442,14 +1505,20 @@ function buildGridTable(style: TableStyle = DEFAULT_TABLE_STYLE): FabricObject {
   const children: FabricObject[] = []
   rows.forEach((row, r) => {
     row.forEach((cellText, c) => {
+      const merge = mergeCovering(merges, r, c)
+      if (merge && (merge.r1 !== r || merge.c1 !== c)) return // 被合并吸收的格子不单独画
+      const spanRows = merge ? merge.r2 - merge.r1 + 1 : 1
+      const spanCols = merge ? merge.c2 - merge.c1 + 1 : 1
       const x = c * cellW
       const y = r * cellH
+      const w = cellW * spanCols
+      const h = cellH * spanRows
       children.push(
         mkRect({
           left: x,
           top: y,
-          width: cellW,
-          height: cellH,
+          width: w,
+          height: h,
           fill: r === 0 ? t.header : r % 2 === 0 ? t.altRow : '#ffffff',
           stroke: t.border,
           strokeWidth: 1,
@@ -1457,7 +1526,18 @@ function buildGridTable(style: TableStyle = DEFAULT_TABLE_STYLE): FabricObject {
       )
       children.push(
         tagDataChild(
-          mkText(cellText, { left: x + 8, top: y + 9, fontSize: 13, fill: r === 0 ? t.headerText : t.text, width: cellW - 16, fontFamily }),
+          mkText(cellText, {
+            left: x + 8,
+            top: y + Math.max(4, (h - fontSize * 1.16) / 2),
+            width: w - 16,
+            fontSize,
+            fill: r === 0 ? t.headerText : t.text,
+            fontFamily,
+            fontWeight: bold || r === 0 ? 'bold' : 'normal',
+            fontStyle: italic ? 'italic' : 'normal',
+            underline,
+            textAlign: align,
+          }),
           'cell',
           r * cols + c,
         ),
@@ -1470,7 +1550,7 @@ function buildGridTable(style: TableStyle = DEFAULT_TABLE_STYLE): FabricObject {
 
 /** 无线表格：不画格子背景，只在表头下方和每行下方留一条细分隔线，文字左对齐——常见的"简洁列表"风格 */
 function buildBorderlessTable(style: TableStyle = DEFAULT_TABLE_STYLE): FabricObject {
-  const { rows, fontFamily } = style
+  const { rows, fontFamily, fontSize, bold, italic, underline, align, merges } = style
   const t = TABLE_THEMES[style.theme] ?? TABLE_THEMES.violet
   const cellW = TABLE_CELL_W
   const cellH = TABLE_CELL_H
@@ -1480,17 +1560,25 @@ function buildBorderlessTable(style: TableStyle = DEFAULT_TABLE_STYLE): FabricOb
   rows.forEach((row, r) => {
     const y = r * cellH
     row.forEach((cellText, c) => {
+      const merge = mergeCovering(merges, r, c)
+      if (merge && (merge.r1 !== r || merge.c1 !== c)) return
+      const spanRows = merge ? merge.r2 - merge.r1 + 1 : 1
+      const spanCols = merge ? merge.c2 - merge.c1 + 1 : 1
       const x = c * cellW
+      const h = cellH * spanRows
       children.push(
         tagDataChild(
           mkText(cellText, {
             left: x + 4,
-            top: y + 9,
-            fontSize: 13,
+            top: y + Math.max(4, (h - fontSize * 1.16) / 2),
+            width: cellW * spanCols - 8,
+            fontSize,
             fill: r === 0 ? t.header : t.text,
-            fontWeight: r === 0 ? 'bold' : 'normal',
-            width: cellW - 8,
             fontFamily,
+            fontWeight: bold || r === 0 ? 'bold' : 'normal',
+            fontStyle: italic ? 'italic' : 'normal',
+            underline,
+            textAlign: align,
           }),
           'cell',
           r * cols + c,
@@ -1518,7 +1606,27 @@ function addDataTable(kind: 'grid' | 'borderless') {
 
 /** 表格样式面板用：修改配色主题/字体/行列数，读当前选中表格的 _componentData 合并 patch 后整表重建
  * （跟双击改单元格走的 commitInlineEdit 是同一套"改数据→调 builder 重建 Group"的模式） */
-function updateTableStyle(patch: Partial<{ theme: string; fontFamily: string; rows: number; cols: number }>) {
+interface TableStylePatch {
+  theme: string
+  fontFamily: string
+  fontSize: number
+  bold: boolean
+  italic: boolean
+  underline: boolean
+  align: 'left' | 'center' | 'right'
+  rows: number
+  cols: number
+  /** 行列互换（转置），选完之后原有的合并范围语义就不对了，直接清空 */
+  transpose: boolean
+  /** 清空所有单元格文字，保留表格结构/样式/合并 */
+  clearAll: boolean
+  mergeRange: TableMerge
+}
+
+/** 表格样式面板用：修改配色主题/字体/字号/加粗斜体下划线/对齐/行列数/转置/清空/合并单元格，
+ * 读当前选中表格的 _componentData 合并 patch 后整表重建
+ * （跟双击改单元格走的 commitInlineEdit 是同一套"改数据→调 builder 重建 Group"的模式） */
+function updateTableStyle(patch: Partial<TableStylePatch>) {
   if (!canvas) return
   const active = canvas.getActiveObject()
   if (!active) return
@@ -1528,11 +1636,17 @@ function updateTableStyle(patch: Partial<{ theme: string; fontFamily: string; ro
   const style: TableStyle = JSON.parse(JSON.stringify(tagged._componentData))
   if (patch.theme !== undefined) style.theme = patch.theme
   if (patch.fontFamily !== undefined) style.fontFamily = patch.fontFamily
+  if (patch.fontSize !== undefined) style.fontSize = Math.max(8, patch.fontSize)
+  if (patch.bold !== undefined) style.bold = patch.bold
+  if (patch.italic !== undefined) style.italic = patch.italic
+  if (patch.underline !== undefined) style.underline = patch.underline
+  if (patch.align !== undefined) style.align = patch.align
   if (patch.rows !== undefined) {
     const cols = style.rows[0]?.length ?? 1
     const target = Math.max(1, patch.rows)
     while (style.rows.length < target) style.rows.push(Array.from({ length: cols }, () => ''))
     if (style.rows.length > target) style.rows.length = target
+    style.merges = style.merges.filter((m) => m.r2 < target)
   }
   if (patch.cols !== undefined) {
     const target = Math.max(1, patch.cols)
@@ -1541,6 +1655,30 @@ function updateTableStyle(patch: Partial<{ theme: string; fontFamily: string; ro
       while (next.length < target) next.push('')
       return next
     })
+    style.merges = style.merges.filter((m) => m.c2 < target)
+  }
+  if (patch.transpose) {
+    const cols = style.rows[0]?.length ?? 0
+    const rowCount = style.rows.length
+    const next: string[][] = Array.from({ length: cols }, () => Array.from({ length: rowCount }, () => ''))
+    style.rows.forEach((row, r) => row.forEach((cell, c) => (next[c][r] = cell)))
+    style.rows = next
+    style.merges = []
+  }
+  if (patch.clearAll) {
+    style.rows = style.rows.map((row) => row.map(() => ''))
+  }
+  if (patch.mergeRange) {
+    const { r1, c1, r2, c2 } = patch.mergeRange
+    const rows = style.rows.length
+    const cols = style.rows[0]?.length ?? 0
+    const rr1 = Math.max(0, Math.min(r1, r2))
+    const rr2 = Math.min(rows - 1, Math.max(r1, r2))
+    const cc1 = Math.max(0, Math.min(c1, c2))
+    const cc2 = Math.min(cols - 1, Math.max(c1, c2))
+    // 跟新范围有重叠的旧合并先撤掉，避免合并区域交叉重叠导致渲染混乱
+    style.merges = style.merges.filter((m) => !(m.r1 <= rr2 && m.r2 >= rr1 && m.c1 <= cc2 && m.c2 >= cc1))
+    if (rr2 > rr1 || cc2 > cc1) style.merges.push({ r1: rr1, c1: cc1, r2: rr2, c2: cc2 })
   }
   const builder = tagged._componentKind === 'borderless-table' ? buildBorderlessTable : buildGridTable
   const newGroup = builder(style)

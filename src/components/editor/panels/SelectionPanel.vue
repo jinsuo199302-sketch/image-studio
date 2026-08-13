@@ -49,8 +49,16 @@ const emit = defineEmits<{
   (e: 'rect-fill', color: string): void
   (e: 'table-theme', theme: string): void
   (e: 'table-font', fontFamily: string): void
+  (e: 'table-font-size', size: number): void
+  (e: 'table-bold', enabled: boolean): void
+  (e: 'table-italic', enabled: boolean): void
+  (e: 'table-underline', enabled: boolean): void
+  (e: 'table-align', align: 'left' | 'center' | 'right'): void
   (e: 'table-rows', count: number): void
   (e: 'table-cols', count: number): void
+  (e: 'table-transpose'): void
+  (e: 'table-clear-all'): void
+  (e: 'table-merge', range: { r1: number; c1: number; r2: number; c2: number }): void
   (e: 'opacity', value: number): void
   (e: 'opacity-commit'): void
   (e: 'blend-mode', mode: string): void
@@ -125,6 +133,15 @@ const bgOpen = ref(false)
 const warpIntensity = ref(30)
 const customGradientStart = ref('#f87171')
 const customGradientEnd = ref('#fbbf24')
+
+/** 合并单元格用：这个应用没有"框选一片单元格"的交互，用行列起止号（1-indexed，跟用户直觉一致）代替拖拽框选 */
+const mergeR1 = ref(1)
+const mergeC1 = ref(1)
+const mergeR2 = ref(1)
+const mergeC2 = ref(1)
+function submitMerge() {
+  emit('table-merge', { r1: mergeR1.value - 1, c1: mergeC1.value - 1, r2: mergeR2.value - 1, c2: mergeC2.value - 1 })
+}
 
 function applyCustomGradient() {
   emit('text-gradient', [customGradientStart.value, customGradientEnd.value])
@@ -543,7 +560,67 @@ function pickWarp(kind: WarpKind) {
       </template>
 
       <template v-if="selection.tableStyle">
-        <p class="mb-1.5 text-xs font-medium text-gray-600">表格配色</p>
+        <p class="mb-1.5 text-xs font-medium text-gray-600">样式</p>
+        <div class="flex items-center gap-1.5">
+          <el-select
+            :model-value="selection.tableStyle.fontFamily"
+            size="small"
+            class="!flex-1"
+            @update:model-value="(v: string) => emit('table-font', v)"
+          >
+            <el-option v-for="f in FONT_OPTIONS" :key="f.value" :label="f.label" :value="f.value" :style="{ fontFamily: f.value }" />
+          </el-select>
+          <div class="flex items-center gap-0.5 shrink-0">
+            <button
+              class="flex h-6 w-6 items-center justify-center rounded hover:bg-gray-100"
+              @click="emit('table-font-size', Math.max(8, selection.tableStyle.fontSize - 1))"
+            >
+              <el-icon :size="12"><Minus /></el-icon>
+            </button>
+            <span class="w-5 text-center text-xs text-gray-600">{{ selection.tableStyle.fontSize }}</span>
+            <button
+              class="flex h-6 w-6 items-center justify-center rounded hover:bg-gray-100"
+              @click="emit('table-font-size', selection.tableStyle.fontSize + 1)"
+            >
+              <el-icon :size="12"><Plus /></el-icon>
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-2 flex items-center gap-1">
+          <button
+            class="flex-1 rounded px-1.5 py-1 text-xs font-bold transition"
+            :class="selection.tableStyle.bold ? 'bg-violet-50 text-violet-600' : 'text-gray-600 hover:bg-gray-100'"
+            @click="emit('table-bold', !selection.tableStyle.bold)"
+          >
+            B
+          </button>
+          <button
+            class="flex-1 rounded px-1.5 py-1 text-xs italic transition"
+            :class="selection.tableStyle.italic ? 'bg-violet-50 text-violet-600' : 'text-gray-600 hover:bg-gray-100'"
+            @click="emit('table-italic', !selection.tableStyle.italic)"
+          >
+            I
+          </button>
+          <button
+            class="flex-1 rounded px-1.5 py-1 text-xs underline transition"
+            :class="selection.tableStyle.underline ? 'bg-violet-50 text-violet-600' : 'text-gray-600 hover:bg-gray-100'"
+            @click="emit('table-underline', !selection.tableStyle.underline)"
+          >
+            U
+          </button>
+          <button
+            v-for="align in (['left', 'center', 'right'] as const)"
+            :key="align"
+            class="flex-1 rounded px-1.5 py-1 text-xs transition"
+            :class="selection.tableStyle.align === align ? 'bg-violet-50 text-violet-600' : 'text-gray-500 hover:bg-gray-100'"
+            @click="emit('table-align', align)"
+          >
+            {{ align === 'left' ? '左' : align === 'center' ? '中' : '右' }}
+          </button>
+        </div>
+
+        <p class="mb-1.5 mt-3 text-xs font-medium text-gray-600">表格配色</p>
         <div class="flex items-center gap-1.5">
           <button
             v-for="t in TABLE_THEME_SWATCHES"
@@ -555,19 +632,10 @@ function pickWarp(kind: WarpKind) {
           />
         </div>
 
-        <p class="mb-1.5 mt-3 text-xs font-medium text-gray-600">表格字体</p>
-        <el-select
-          :model-value="selection.tableStyle.fontFamily"
-          size="small"
-          class="!w-full"
-          @update:model-value="(v: string) => emit('table-font', v)"
-        >
-          <el-option v-for="f in FONT_OPTIONS" :key="f.value" :label="f.label" :value="f.value" :style="{ fontFamily: f.value }" />
-        </el-select>
-
-        <div class="mt-3 flex items-center justify-between">
+        <p class="mb-1.5 mt-3 text-xs font-medium text-gray-600">行列数</p>
+        <div class="flex items-center justify-between">
           <div class="flex items-center gap-1" title="行数">
-            <span class="text-[11px] text-gray-400">行数</span>
+            <span class="text-[11px] text-gray-400">行</span>
             <button
               class="flex h-6 w-6 items-center justify-center rounded hover:bg-gray-100"
               @click="emit('table-rows', Math.max(1, selection.tableStyle.rows - 1))"
@@ -583,7 +651,7 @@ function pickWarp(kind: WarpKind) {
             </button>
           </div>
           <div class="flex items-center gap-1" title="列数">
-            <span class="text-[11px] text-gray-400">列数</span>
+            <span class="text-[11px] text-gray-400">列</span>
             <button
               class="flex h-6 w-6 items-center justify-center rounded hover:bg-gray-100"
               @click="emit('table-cols', Math.max(1, selection.tableStyle.cols - 1))"
@@ -598,7 +666,23 @@ function pickWarp(kind: WarpKind) {
               <el-icon :size="12"><Plus /></el-icon>
             </button>
           </div>
+          <button class="text-[11px] text-violet-600 hover:underline" title="把行和列互换" @click="emit('table-transpose')">
+            行列转换
+          </button>
         </div>
+
+        <p class="mb-1.5 mt-3 text-xs font-medium text-gray-600">合并单元格</p>
+        <p class="mb-1.5 text-[11px] text-gray-400">按行号/列号（从1开始）指定要合并的范围</p>
+        <div class="grid grid-cols-4 gap-1.5">
+          <el-input-number v-model="mergeR1" :min="1" :max="selection.tableStyle.rows" size="small" controls-position="right" />
+          <el-input-number v-model="mergeC1" :min="1" :max="selection.tableStyle.cols" size="small" controls-position="right" />
+          <el-input-number v-model="mergeR2" :min="1" :max="selection.tableStyle.rows" size="small" controls-position="right" />
+          <el-input-number v-model="mergeC2" :min="1" :max="selection.tableStyle.cols" size="small" controls-position="right" />
+        </div>
+        <p class="mb-1.5 mt-1 text-[11px] text-gray-400">起始行 / 起始列 / 结束行 / 结束列</p>
+        <el-button size="small" class="!w-full" @click="submitMerge">合并单元格</el-button>
+
+        <el-button size="small" class="!mt-2 !ml-0 !w-full" @click="emit('table-clear-all')">清空全部数据</el-button>
       </template>
 
       <div class="mt-5 border-t border-gray-100 pt-4">
