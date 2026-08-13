@@ -1035,9 +1035,23 @@ function polarPoint(cx: number, cy: number, r: number, angleDeg: number) {
   return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) }
 }
 
+/** 饼图/环形图共用的图例行：色块 + 独立的标签/百分比两个 tagDataChild 文字（可分别双击编辑），
+ * 百分比文字编辑时改的是背后的 value（比例的分子），提交后扇形角度和百分比会跟着重新计算 */
+function buildPieLegendRow(children: FabricObject[], d: ChartDatum, i: number, r: number, total: number) {
+  const ly = r * 2 + 16 + i * 22
+  children.push(mkRect({ left: r * 2 + 16, top: ly, width: 12, height: 12, fill: d.color, rx: 3, ry: 3 }))
+  children.push(tagDataChild(mkText(d.label, { left: r * 2 + 34, top: ly - 2, fontSize: 13, fill: '#374151', width: 50 }), 'label', i))
+  children.push(
+    tagDataChild(
+      mkText(`${Math.round((d.value / total) * 100)}%`, { left: r * 2 + 86, top: ly - 2, fontSize: 13, fill: '#374151', width: 40 }),
+      'value',
+      i,
+    ),
+  )
+}
+
 /** 饼图：用 SVG 弧形路径手算每一块扇形，圆心引一条细线到外面的图例文字 */
-function addPieChart(): FabricObject {
-  const data = CHART_DATA
+function addPieChart(data: ChartDatum[] = CHART_DATA): FabricObject {
   const r = 80
   const cx = r
   const cy = r
@@ -1053,17 +1067,13 @@ function addPieChart(): FabricObject {
     children.push(new Path(path, { fill: d.color, originX: 'left', originY: 'top' }))
     angle += sweep
   })
-  data.forEach((d, i) => {
-    const ly = r * 2 + 16 + i * 22
-    children.push(mkRect({ left: r * 2 + 16, top: ly, width: 12, height: 12, fill: d.color, rx: 3, ry: 3 }))
-    children.push(mkText(`${d.label}  ${Math.round((d.value / total) * 100)}%`, { left: r * 2 + 34, top: ly - 2, fontSize: 13, fill: '#374151' }))
-  })
-  return new Group(children, { left: 0, top: 0, originX: 'left', originY: 'top' })
+  data.forEach((d, i) => buildPieLegendRow(children, d, i, r, total))
+  const group = new Group(children, { left: 0, top: 0, originX: 'left', originY: 'top' })
+  return tagComponent(group, 'pie-chart', data)
 }
 
 /** 环形图：跟饼图算法一样，多一步——中间盖一个白色圆挖空 */
-function addDonutChart(): FabricObject {
-  const data = CHART_DATA
+function addDonutChart(data: ChartDatum[] = CHART_DATA): FabricObject {
   const r = 80
   const innerR = 45
   const cx = r
@@ -1081,12 +1091,9 @@ function addDonutChart(): FabricObject {
     angle += sweep
   })
   children.push(mkCircle({ left: cx - innerR, top: cy - innerR, radius: innerR, fill: '#ffffff' }))
-  data.forEach((d, i) => {
-    const ly = r * 2 + 16 + i * 22
-    children.push(mkRect({ left: r * 2 + 16, top: ly, width: 12, height: 12, fill: d.color, rx: 3, ry: 3 }))
-    children.push(mkText(`${d.label}  ${Math.round((d.value / total) * 100)}%`, { left: r * 2 + 34, top: ly - 2, fontSize: 13, fill: '#374151' }))
-  })
-  return new Group(children, { left: 0, top: 0, originX: 'left', originY: 'top' })
+  data.forEach((d, i) => buildPieLegendRow(children, d, i, r, total))
+  const group = new Group(children, { left: 0, top: 0, originX: 'left', originY: 'top' })
+  return tagComponent(group, 'donut-chart', data)
 }
 
 const FUNNEL_DATA: ChartDatum[] = [
@@ -1277,6 +1284,8 @@ const COMPONENT_BUILDERS: Record<string, (data: never) => FabricObject> = {
   'line-chart': addLineChart as (data: never) => FabricObject,
   'hbar-chart': addHorizontalBarChart as (data: never) => FabricObject,
   'funnel-chart': addFunnelChart as (data: never) => FabricObject,
+  'pie-chart': addPieChart as (data: never) => FabricObject,
+  'donut-chart': addDonutChart as (data: never) => FabricObject,
   'swatch-legend': buildSwatchLegend as (data: never) => FabricObject,
   'step-legend': buildStepFlow as (data: never) => FabricObject,
   'grid-table': buildGridTable as (data: never) => FabricObject,
