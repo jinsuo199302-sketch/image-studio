@@ -1089,38 +1089,46 @@ function addDonutChart(): FabricObject {
   return new Group(children, { left: 0, top: 0, originX: 'left', originY: 'top' })
 }
 
-/** 漏斗图：转化率场景常用，每层是上宽下窄的梯形，宽度按占比递减 */
-function addFunnelChart(): FabricObject {
-  const stages = [
-    { label: '访问', value: 100, color: '#8b5cf6' },
-    { label: '咨询', value: 65, color: '#a78bfa' },
-    { label: '下单', value: 38, color: '#ec4899' },
-    { label: '成交', value: 20, color: '#f472b6' },
-  ]
+const FUNNEL_DATA: ChartDatum[] = [
+  { label: '访问', value: 100, color: '#8b5cf6' },
+  { label: '咨询', value: 65, color: '#a78bfa' },
+  { label: '下单', value: 38, color: '#ec4899' },
+  { label: '成交', value: 20, color: '#f472b6' },
+]
+
+/** 漏斗图：转化率场景常用，每层是上宽下窄的梯形，宽度按占比递减
+ * 标签和"数值%"拆成两个独立的 tagDataChild 文字（而不是像最初那样拼成一整串），
+ * 这样才能像柱状图一样双击单独编辑其中一项 */
+function addFunnelChart(data: ChartDatum[] = FUNNEL_DATA): FabricObject {
   const maxW = 220
   const stageH = 44
   const cx = maxW / 2
-  const maxVal = stages[0].value
+  const maxVal = data[0].value
   const children: FabricObject[] = []
-  stages.forEach((s, i) => {
-    const wTop = ((i === 0 ? maxVal : stages[i - 1].value) / maxVal) * maxW
+  data.forEach((s, i) => {
+    const wTop = ((i === 0 ? maxVal : data[i - 1].value) / maxVal) * maxW
     const wBottom = (s.value / maxVal) * maxW
     const y = i * stageH
     const path = `M ${cx - wTop / 2} ${y} L ${cx + wTop / 2} ${y} L ${cx + wBottom / 2} ${y + stageH - 2} L ${cx - wBottom / 2} ${y + stageH - 2} Z`
     children.push(new Path(path, { fill: s.color, originX: 'left', originY: 'top' }))
+    const textY = y + stageH / 2 - 9
     children.push(
-      mkText(`${s.label} ${s.value}%`, {
-        left: cx - 50,
-        top: y + stageH / 2 - 9,
-        fontSize: 14,
-        fontWeight: 'bold',
-        fill: '#ffffff',
-        width: 100,
-        textAlign: 'center',
-      }),
+      tagDataChild(
+        mkText(s.label, { left: cx - 50, top: textY, fontSize: 14, fontWeight: 'bold', fill: '#ffffff', width: 48, textAlign: 'right' }),
+        'label',
+        i,
+      ),
+    )
+    children.push(
+      tagDataChild(
+        mkText(`${s.value}%`, { left: cx + 2, top: textY, fontSize: 14, fontWeight: 'bold', fill: '#ffffff', width: 48, textAlign: 'left' }),
+        'value',
+        i,
+      ),
     )
   })
-  return new Group(children, { left: 0, top: 0, width: maxW, height: stages.length * stageH - 2, originX: 'left', originY: 'top' })
+  const group = new Group(children, { left: 0, top: 0, width: maxW, height: data.length * stageH - 2, originX: 'left', originY: 'top' })
+  return tagComponent(group, 'funnel-chart', data)
 }
 
 /** 图表统一入口：kind 决定具体画哪一种，插入逻辑（居中定位+选中+存历史）几种共用 */
@@ -1268,6 +1276,7 @@ const COMPONENT_BUILDERS: Record<string, (data: never) => FabricObject> = {
   'bar-chart': addBarChart as (data: never) => FabricObject,
   'line-chart': addLineChart as (data: never) => FabricObject,
   'hbar-chart': addHorizontalBarChart as (data: never) => FabricObject,
+  'funnel-chart': addFunnelChart as (data: never) => FabricObject,
   'swatch-legend': buildSwatchLegend as (data: never) => FabricObject,
   'step-legend': buildStepFlow as (data: never) => FabricObject,
   'grid-table': buildGridTable as (data: never) => FabricObject,
@@ -1292,7 +1301,7 @@ function applyFieldEdit(data: unknown, field: string, index: number, value: stri
   if (Array.isArray(data)) {
     const item = (data as Array<{ label: string; value?: number }>)[index]
     if (!item) return
-    if (field === 'value') item.value = Number(value) || 0
+    if (field === 'value') item.value = parseFloat(value) || 0
     else if (field === 'label') item.label = value
   }
 }
