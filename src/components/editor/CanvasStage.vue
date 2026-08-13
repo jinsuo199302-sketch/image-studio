@@ -551,6 +551,21 @@ const CHART_DATA = [
   { label: 'D', value: 75, color: '#22c55e' },
 ]
 
+/** 所有图表/图例/表格子元素统一走这几个 helper 创建，强制 originX/originY 为 left/top——
+ * Fabric 这个版本里 Rect/IText/Circle/Line/Group 全部默认 center 锚点，混用手算坐标会全部错位 */
+function mkRect(opts: ConstructorParameters<typeof Rect>[0]) {
+  return new Rect({ originX: 'left', originY: 'top', ...opts })
+}
+function mkText(text: string, opts: ConstructorParameters<typeof IText>[1]) {
+  return new IText(text, { originX: 'left', originY: 'top', ...opts })
+}
+function mkCircle(opts: ConstructorParameters<typeof Circle>[0]) {
+  return new Circle({ originX: 'left', originY: 'top', ...opts })
+}
+function mkLine(points: [number, number, number, number], opts: ConstructorParameters<typeof Line>[1]) {
+  return new Line(points, { originX: 'left', originY: 'top', ...opts })
+}
+
 function addBarChart(): FabricObject {
   const data = CHART_DATA
   const chartH = 160
@@ -558,18 +573,14 @@ function addBarChart(): FabricObject {
   const gap = 20
   const maxVal = Math.max(...data.map((d) => d.value))
   const children: FabricObject[] = [
-    new Rect({ left: 0, top: chartH, width: data.length * (barW + gap), height: 2, fill: '#d1d5db' }),
+    mkRect({ left: 0, top: chartH, width: data.length * (barW + gap), height: 2, fill: '#d1d5db' }),
   ]
   data.forEach((d, i) => {
     const h = (d.value / maxVal) * (chartH - 30)
     const x = i * (barW + gap) + 10
-    children.push(new Rect({ left: x, top: chartH - h, width: barW, height: h, fill: d.color, rx: 4, ry: 4 }))
-    children.push(
-      new IText(String(d.value), { left: x, top: chartH - h - 22, fontSize: 14, fill: '#374151', width: barW, textAlign: 'center' }),
-    )
-    children.push(
-      new IText(d.label, { left: x, top: chartH + 8, fontSize: 13, fill: '#6b7280', width: barW, textAlign: 'center' }),
-    )
+    children.push(mkRect({ left: x, top: chartH - h, width: barW, height: h, fill: d.color, rx: 4, ry: 4 }))
+    children.push(mkText(String(d.value), { left: x, top: chartH - h - 22, fontSize: 14, fill: '#374151', width: barW, textAlign: 'center' }))
+    children.push(mkText(d.label, { left: x, top: chartH + 8, fontSize: 13, fill: '#6b7280', width: barW, textAlign: 'center' }))
   })
   const chartW = data.length * (barW + gap) + 20
   return new Group(children, { left: 0, top: 0, width: chartW, height: chartH + 30, originX: 'left', originY: 'top' })
@@ -586,11 +597,11 @@ function addLineChart(): FabricObject {
     y: chartH - (d.value / maxVal) * (chartH - 30),
   }))
   const children: FabricObject[] = [
-    new Rect({ left: 0, top: chartH, width: (data.length - 1) * stepX + 40, height: 2, fill: '#d1d5db' }),
+    mkRect({ left: 0, top: chartH, width: (data.length - 1) * stepX + 40, height: 2, fill: '#d1d5db' }),
   ]
   for (let i = 0; i < points.length - 1; i++) {
     children.push(
-      new Line([points[i].x, points[i].y, points[i + 1].x, points[i + 1].y], {
+      mkLine([points[i].x, points[i].y, points[i + 1].x, points[i + 1].y], {
         stroke: '#8b5cf6',
         strokeWidth: 3,
         strokeLineCap: 'round',
@@ -598,16 +609,32 @@ function addLineChart(): FabricObject {
     )
   }
   points.forEach((p, i) => {
-    children.push(new Circle({ left: p.x - 6, top: p.y - 6, radius: 6, fill: '#ffffff', stroke: '#8b5cf6', strokeWidth: 3 }))
-    children.push(
-      new IText(String(data[i].value), { left: p.x - 20, top: p.y - 28, fontSize: 14, fill: '#374151', width: 40, textAlign: 'center' }),
-    )
-    children.push(
-      new IText(data[i].label, { left: p.x - 20, top: chartH + 8, fontSize: 13, fill: '#6b7280', width: 40, textAlign: 'center' }),
-    )
+    children.push(mkCircle({ left: p.x - 6, top: p.y - 6, radius: 6, fill: '#ffffff', stroke: '#8b5cf6', strokeWidth: 3 }))
+    children.push(mkText(String(data[i].value), { left: p.x - 20, top: p.y - 28, fontSize: 14, fill: '#374151', width: 40, textAlign: 'center' }))
+    children.push(mkText(data[i].label, { left: p.x - 20, top: chartH + 8, fontSize: 13, fill: '#6b7280', width: 40, textAlign: 'center' }))
   })
   const chartW = (data.length - 1) * stepX + 40
   return new Group(children, { left: 0, top: 0, width: chartW, height: chartH + 30, originX: 'left', originY: 'top' })
+}
+
+/** 横向柱状图：标签在左、数值在条形右端，适合标签文字比较长的场景 */
+function addHorizontalBarChart(): FabricObject {
+  const data = CHART_DATA
+  const chartW = 180
+  const barH = 26
+  const gap = 16
+  const labelW = 22
+  const maxVal = Math.max(...data.map((d) => d.value))
+  const children: FabricObject[] = []
+  data.forEach((d, i) => {
+    const y = i * (barH + gap)
+    const w = (d.value / maxVal) * chartW
+    children.push(mkText(d.label, { left: 0, top: y + barH / 2 - 8, fontSize: 14, fill: '#374151', width: labelW }))
+    children.push(mkRect({ left: labelW + 8, top: y, width: w, height: barH, fill: d.color, rx: 4, ry: 4 }))
+    children.push(mkText(String(d.value), { left: labelW + 8 + w + 8, top: y + barH / 2 - 8, fontSize: 13, fill: '#6b7280' }))
+  })
+  const totalH = data.length * (barH + gap) - gap
+  return new Group(children, { left: 0, top: 0, width: labelW + 8 + chartW + 40, height: totalH, originX: 'left', originY: 'top' })
 }
 
 function polarPoint(cx: number, cy: number, r: number, angleDeg: number) {
@@ -630,28 +657,91 @@ function addPieChart(): FabricObject {
     const end = polarPoint(cx, cy, r, angle + sweep)
     const largeArc = sweep > 180 ? 1 : 0
     const path = `M ${cx} ${cy} L ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${end.x} ${end.y} Z`
-    children.push(new Path(path, { fill: d.color }))
+    children.push(new Path(path, { fill: d.color, originX: 'left', originY: 'top' }))
     angle += sweep
   })
   data.forEach((d, i) => {
     const ly = r * 2 + 16 + i * 22
-    children.push(new Rect({ left: r * 2 + 16, top: ly, width: 12, height: 12, fill: d.color, rx: 3, ry: 3 }))
-    children.push(
-      new IText(`${d.label}  ${Math.round((d.value / total) * 100)}%`, {
-        left: r * 2 + 34,
-        top: ly - 2,
-        fontSize: 13,
-        fill: '#374151',
-      }),
-    )
+    children.push(mkRect({ left: r * 2 + 16, top: ly, width: 12, height: 12, fill: d.color, rx: 3, ry: 3 }))
+    children.push(mkText(`${d.label}  ${Math.round((d.value / total) * 100)}%`, { left: r * 2 + 34, top: ly - 2, fontSize: 13, fill: '#374151' }))
   })
   return new Group(children, { left: 0, top: 0, originX: 'left', originY: 'top' })
 }
 
-/** 图表统一入口：kind 决定具体画哪一种，插入逻辑（居中定位+选中+存历史）三种共用 */
-function addChart(kind: 'bar' | 'line' | 'pie') {
+/** 环形图：跟饼图算法一样，多一步——中间盖一个白色圆挖空 */
+function addDonutChart(): FabricObject {
+  const data = CHART_DATA
+  const r = 80
+  const innerR = 45
+  const cx = r
+  const cy = r
+  const total = data.reduce((sum, d) => sum + d.value, 0)
+  const children: FabricObject[] = []
+  let angle = 0
+  data.forEach((d) => {
+    const sweep = (d.value / total) * 360
+    const start = polarPoint(cx, cy, r, angle)
+    const end = polarPoint(cx, cy, r, angle + sweep)
+    const largeArc = sweep > 180 ? 1 : 0
+    const path = `M ${cx} ${cy} L ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${end.x} ${end.y} Z`
+    children.push(new Path(path, { fill: d.color, originX: 'left', originY: 'top' }))
+    angle += sweep
+  })
+  children.push(mkCircle({ left: cx - innerR, top: cy - innerR, radius: innerR, fill: '#ffffff' }))
+  data.forEach((d, i) => {
+    const ly = r * 2 + 16 + i * 22
+    children.push(mkRect({ left: r * 2 + 16, top: ly, width: 12, height: 12, fill: d.color, rx: 3, ry: 3 }))
+    children.push(mkText(`${d.label}  ${Math.round((d.value / total) * 100)}%`, { left: r * 2 + 34, top: ly - 2, fontSize: 13, fill: '#374151' }))
+  })
+  return new Group(children, { left: 0, top: 0, originX: 'left', originY: 'top' })
+}
+
+/** 漏斗图：转化率场景常用，每层是上宽下窄的梯形，宽度按占比递减 */
+function addFunnelChart(): FabricObject {
+  const stages = [
+    { label: '访问', value: 100, color: '#8b5cf6' },
+    { label: '咨询', value: 65, color: '#a78bfa' },
+    { label: '下单', value: 38, color: '#ec4899' },
+    { label: '成交', value: 20, color: '#f472b6' },
+  ]
+  const maxW = 220
+  const stageH = 44
+  const cx = maxW / 2
+  const maxVal = stages[0].value
+  const children: FabricObject[] = []
+  stages.forEach((s, i) => {
+    const wTop = ((i === 0 ? maxVal : stages[i - 1].value) / maxVal) * maxW
+    const wBottom = (s.value / maxVal) * maxW
+    const y = i * stageH
+    const path = `M ${cx - wTop / 2} ${y} L ${cx + wTop / 2} ${y} L ${cx + wBottom / 2} ${y + stageH - 2} L ${cx - wBottom / 2} ${y + stageH - 2} Z`
+    children.push(new Path(path, { fill: s.color, originX: 'left', originY: 'top' }))
+    children.push(
+      mkText(`${s.label} ${s.value}%`, {
+        left: cx - 50,
+        top: y + stageH / 2 - 9,
+        fontSize: 14,
+        fontWeight: 'bold',
+        fill: '#ffffff',
+        width: 100,
+        textAlign: 'center',
+      }),
+    )
+  })
+  return new Group(children, { left: 0, top: 0, width: maxW, height: stages.length * stageH - 2, originX: 'left', originY: 'top' })
+}
+
+/** 图表统一入口：kind 决定具体画哪一种，插入逻辑（居中定位+选中+存历史）几种共用 */
+function addChart(kind: 'bar' | 'hbar' | 'line' | 'pie' | 'donut' | 'funnel') {
   if (!canvas) return
-  const obj = kind === 'line' ? addLineChart() : kind === 'pie' ? addPieChart() : addBarChart()
+  const builders = {
+    bar: addBarChart,
+    hbar: addHorizontalBarChart,
+    line: addLineChart,
+    pie: addPieChart,
+    donut: addDonutChart,
+    funnel: addFunnelChart,
+  }
+  const obj = builders[kind]()
   const w = obj.width ?? 200
   const h = obj.height ?? 160
   obj.set({ left: canvasSize.width / 2 - w / 2, top: canvasSize.height / 2 - h / 2 })
@@ -670,8 +760,8 @@ function buildSwatchLegend(): FabricObject {
   const children: FabricObject[] = []
   items.forEach((it, i) => {
     const y = i * 26
-    children.push(new Rect({ left: 0, top: y, width: 14, height: 14, fill: it.color, rx: 3, ry: 3 }))
-    children.push(new IText(it.label, { left: 22, top: y - 2, fontSize: 14, fill: '#374151' }))
+    children.push(mkRect({ left: 0, top: y, width: 14, height: 14, fill: it.color, rx: 3, ry: 3 }))
+    children.push(mkText(it.label, { left: 22, top: y - 2, fontSize: 14, fill: '#374151' }))
   })
   return new Group(children, { left: 0, top: 0, originX: 'left', originY: 'top' })
 }
@@ -689,15 +779,11 @@ function buildStepFlow(): FabricObject {
   steps.forEach((s, i) => {
     const cx = i * gap + r
     if (i < steps.length - 1) {
-      children.push(new Line([cx + r, r, cx + gap - r, r], { stroke: '#d1d5db', strokeWidth: 2 }))
+      children.push(mkLine([cx + r, r, cx + gap - r, r], { stroke: '#d1d5db', strokeWidth: 2 }))
     }
-    children.push(new Circle({ left: cx - r, top: 0, radius: r, fill: s.color }))
-    children.push(
-      new IText(String(i + 1), { left: cx - r, top: r - 9, fontSize: 16, fontWeight: 'bold', fill: '#ffffff', width: r * 2, textAlign: 'center' }),
-    )
-    children.push(
-      new IText(s.label, { left: cx - 30, top: r * 2 + 10, fontSize: 13, fill: '#374151', width: 60, textAlign: 'center' }),
-    )
+    children.push(mkCircle({ left: cx - r, top: 0, radius: r, fill: s.color }))
+    children.push(mkText(String(i + 1), { left: cx - r, top: r - 9, fontSize: 16, fontWeight: 'bold', fill: '#ffffff', width: r * 2, textAlign: 'center' }))
+    children.push(mkText(s.label, { left: cx - 30, top: r * 2 + 10, fontSize: 13, fill: '#374151', width: 60, textAlign: 'center' }))
   })
   return new Group(children, { left: 0, top: 0, originX: 'left', originY: 'top' })
 }
@@ -724,7 +810,7 @@ function buildGridTable(): FabricObject {
       const x = c * cellW
       const y = r * cellH
       children.push(
-        new Rect({
+        mkRect({
           left: x,
           top: y,
           width: cellW,
@@ -735,9 +821,7 @@ function buildGridTable(): FabricObject {
         }),
       )
       const text = r === 0 ? `列${c + 1}` : `内容${r}-${c + 1}`
-      children.push(
-        new IText(text, { left: x + 8, top: y + 9, fontSize: 13, fill: r === 0 ? '#ffffff' : '#374151', width: cellW - 16 }),
-      )
+      children.push(mkText(text, { left: x + 8, top: y + 9, fontSize: 13, fill: r === 0 ? '#ffffff' : '#374151', width: cellW - 16 }))
     }
   }
   return new Group(children, { left: 0, top: 0, originX: 'left', originY: 'top' })
@@ -754,7 +838,7 @@ function buildBorderlessTable(): FabricObject {
       const x = c * cellW
       const text = r === 0 ? `列${c + 1}` : `内容${r}-${c + 1}`
       children.push(
-        new IText(text, {
+        mkText(text, {
           left: x + 4,
           top: y + 9,
           fontSize: 13,
@@ -764,7 +848,7 @@ function buildBorderlessTable(): FabricObject {
         }),
       )
     }
-    children.push(new Rect({ left: 0, top: y + cellH - 1, width: tableW, height: r === 0 ? 2 : 1, fill: r === 0 ? '#1f2937' : '#e5e7eb' }))
+    children.push(mkRect({ left: 0, top: y + cellH - 1, width: tableW, height: r === 0 ? 2 : 1, fill: r === 0 ? '#1f2937' : '#e5e7eb' }))
   }
   return new Group(children, { left: 0, top: 0, originX: 'left', originY: 'top' })
 }
