@@ -7,9 +7,9 @@ import { createSnippet } from '../../../services/snippetApi'
 const emit = defineEmits<{
   (e: 'add', color: string): void
   (e: 'add-image', url: string): void
-  (e: 'add-chart'): void
-  (e: 'add-legend'): void
-  (e: 'add-table'): void
+  (e: 'add-chart', kind: 'bar' | 'line' | 'pie'): void
+  (e: 'add-legend', kind: 'swatch' | 'steps'): void
+  (e: 'add-table', kind: 'grid' | 'borderless'): void
 }>()
 
 const SWATCHES = ['#1f2937', '#dc2626', '#ea580c', '#16a34a', '#2563eb', '#7c3aed']
@@ -104,28 +104,68 @@ async function generateQrcode() {
     </div>
 
     <div class="mt-5 border-t border-gray-100 pt-4">
-      <p class="mb-2 text-xs font-medium text-gray-600">数据组件</p>
+      <p class="mb-2 text-xs font-medium text-gray-600">图表</p>
       <div class="grid grid-cols-3 gap-2">
         <button
           class="flex flex-col items-center gap-1 rounded-md border border-gray-200 py-2.5 text-[11px] text-gray-600 hover:border-violet-300 hover:text-violet-600"
-          @click="emit('add-chart')"
+          @click="emit('add-chart', 'bar')"
         >
           <span class="text-lg">📊</span>
-          图表
+          柱状图
         </button>
         <button
           class="flex flex-col items-center gap-1 rounded-md border border-gray-200 py-2.5 text-[11px] text-gray-600 hover:border-violet-300 hover:text-violet-600"
-          @click="emit('add-legend')"
+          @click="emit('add-chart', 'line')"
+        >
+          <span class="text-lg">📈</span>
+          折线图
+        </button>
+        <button
+          class="flex flex-col items-center gap-1 rounded-md border border-gray-200 py-2.5 text-[11px] text-gray-600 hover:border-violet-300 hover:text-violet-600"
+          @click="emit('add-chart', 'pie')"
+        >
+          <span class="text-lg">🥧</span>
+          饼图
+        </button>
+      </div>
+    </div>
+
+    <div class="mt-5 border-t border-gray-100 pt-4">
+      <p class="mb-2 text-xs font-medium text-gray-600">图例 / 流程图</p>
+      <div class="grid grid-cols-3 gap-2">
+        <button
+          class="flex flex-col items-center gap-1 rounded-md border border-gray-200 py-2.5 text-[11px] text-gray-600 hover:border-violet-300 hover:text-violet-600"
+          @click="emit('add-legend', 'swatch')"
         >
           <span class="text-lg">🎨</span>
-          图例
+          色块图例
         </button>
         <button
           class="flex flex-col items-center gap-1 rounded-md border border-gray-200 py-2.5 text-[11px] text-gray-600 hover:border-violet-300 hover:text-violet-600"
-          @click="emit('add-table')"
+          @click="emit('add-legend', 'steps')"
+        >
+          <span class="text-lg">🔢</span>
+          步骤流程
+        </button>
+      </div>
+    </div>
+
+    <div class="mt-5 border-t border-gray-100 pt-4">
+      <p class="mb-2 text-xs font-medium text-gray-600">表格</p>
+      <div class="grid grid-cols-3 gap-2">
+        <button
+          class="flex flex-col items-center gap-1 rounded-md border border-gray-200 py-2.5 text-[11px] text-gray-600 hover:border-violet-300 hover:text-violet-600"
+          @click="emit('add-table', 'grid')"
         >
           <span class="text-lg">▦</span>
-          表格
+          网格表格
+        </button>
+        <button
+          class="flex flex-col items-center gap-1 rounded-md border border-gray-200 py-2.5 text-[11px] text-gray-600 hover:border-violet-300 hover:text-violet-600"
+          @click="emit('add-table', 'borderless')"
+        >
+          <span class="text-lg">☰</span>
+          无线表格
         </button>
       </div>
     </div>

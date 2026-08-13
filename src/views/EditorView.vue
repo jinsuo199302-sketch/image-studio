@@ -185,9 +185,9 @@ async function onRemoveBackground() {
           v-else-if="activePanel === 'shape'"
           @add="(c) => stageRef?.addRect(c)"
           @add-image="(url) => stageRef?.addImage(url)"
-          @add-chart="stageRef?.addBarChart()"
-          @add-legend="stageRef?.addLegend()"
-          @add-table="stageRef?.addDataTable()"
+          @add-chart="(kind) => stageRef?.addChart(kind)"
+          @add-legend="(kind) => stageRef?.addLegend(kind)"
+          @add-table="(kind) => stageRef?.addDataTable(kind)"
         />
         <UploadPanel v-else-if="activePanel === 'upload'" @add="(url) => stageRef?.addImage(url)" />
         <PlaceholderPanel v-else label="素材图片库" />

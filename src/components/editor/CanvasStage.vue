@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { Canvas, FabricImage, Gradient, Group, IText, Rect, Shadow, Textbox, filters, type FabricObject } from 'fabric'
+import { Canvas, Circle, FabricImage, Gradient, Group, IText, Line, Path, Rect, Shadow, Textbox, filters, type FabricObject } from 'fabric'
 import type { CanvasElement, Template } from '../../data/templates'
 
 const props = defineProps<{ template: Template }>()
@@ -544,15 +544,15 @@ function addRect(fill: string) {
   canvas.requestRenderAll()
 }
 
-/** 插入一个简单柱状图组件（示例数据，插入后可以像普通图层一样拖拽、编辑里面的文字） */
-function addBarChart() {
-  if (!canvas) return
-  const data = [
-    { label: 'A', value: 60, color: '#8b5cf6' },
-    { label: 'B', value: 90, color: '#ec4899' },
-    { label: 'C', value: 45, color: '#38bdf8' },
-    { label: 'D', value: 75, color: '#22c55e' },
-  ]
+const CHART_DATA = [
+  { label: 'A', value: 60, color: '#8b5cf6' },
+  { label: 'B', value: 90, color: '#ec4899' },
+  { label: 'C', value: 45, color: '#38bdf8' },
+  { label: 'D', value: 75, color: '#22c55e' },
+]
+
+function addBarChart(): FabricObject {
+  const data = CHART_DATA
   const chartH = 160
   const barW = 40
   const gap = 20
@@ -572,19 +572,96 @@ function addBarChart() {
     )
   })
   const chartW = data.length * (barW + gap) + 20
-  const group = new Group(children, {
-    left: canvasSize.width / 2 - chartW / 2,
-    top: canvasSize.height / 2 - chartH / 2,
+  return new Group(children, { left: 0, top: 0, width: chartW, height: chartH + 30, originX: 'left', originY: 'top' })
+}
+
+/** 折线图：同一组示例数据，把柱子换成"折线+端点圆点"的画法 */
+function addLineChart(): FabricObject {
+  const data = CHART_DATA
+  const chartH = 160
+  const stepX = 90
+  const maxVal = Math.max(...data.map((d) => d.value))
+  const points = data.map((d, i) => ({
+    x: i * stepX + 20,
+    y: chartH - (d.value / maxVal) * (chartH - 30),
+  }))
+  const children: FabricObject[] = [
+    new Rect({ left: 0, top: chartH, width: (data.length - 1) * stepX + 40, height: 2, fill: '#d1d5db' }),
+  ]
+  for (let i = 0; i < points.length - 1; i++) {
+    children.push(
+      new Line([points[i].x, points[i].y, points[i + 1].x, points[i + 1].y], {
+        stroke: '#8b5cf6',
+        strokeWidth: 3,
+        strokeLineCap: 'round',
+      }),
+    )
+  }
+  points.forEach((p, i) => {
+    children.push(new Circle({ left: p.x - 6, top: p.y - 6, radius: 6, fill: '#ffffff', stroke: '#8b5cf6', strokeWidth: 3 }))
+    children.push(
+      new IText(String(data[i].value), { left: p.x - 20, top: p.y - 28, fontSize: 14, fill: '#374151', width: 40, textAlign: 'center' }),
+    )
+    children.push(
+      new IText(data[i].label, { left: p.x - 20, top: chartH + 8, fontSize: 13, fill: '#6b7280', width: 40, textAlign: 'center' }),
+    )
   })
-  canvas.add(group)
-  canvas.setActiveObject(group)
+  const chartW = (data.length - 1) * stepX + 40
+  return new Group(children, { left: 0, top: 0, width: chartW, height: chartH + 30, originX: 'left', originY: 'top' })
+}
+
+function polarPoint(cx: number, cy: number, r: number, angleDeg: number) {
+  const rad = ((angleDeg - 90) * Math.PI) / 180
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) }
+}
+
+/** 饼图：用 SVG 弧形路径手算每一块扇形，圆心引一条细线到外面的图例文字 */
+function addPieChart(): FabricObject {
+  const data = CHART_DATA
+  const r = 80
+  const cx = r
+  const cy = r
+  const total = data.reduce((sum, d) => sum + d.value, 0)
+  const children: FabricObject[] = []
+  let angle = 0
+  data.forEach((d) => {
+    const sweep = (d.value / total) * 360
+    const start = polarPoint(cx, cy, r, angle)
+    const end = polarPoint(cx, cy, r, angle + sweep)
+    const largeArc = sweep > 180 ? 1 : 0
+    const path = `M ${cx} ${cy} L ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${end.x} ${end.y} Z`
+    children.push(new Path(path, { fill: d.color }))
+    angle += sweep
+  })
+  data.forEach((d, i) => {
+    const ly = r * 2 + 16 + i * 22
+    children.push(new Rect({ left: r * 2 + 16, top: ly, width: 12, height: 12, fill: d.color, rx: 3, ry: 3 }))
+    children.push(
+      new IText(`${d.label}  ${Math.round((d.value / total) * 100)}%`, {
+        left: r * 2 + 34,
+        top: ly - 2,
+        fontSize: 13,
+        fill: '#374151',
+      }),
+    )
+  })
+  return new Group(children, { left: 0, top: 0, originX: 'left', originY: 'top' })
+}
+
+/** 图表统一入口：kind 决定具体画哪一种，插入逻辑（居中定位+选中+存历史）三种共用 */
+function addChart(kind: 'bar' | 'line' | 'pie') {
+  if (!canvas) return
+  const obj = kind === 'line' ? addLineChart() : kind === 'pie' ? addPieChart() : addBarChart()
+  const w = obj.width ?? 200
+  const h = obj.height ?? 160
+  obj.set({ left: canvasSize.width / 2 - w / 2, top: canvasSize.height / 2 - h / 2 })
+  canvas.add(obj)
+  canvas.setActiveObject(obj)
   canvas.requestRenderAll()
   pushHistory()
 }
 
-/** 插入一个色块+文字的图例组件 */
-function addLegend() {
-  if (!canvas) return
+function buildSwatchLegend(): FabricObject {
   const items = [
     { label: '系列一', color: '#8b5cf6' },
     { label: '系列二', color: '#ec4899' },
@@ -596,23 +673,51 @@ function addLegend() {
     children.push(new Rect({ left: 0, top: y, width: 14, height: 14, fill: it.color, rx: 3, ry: 3 }))
     children.push(new IText(it.label, { left: 22, top: y - 2, fontSize: 14, fill: '#374151' }))
   })
-  const group = new Group(children, {
-    left: canvasSize.width / 2 - 60,
-    top: canvasSize.height / 2 - 40,
+  return new Group(children, { left: 0, top: 0, originX: 'left', originY: 'top' })
+}
+
+/** 步骤流程图：编号圆圈 + 连接线，横向排 3 步，每步下面配一行说明文字 */
+function buildStepFlow(): FabricObject {
+  const steps = [
+    { label: '第一步', color: '#8b5cf6' },
+    { label: '第二步', color: '#ec4899' },
+    { label: '第三步', color: '#22c55e' },
+  ]
+  const r = 20
+  const gap = 100
+  const children: FabricObject[] = []
+  steps.forEach((s, i) => {
+    const cx = i * gap + r
+    if (i < steps.length - 1) {
+      children.push(new Line([cx + r, r, cx + gap - r, r], { stroke: '#d1d5db', strokeWidth: 2 }))
+    }
+    children.push(new Circle({ left: cx - r, top: 0, radius: r, fill: s.color }))
+    children.push(
+      new IText(String(i + 1), { left: cx - r, top: r - 9, fontSize: 16, fontWeight: 'bold', fill: '#ffffff', width: r * 2, textAlign: 'center' }),
+    )
+    children.push(
+      new IText(s.label, { left: cx - 30, top: r * 2 + 10, fontSize: 13, fill: '#374151', width: 60, textAlign: 'center' }),
+    )
   })
-  canvas.add(group)
-  canvas.setActiveObject(group)
+  return new Group(children, { left: 0, top: 0, originX: 'left', originY: 'top' })
+}
+
+function addLegend(kind: 'swatch' | 'steps') {
+  if (!canvas) return
+  const obj = kind === 'steps' ? buildStepFlow() : buildSwatchLegend()
+  const w = obj.width ?? 160
+  const h = obj.height ?? 80
+  obj.set({ left: canvasSize.width / 2 - w / 2, top: canvasSize.height / 2 - h / 2 })
+  canvas.add(obj)
+  canvas.setActiveObject(obj)
   canvas.requestRenderAll()
   pushHistory()
 }
 
-/** 插入一个 3 列 x 3 行的数据表格组件（首行是表头样式） */
-function addDataTable() {
-  if (!canvas) return
-  const cols = 3
-  const rows = 3
-  const cellW = 90
-  const cellH = 36
+const TABLE_DATA = { cols: 3, rows: 3, cellW: 90, cellH: 36 }
+
+function buildGridTable(): FabricObject {
+  const { cols, rows, cellW, cellH } = TABLE_DATA
   const children: FabricObject[] = []
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
@@ -631,22 +736,48 @@ function addDataTable() {
       )
       const text = r === 0 ? `列${c + 1}` : `内容${r}-${c + 1}`
       children.push(
-        new IText(text, {
-          left: x + 8,
-          top: y + 9,
-          fontSize: 13,
-          fill: r === 0 ? '#ffffff' : '#374151',
-          width: cellW - 16,
-        }),
+        new IText(text, { left: x + 8, top: y + 9, fontSize: 13, fill: r === 0 ? '#ffffff' : '#374151', width: cellW - 16 }),
       )
     }
   }
-  const group = new Group(children, {
-    left: canvasSize.width / 2 - (cols * cellW) / 2,
-    top: canvasSize.height / 2 - (rows * cellH) / 2,
-  })
-  canvas.add(group)
-  canvas.setActiveObject(group)
+  return new Group(children, { left: 0, top: 0, originX: 'left', originY: 'top' })
+}
+
+/** 无线表格：不画格子背景，只在表头下方和每行下方留一条细分隔线，文字左对齐——常见的"简洁列表"风格 */
+function buildBorderlessTable(): FabricObject {
+  const { cols, rows, cellW, cellH } = TABLE_DATA
+  const tableW = cols * cellW
+  const children: FabricObject[] = []
+  for (let r = 0; r < rows; r++) {
+    const y = r * cellH
+    for (let c = 0; c < cols; c++) {
+      const x = c * cellW
+      const text = r === 0 ? `列${c + 1}` : `内容${r}-${c + 1}`
+      children.push(
+        new IText(text, {
+          left: x + 4,
+          top: y + 9,
+          fontSize: 13,
+          fill: r === 0 ? '#1f2937' : '#4b5563',
+          fontWeight: r === 0 ? 'bold' : 'normal',
+          width: cellW - 8,
+        }),
+      )
+    }
+    children.push(new Rect({ left: 0, top: y + cellH - 1, width: tableW, height: r === 0 ? 2 : 1, fill: r === 0 ? '#1f2937' : '#e5e7eb' }))
+  }
+  return new Group(children, { left: 0, top: 0, originX: 'left', originY: 'top' })
+}
+
+function addDataTable(kind: 'grid' | 'borderless') {
+  if (!canvas) return
+  const obj = kind === 'borderless' ? buildBorderlessTable() : buildGridTable()
+  const { cols, rows, cellW, cellH } = TABLE_DATA
+  const w = obj.width ?? cols * cellW
+  const h = obj.height ?? rows * cellH
+  obj.set({ left: canvasSize.width / 2 - w / 2, top: canvasSize.height / 2 - h / 2 })
+  canvas.add(obj)
+  canvas.setActiveObject(obj)
   canvas.requestRenderAll()
   pushHistory()
 }
@@ -789,7 +920,7 @@ defineExpose({
   setSelectedText,
   deleteSelected,
   addRect,
-  addBarChart,
+  addChart,
   addLegend,
   addDataTable,
   setBackground,
