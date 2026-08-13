@@ -36,6 +36,10 @@ export type CanvasElement =
       height?: number
       angle?: number
       children: GroupChildElement[]
+      /** 图表/图例/表格这类"数据驱动"的组件才有：组件种类标识 + 对应数据，重新加载模板时优先按这个调用对应
+       * builder 重新生成（拿到真正语义正确、双击还能继续编辑的组件），没有这两个字段就走 children 通用兜底重建 */
+      componentKind?: string
+      componentData?: unknown
     }
 
 /** 组件（图表/图例/表格）内部的基础图形，坐标相对组内原点，用于把 Fabric Group 完整存进/读出模板 */

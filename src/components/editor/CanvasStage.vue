@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { Canvas, Circle, FabricImage, Gradient, Group, IText, Line, Path, Rect, Shadow, Textbox, filters, type FabricObject } from 'fabric'
 import type { CanvasElement, GroupChildElement, Template } from '../../data/templates'
 
@@ -51,13 +51,16 @@ const undoStack: string[] = []
 const redoStack: string[] = []
 let restoring = false
 let historyTimer: ReturnType<typeof setTimeout> | null = null
+/** 撤销/重做走 Fabric 自己的 canvas.toObject()/loadFromJSON()，默认不会带上我们自己塞在实例上的自定义属性——
+ * 显式声明这两个才能让"双击编辑"这个组件标记在撤销/重做之后还活着 */
+const HISTORY_EXTRA_PROPS = ['_componentKind', '_componentData']
 
 function pushHistory() {
   if (!canvas || restoring) return
   if (historyTimer) clearTimeout(historyTimer)
   historyTimer = setTimeout(() => {
     if (!canvas) return
-    undoStack.push(JSON.stringify(canvas.toJSON()))
+    undoStack.push(JSON.stringify(canvas.toObject(HISTORY_EXTRA_PROPS)))
     if (undoStack.length > 30) undoStack.shift()
     redoStack.length = 0
     emitHistory()
@@ -240,14 +243,15 @@ async function applyElements(
         // 图片加载失败时跳过，不阻塞其它元素渲染
       }
     } else if (el.type === 'group') {
-      const children = el.children.map(buildGroupChild).filter((c): c is FabricObject => c !== null)
-      const group = new Group(children, {
-        left: el.x,
-        top: el.y,
-        originX: 'left',
-        originY: 'top',
-        angle: el.angle ?? 0,
-      })
+      const builder = el.componentKind ? COMPONENT_BUILDERS[el.componentKind] : undefined
+      const group =
+        builder && el.componentData
+          ? builder(el.componentData as never)
+          : new Group(el.children.map(buildGroupChild).filter((c): c is FabricObject => c !== null), {
+              originX: 'left',
+              originY: 'top',
+            })
+      group.set({ left: el.x, top: el.y, angle: el.angle ?? 0 })
       canvas.add(group)
     }
   }
@@ -368,6 +372,23 @@ onMounted(async () => {
   canvas.on('object:modified', clearAlignmentGuides)
   canvas.on('object:moving', (e) => updateAlignmentGuides(e.target))
   canvas.on('mouse:up', clearAlignmentGuides)
+  canvas.on('mouse:dblclick', (opt) => {
+    const group = opt.target
+    if (!canvas || !(group instanceof Group)) return
+    const tagged = group as unknown as { _componentKind?: string }
+    if (!tagged._componentKind) return
+    const scenePoint = (opt as unknown as { scenePoint?: ReturnType<Canvas['getScenePoint']> }).scenePoint
+    if (!scenePoint) return
+    const children = group.getObjects()
+    for (let i = children.length - 1; i >= 0; i--) {
+      const c = children[i]
+      const dataTag = c as unknown as { _dataField?: string; _dataIndex?: number }
+      if (dataTag._dataField !== undefined && c.visible && c.containsPoint(scenePoint)) {
+        openInlineEdit(group, c, dataTag._dataField, dataTag._dataIndex ?? 0)
+        break
+      }
+    }
+  })
 
   await buildFromTemplate(props.template)
   fitCanvas()
@@ -826,12 +847,58 @@ function addRect(fill: string) {
   canvas.requestRenderAll()
 }
 
-const CHART_DATA = [
+interface ChartDatum {
+  label: string
+  value: number
+  color: string
+}
+interface LegendDatum {
+  label: string
+  color: string
+}
+
+const CHART_DATA: ChartDatum[] = [
   { label: 'A', value: 60, color: '#8b5cf6' },
   { label: 'B', value: 90, color: '#ec4899' },
   { label: 'C', value: 45, color: '#38bdf8' },
   { label: 'D', value: 75, color: '#22c55e' },
 ]
+
+const DEFAULT_SWATCH_LEGEND: LegendDatum[] = [
+  { label: '系列一', color: '#8b5cf6' },
+  { label: '系列二', color: '#ec4899' },
+  { label: '系列三', color: '#38bdf8' },
+]
+
+const DEFAULT_STEP_LEGEND: LegendDatum[] = [
+  { label: '第一步', color: '#8b5cf6' },
+  { label: '第二步', color: '#ec4899' },
+  { label: '第三步', color: '#22c55e' },
+]
+
+const DEFAULT_TABLE_ROWS: string[][] = [
+  ['列1', '列2', '列3'],
+  ['内容1-1', '内容1-2', '内容1-3'],
+  ['内容2-1', '内容2-2', '内容2-3'],
+]
+const TABLE_CELL_W = 90
+const TABLE_CELL_H = 36
+
+/** 给图表/图例/表格里"承载数据"的子元素打标记，双击命中测试时用来反查该改 _componentData 里的哪一项 */
+function tagDataChild<T extends FabricObject>(obj: T, field: string, index: number): T {
+  const tagged = obj as unknown as { _dataField?: string; _dataIndex?: number }
+  tagged._dataField = field
+  tagged._dataIndex = index
+  return obj
+}
+
+/** 给整个 Group 打上"这是什么组件+对应数据是什么"，双击编辑提交后要靠这两个信息重新调用对应 builder 重画 */
+function tagComponent<T extends FabricObject>(group: T, kind: string, data: unknown): T {
+  const tagged = group as unknown as { _componentKind?: string; _componentData?: unknown }
+  tagged._componentKind = kind
+  tagged._componentData = data
+  return group
+}
 
 /** 所有图表/图例/表格子元素统一走这几个 helper 创建，强制 originX/originY 为 left/top——
  * Fabric 这个版本里 Rect/IText/Circle/Line/Group 全部默认 center 锚点，混用手算坐标会全部错位 */
@@ -878,8 +945,7 @@ function serializeGroupChild(obj: FabricObject): GroupChildElement | null {
   return null
 }
 
-function addBarChart(): FabricObject {
-  const data = CHART_DATA
+function addBarChart(data: ChartDatum[] = CHART_DATA): FabricObject {
   const chartH = 160
   const barW = 40
   const gap = 20
@@ -891,16 +957,16 @@ function addBarChart(): FabricObject {
     const h = (d.value / maxVal) * (chartH - 30)
     const x = i * (barW + gap) + 10
     children.push(mkRect({ left: x, top: chartH - h, width: barW, height: h, fill: d.color, rx: 4, ry: 4 }))
-    children.push(mkText(String(d.value), { left: x, top: chartH - h - 22, fontSize: 14, fill: '#374151', width: barW, textAlign: 'center' }))
-    children.push(mkText(d.label, { left: x, top: chartH + 8, fontSize: 13, fill: '#6b7280', width: barW, textAlign: 'center' }))
+    children.push(tagDataChild(mkText(String(d.value), { left: x, top: chartH - h - 22, fontSize: 14, fill: '#374151', width: barW, textAlign: 'center' }), 'value', i))
+    children.push(tagDataChild(mkText(d.label, { left: x, top: chartH + 8, fontSize: 13, fill: '#6b7280', width: barW, textAlign: 'center' }), 'label', i))
   })
   const chartW = data.length * (barW + gap) + 20
-  return new Group(children, { left: 0, top: 0, width: chartW, height: chartH + 30, originX: 'left', originY: 'top' })
+  const group = new Group(children, { left: 0, top: 0, width: chartW, height: chartH + 30, originX: 'left', originY: 'top' })
+  return tagComponent(group, 'bar-chart', data)
 }
 
 /** 折线图：同一组示例数据，把柱子换成"折线+端点圆点"的画法 */
-function addLineChart(): FabricObject {
-  const data = CHART_DATA
+function addLineChart(data: ChartDatum[] = CHART_DATA): FabricObject {
   const chartH = 160
   const stepX = 90
   const maxVal = Math.max(...data.map((d) => d.value))
@@ -922,16 +988,16 @@ function addLineChart(): FabricObject {
   }
   points.forEach((p, i) => {
     children.push(mkCircle({ left: p.x - 6, top: p.y - 6, radius: 6, fill: '#ffffff', stroke: '#8b5cf6', strokeWidth: 3 }))
-    children.push(mkText(String(data[i].value), { left: p.x - 20, top: p.y - 28, fontSize: 14, fill: '#374151', width: 40, textAlign: 'center' }))
-    children.push(mkText(data[i].label, { left: p.x - 20, top: chartH + 8, fontSize: 13, fill: '#6b7280', width: 40, textAlign: 'center' }))
+    children.push(tagDataChild(mkText(String(data[i].value), { left: p.x - 20, top: p.y - 28, fontSize: 14, fill: '#374151', width: 40, textAlign: 'center' }), 'value', i))
+    children.push(tagDataChild(mkText(data[i].label, { left: p.x - 20, top: chartH + 8, fontSize: 13, fill: '#6b7280', width: 40, textAlign: 'center' }), 'label', i))
   })
   const chartW = (data.length - 1) * stepX + 40
-  return new Group(children, { left: 0, top: 0, width: chartW, height: chartH + 30, originX: 'left', originY: 'top' })
+  const group = new Group(children, { left: 0, top: 0, width: chartW, height: chartH + 30, originX: 'left', originY: 'top' })
+  return tagComponent(group, 'line-chart', data)
 }
 
 /** 横向柱状图：标签在左、数值在条形右端，适合标签文字比较长的场景 */
-function addHorizontalBarChart(): FabricObject {
-  const data = CHART_DATA
+function addHorizontalBarChart(data: ChartDatum[] = CHART_DATA): FabricObject {
   const chartW = 180
   const barH = 26
   const gap = 16
@@ -941,12 +1007,13 @@ function addHorizontalBarChart(): FabricObject {
   data.forEach((d, i) => {
     const y = i * (barH + gap)
     const w = (d.value / maxVal) * chartW
-    children.push(mkText(d.label, { left: 0, top: y + barH / 2 - 8, fontSize: 14, fill: '#374151', width: labelW }))
+    children.push(tagDataChild(mkText(d.label, { left: 0, top: y + barH / 2 - 8, fontSize: 14, fill: '#374151', width: labelW }), 'label', i))
     children.push(mkRect({ left: labelW + 8, top: y, width: w, height: barH, fill: d.color, rx: 4, ry: 4 }))
-    children.push(mkText(String(d.value), { left: labelW + 8 + w + 8, top: y + barH / 2 - 8, fontSize: 13, fill: '#6b7280' }))
+    children.push(tagDataChild(mkText(String(d.value), { left: labelW + 8 + w + 8, top: y + barH / 2 - 8, fontSize: 13, fill: '#6b7280' }), 'value', i))
   })
   const totalH = data.length * (barH + gap) - gap
-  return new Group(children, { left: 0, top: 0, width: labelW + 8 + chartW + 40, height: totalH, originX: 'left', originY: 'top' })
+  const group = new Group(children, { left: 0, top: 0, width: labelW + 8 + chartW + 40, height: totalH, originX: 'left', originY: 'top' })
+  return tagComponent(group, 'hbar-chart', data)
 }
 
 function polarPoint(cx: number, cy: number, r: number, angleDeg: number) {
@@ -1063,41 +1130,33 @@ function addChart(kind: 'bar' | 'hbar' | 'line' | 'pie' | 'donut' | 'funnel') {
   pushHistory()
 }
 
-function buildSwatchLegend(): FabricObject {
-  const items = [
-    { label: '系列一', color: '#8b5cf6' },
-    { label: '系列二', color: '#ec4899' },
-    { label: '系列三', color: '#38bdf8' },
-  ]
+function buildSwatchLegend(data: LegendDatum[] = DEFAULT_SWATCH_LEGEND): FabricObject {
   const children: FabricObject[] = []
-  items.forEach((it, i) => {
+  data.forEach((it, i) => {
     const y = i * 26
     children.push(mkRect({ left: 0, top: y, width: 14, height: 14, fill: it.color, rx: 3, ry: 3 }))
-    children.push(mkText(it.label, { left: 22, top: y - 2, fontSize: 14, fill: '#374151' }))
+    children.push(tagDataChild(mkText(it.label, { left: 22, top: y - 2, fontSize: 14, fill: '#374151' }), 'label', i))
   })
-  return new Group(children, { left: 0, top: 0, originX: 'left', originY: 'top' })
+  const group = new Group(children, { left: 0, top: 0, originX: 'left', originY: 'top' })
+  return tagComponent(group, 'swatch-legend', data)
 }
 
 /** 步骤流程图：编号圆圈 + 连接线，横向排 3 步，每步下面配一行说明文字 */
-function buildStepFlow(): FabricObject {
-  const steps = [
-    { label: '第一步', color: '#8b5cf6' },
-    { label: '第二步', color: '#ec4899' },
-    { label: '第三步', color: '#22c55e' },
-  ]
+function buildStepFlow(data: LegendDatum[] = DEFAULT_STEP_LEGEND): FabricObject {
   const r = 20
   const gap = 100
   const children: FabricObject[] = []
-  steps.forEach((s, i) => {
+  data.forEach((s, i) => {
     const cx = i * gap + r
-    if (i < steps.length - 1) {
+    if (i < data.length - 1) {
       children.push(mkLine([cx + r, r, cx + gap - r, r], { stroke: '#d1d5db', strokeWidth: 2 }))
     }
     children.push(mkCircle({ left: cx - r, top: 0, radius: r, fill: s.color }))
     children.push(mkText(String(i + 1), { left: cx - r, top: r - 9, fontSize: 16, fontWeight: 'bold', fill: '#ffffff', width: r * 2, textAlign: 'center' }))
-    children.push(mkText(s.label, { left: cx - 30, top: r * 2 + 10, fontSize: 13, fill: '#374151', width: 60, textAlign: 'center' }))
+    children.push(tagDataChild(mkText(s.label, { left: cx - 30, top: r * 2 + 10, fontSize: 13, fill: '#374151', width: 60, textAlign: 'center' }), 'label', i))
   })
-  return new Group(children, { left: 0, top: 0, originX: 'left', originY: 'top' })
+  const group = new Group(children, { left: 0, top: 0, originX: 'left', originY: 'top' })
+  return tagComponent(group, 'step-legend', data)
 }
 
 function addLegend(kind: 'swatch' | 'steps') {
@@ -1112,13 +1171,13 @@ function addLegend(kind: 'swatch' | 'steps') {
   pushHistory()
 }
 
-const TABLE_DATA = { cols: 3, rows: 3, cellW: 90, cellH: 36 }
-
-function buildGridTable(): FabricObject {
-  const { cols, rows, cellW, cellH } = TABLE_DATA
+function buildGridTable(rows: string[][] = DEFAULT_TABLE_ROWS): FabricObject {
+  const cellW = TABLE_CELL_W
+  const cellH = TABLE_CELL_H
+  const cols = rows[0]?.length ?? 0
   const children: FabricObject[] = []
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
+  rows.forEach((row, r) => {
+    row.forEach((cellText, c) => {
       const x = c * cellW
       const y = r * cellH
       children.push(
@@ -1132,50 +1191,162 @@ function buildGridTable(): FabricObject {
           strokeWidth: 1,
         }),
       )
-      const text = r === 0 ? `列${c + 1}` : `内容${r}-${c + 1}`
-      children.push(mkText(text, { left: x + 8, top: y + 9, fontSize: 13, fill: r === 0 ? '#ffffff' : '#374151', width: cellW - 16 }))
-    }
-  }
-  return new Group(children, { left: 0, top: 0, originX: 'left', originY: 'top' })
+      children.push(
+        tagDataChild(
+          mkText(cellText, { left: x + 8, top: y + 9, fontSize: 13, fill: r === 0 ? '#ffffff' : '#374151', width: cellW - 16 }),
+          'cell',
+          r * cols + c,
+        ),
+      )
+    })
+  })
+  const group = new Group(children, { left: 0, top: 0, originX: 'left', originY: 'top' })
+  return tagComponent(group, 'grid-table', rows)
 }
 
 /** 无线表格：不画格子背景，只在表头下方和每行下方留一条细分隔线，文字左对齐——常见的"简洁列表"风格 */
-function buildBorderlessTable(): FabricObject {
-  const { cols, rows, cellW, cellH } = TABLE_DATA
+function buildBorderlessTable(rows: string[][] = DEFAULT_TABLE_ROWS): FabricObject {
+  const cellW = TABLE_CELL_W
+  const cellH = TABLE_CELL_H
+  const cols = rows[0]?.length ?? 0
   const tableW = cols * cellW
   const children: FabricObject[] = []
-  for (let r = 0; r < rows; r++) {
+  rows.forEach((row, r) => {
     const y = r * cellH
-    for (let c = 0; c < cols; c++) {
+    row.forEach((cellText, c) => {
       const x = c * cellW
-      const text = r === 0 ? `列${c + 1}` : `内容${r}-${c + 1}`
       children.push(
-        mkText(text, {
-          left: x + 4,
-          top: y + 9,
-          fontSize: 13,
-          fill: r === 0 ? '#1f2937' : '#4b5563',
-          fontWeight: r === 0 ? 'bold' : 'normal',
-          width: cellW - 8,
-        }),
+        tagDataChild(
+          mkText(cellText, {
+            left: x + 4,
+            top: y + 9,
+            fontSize: 13,
+            fill: r === 0 ? '#1f2937' : '#4b5563',
+            fontWeight: r === 0 ? 'bold' : 'normal',
+            width: cellW - 8,
+          }),
+          'cell',
+          r * cols + c,
+        ),
       )
-    }
+    })
     children.push(mkRect({ left: 0, top: y + cellH - 1, width: tableW, height: r === 0 ? 2 : 1, fill: r === 0 ? '#1f2937' : '#e5e7eb' }))
-  }
-  return new Group(children, { left: 0, top: 0, originX: 'left', originY: 'top' })
+  })
+  const group = new Group(children, { left: 0, top: 0, originX: 'left', originY: 'top' })
+  return tagComponent(group, 'borderless-table', rows)
 }
 
 function addDataTable(kind: 'grid' | 'borderless') {
   if (!canvas) return
   const obj = kind === 'borderless' ? buildBorderlessTable() : buildGridTable()
-  const { cols, rows, cellW, cellH } = TABLE_DATA
-  const w = obj.width ?? cols * cellW
-  const h = obj.height ?? rows * cellH
+  const cols = DEFAULT_TABLE_ROWS[0]?.length ?? 0
+  const w = obj.width ?? cols * TABLE_CELL_W
+  const h = obj.height ?? DEFAULT_TABLE_ROWS.length * TABLE_CELL_H
   obj.set({ left: canvasSize.width / 2 - w / 2, top: canvasSize.height / 2 - h / 2 })
   canvas.add(obj)
   canvas.setActiveObject(obj)
   canvas.requestRenderAll()
   pushHistory()
+}
+
+/** 每种可编辑组件的 kind → 重建函数，双击改完数据后靠这张表拿对应 builder 重新生成整个 Group */
+const COMPONENT_BUILDERS: Record<string, (data: never) => FabricObject> = {
+  'bar-chart': addBarChart as (data: never) => FabricObject,
+  'line-chart': addLineChart as (data: never) => FabricObject,
+  'hbar-chart': addHorizontalBarChart as (data: never) => FabricObject,
+  'swatch-legend': buildSwatchLegend as (data: never) => FabricObject,
+  'step-legend': buildStepFlow as (data: never) => FabricObject,
+  'grid-table': buildGridTable as (data: never) => FabricObject,
+  'borderless-table': buildBorderlessTable as (data: never) => FabricObject,
+}
+
+function cloneComponentData(data: unknown): unknown {
+  return JSON.parse(JSON.stringify(data))
+}
+
+/** 根据数据形状（表格是二维字符串数组，图表/图例是对象数组）通用地把编辑结果写回去，
+ * 不用为每种组件分别写"改哪个字段"的逻辑 */
+function applyFieldEdit(data: unknown, field: string, index: number, value: string) {
+  if (Array.isArray(data) && data.length > 0 && Array.isArray(data[0])) {
+    const rows = data as string[][]
+    const cols = rows[0]?.length ?? 1
+    const r = Math.floor(index / cols)
+    const c = index % cols
+    if (rows[r]) rows[r][c] = value
+    return
+  }
+  if (Array.isArray(data)) {
+    const item = (data as Array<{ label: string; value?: number }>)[index]
+    if (!item) return
+    if (field === 'value') item.value = Number(value) || 0
+    else if (field === 'label') item.label = value
+  }
+}
+
+const inlineEdit = reactive({
+  visible: false,
+  left: 0,
+  top: 0,
+  width: 60,
+  height: 24,
+  fontSize: 14,
+  value: '',
+})
+const inlineEditInput = ref<HTMLInputElement>()
+let inlineEditTarget: { group: FabricObject; field: string; index: number } | null = null
+
+/** 双击命中的子元素的场景坐标角点（已经叠加了 group 的变换）经 viewportTransform 换算成画布容器内的 CSS 像素，
+ * 用来给悬浮的 <input> 定位——用四个角点取包围盒而不是直接拿 width/height 乘 zoom，组件被整体旋转时也不会算错 */
+function openInlineEdit(group: FabricObject, child: FabricObject, field: string, index: number) {
+  if (!canvas) return
+  const vt = canvas.viewportTransform
+  const pts = child.getCoords().map((p) => p.transform(vt))
+  const xs = pts.map((p) => p.x)
+  const ys = pts.map((p) => p.y)
+  const left = Math.min(...xs)
+  const top = Math.min(...ys)
+  const width = Math.max(...xs) - left
+  const height = Math.max(...ys) - top
+  inlineEdit.left = left
+  inlineEdit.top = top
+  inlineEdit.width = Math.max(width, 40)
+  inlineEdit.height = Math.max(height, 20)
+  inlineEdit.fontSize = Math.max((child instanceof IText ? child.fontSize : 14) * canvas.getZoom(), 10)
+  inlineEdit.value = child instanceof IText ? (child.text ?? '') : ''
+  inlineEdit.visible = true
+  inlineEditTarget = { group, field, index }
+  nextTick(() => {
+    inlineEditInput.value?.focus()
+    inlineEditInput.value?.select()
+  })
+}
+
+function commitInlineEdit() {
+  if (!canvas || !inlineEditTarget) {
+    inlineEdit.visible = false
+    return
+  }
+  const { group, field, index } = inlineEditTarget
+  const tagged = group as unknown as { _componentKind?: string; _componentData?: unknown }
+  const builder = tagged._componentKind ? COMPONENT_BUILDERS[tagged._componentKind] : undefined
+  if (builder && tagged._componentData) {
+    const newData = cloneComponentData(tagged._componentData)
+    applyFieldEdit(newData, field, index, inlineEdit.value)
+    const newGroup = builder(newData as never)
+    newGroup.set({ left: group.left, top: group.top, angle: group.angle })
+    canvas.remove(group)
+    canvas.add(newGroup)
+    canvas.setActiveObject(newGroup)
+    canvas.requestRenderAll()
+    pushHistory()
+  }
+  inlineEdit.visible = false
+  inlineEditTarget = null
+}
+
+function cancelInlineEdit() {
+  inlineEdit.visible = false
+  inlineEditTarget = null
 }
 
 function setBackground(color: string) {
@@ -1285,6 +1456,7 @@ function serialize(): SerializedTemplate {
         .getObjects()
         .map(serializeGroupChild)
         .filter((c): c is GroupChildElement => c !== null)
+      const tagged = obj as unknown as { _componentKind?: string; _componentData?: unknown }
       elements.push({
         type: 'group',
         x: obj.left ?? 0,
@@ -1292,6 +1464,8 @@ function serialize(): SerializedTemplate {
         width: obj.width,
         height: obj.height,
         angle: obj.angle || undefined,
+        componentKind: tagged._componentKind,
+        componentData: tagged._componentData,
         children,
       })
     }
@@ -1351,8 +1525,24 @@ defineExpose({
 
 <template>
   <div ref="wrapperEl" class="flex h-full w-full items-center justify-center overflow-hidden">
-    <div class="rounded-sm shadow-lg">
+    <div class="relative rounded-sm shadow-lg">
       <canvas ref="canvasEl" />
+      <input
+        v-if="inlineEdit.visible"
+        ref="inlineEditInput"
+        v-model="inlineEdit.value"
+        class="absolute z-10 border-2 border-violet-500 bg-white px-0.5 outline-none"
+        :style="{
+          left: inlineEdit.left + 'px',
+          top: inlineEdit.top + 'px',
+          width: inlineEdit.width + 'px',
+          height: inlineEdit.height + 'px',
+          fontSize: inlineEdit.fontSize + 'px',
+        }"
+        @keyup.enter="commitInlineEdit"
+        @keyup.esc="cancelInlineEdit"
+        @blur="commitInlineEdit"
+      />
     </div>
   </div>
 </template>
