@@ -210,6 +210,10 @@ async function onRemoveBackground() {
           @text-effect-preset="(preset) => stageRef?.applyTextEffectPreset(preset)"
           @text-warp="(kind, intensity) => stageRef?.setSelectedTextWarp(kind, intensity)"
           @rect-fill="(color) => stageRef?.setSelectedRectFill(color)"
+          @table-theme="(theme) => stageRef?.updateTableStyle({ theme })"
+          @table-font="(fontFamily) => stageRef?.updateTableStyle({ fontFamily })"
+          @table-rows="(count) => stageRef?.updateTableStyle({ rows: count })"
+          @table-cols="(count) => stageRef?.updateTableStyle({ cols: count })"
           @opacity="(value) => stageRef?.setSelectedOpacity(value)"
           @opacity-commit="stageRef?.commitSelectedOpacity()"
           @blend-mode="(mode) => stageRef?.setSelectedBlendMode(mode)"
@@ -240,6 +244,7 @@ async function onRemoveBackground() {
           @add-image="(url) => stageRef?.addImage(url)"
           @add-chart="(kind) => stageRef?.addChart(kind)"
           @add-legend="(kind) => stageRef?.addLegend(kind)"
+          @add-diagram="(kind) => stageRef?.addDiagram(kind)"
           @add-table="(kind) => stageRef?.addDataTable(kind)"
         />
         <UploadPanel v-else-if="activePanel === 'upload'" @add="(url) => stageRef?.addImage(url)" />

@@ -11,6 +11,8 @@ const emit = defineEmits<{
 
 export interface SelectionInfo {
   type: 'text' | 'image' | 'rect' | 'other'
+  /** 仅当选中的是表格组件（grid-table/borderless-table）时才有值，用来在选中面板里显示表格样式设置 */
+  tableStyle?: { theme: string; fontFamily: string; rows: number; cols: number }
   fontSize?: number
   fill?: string
   fontFamily?: string
@@ -346,6 +348,21 @@ function describeSelection(obj: FabricObject | undefined): SelectionInfo | null 
       blendMode: obj.globalCompositeOperation ?? 'source-over',
       locked: !!obj.lockMovementX,
     }
+  if (obj instanceof Group) {
+    const tagged = obj as unknown as { _componentKind?: string; _componentData?: TableStyle }
+    if (tagged._componentKind === 'grid-table' || tagged._componentKind === 'borderless-table') {
+      const style = tagged._componentData
+      return {
+        type: 'other',
+        opacity: obj.opacity ?? 1,
+        blendMode: obj.globalCompositeOperation ?? 'source-over',
+        locked: !!obj.lockMovementX,
+        tableStyle: style
+          ? { theme: style.theme, fontFamily: style.fontFamily, rows: style.rows.length, cols: style.rows[0]?.length ?? 0 }
+          : undefined,
+      }
+    }
+  }
   return {
     type: 'other',
     opacity: obj.opacity ?? 1,
@@ -1138,8 +1155,49 @@ function addFunnelChart(data: ChartDatum[] = FUNNEL_DATA): FabricObject {
   return tagComponent(group, 'funnel-chart', data)
 }
 
+const PYRAMID_DATA: ChartDatum[] = [
+  { label: '战略层', value: 20, color: '#8b5cf6' },
+  { label: '管理层', value: 38, color: '#a78bfa' },
+  { label: '执行层', value: 65, color: '#ec4899' },
+  { label: '基础层', value: 100, color: '#f472b6' },
+]
+
+/** 金字塔图：漏斗图的镜像——顶部收成一点、底部最宽，常用来表现"层级越往上人越少"的结构。
+ * data 按从上到下排列，value 是"越往下越大"的基数（不要求是百分比，跟漏斗图一样是相对比例） */
+function addPyramidChart(data: ChartDatum[] = PYRAMID_DATA): FabricObject {
+  const maxW = 220
+  const stageH = 44
+  const cx = maxW / 2
+  const maxVal = data[data.length - 1].value
+  const children: FabricObject[] = []
+  data.forEach((s, i) => {
+    const wTop = i === 0 ? 0 : (data[i - 1].value / maxVal) * maxW
+    const wBottom = (s.value / maxVal) * maxW
+    const y = i * stageH
+    const path = `M ${cx - wTop / 2} ${y} L ${cx + wTop / 2} ${y} L ${cx + wBottom / 2} ${y + stageH - 2} L ${cx - wBottom / 2} ${y + stageH - 2} Z`
+    children.push(new Path(path, { fill: s.color, originX: 'left', originY: 'top' }))
+    const textY = y + stageH / 2 - 9
+    children.push(
+      tagDataChild(
+        mkText(s.label, { left: cx - 50, top: textY, fontSize: 13, fontWeight: 'bold', fill: '#ffffff', width: 48, textAlign: 'right' }),
+        'label',
+        i,
+      ),
+    )
+    children.push(
+      tagDataChild(
+        mkText(`${s.value}%`, { left: cx + 2, top: textY, fontSize: 13, fontWeight: 'bold', fill: '#ffffff', width: 48, textAlign: 'left' }),
+        'value',
+        i,
+      ),
+    )
+  })
+  const group = new Group(children, { left: 0, top: 0, width: maxW, height: data.length * stageH - 2, originX: 'left', originY: 'top' })
+  return tagComponent(group, 'pyramid-chart', data)
+}
+
 /** 图表统一入口：kind 决定具体画哪一种，插入逻辑（居中定位+选中+存历史）几种共用 */
-function addChart(kind: 'bar' | 'hbar' | 'line' | 'pie' | 'donut' | 'funnel') {
+function addChart(kind: 'bar' | 'hbar' | 'line' | 'pie' | 'donut' | 'funnel' | 'pyramid') {
   if (!canvas) return
   const builders = {
     bar: addBarChart,
@@ -1148,6 +1206,7 @@ function addChart(kind: 'bar' | 'hbar' | 'line' | 'pie' | 'donut' | 'funnel') {
     pie: addPieChart,
     donut: addDonutChart,
     funnel: addFunnelChart,
+    pyramid: addPyramidChart,
   }
   const obj = builders[kind]()
   const w = obj.width ?? 200
@@ -1200,7 +1259,183 @@ function addLegend(kind: 'swatch' | 'steps') {
   pushHistory()
 }
 
-function buildGridTable(rows: string[][] = DEFAULT_TABLE_ROWS): FabricObject {
+interface SwotDatum {
+  title: string
+  body: string
+  color: string
+}
+const SWOT_DATA: SwotDatum[] = [
+  { title: '优势 S', body: '核心竞争力\n产品/团队优势', color: '#22c55e' },
+  { title: '劣势 W', body: '待改进的短板', color: '#ef4444' },
+  { title: '机会 O', body: '可以把握的\n市场机会', color: '#3b82f6' },
+  { title: '威胁 T', body: '需要警惕的\n外部风险', color: '#f59e0b' },
+]
+
+/** SWOT 四象限：2x2 彩色格子，每格一个标题+一段说明，标题/说明分别可双击编辑 */
+function buildSwot(data: SwotDatum[] = SWOT_DATA): FabricObject {
+  const cellW = 150
+  const cellH = 110
+  const gap = 8
+  const children: FabricObject[] = []
+  data.forEach((d, i) => {
+    const col = i % 2
+    const row = Math.floor(i / 2)
+    const x = col * (cellW + gap)
+    const y = row * (cellH + gap)
+    children.push(mkRect({ left: x, top: y, width: cellW, height: cellH, fill: d.color, rx: 8, ry: 8 }))
+    children.push(
+      tagDataChild(mkText(d.title, { left: x + 12, top: y + 10, fontSize: 16, fontWeight: 'bold', fill: '#ffffff', width: cellW - 24 }), 'title', i),
+    )
+    children.push(
+      tagDataChild(mkText(d.body, { left: x + 12, top: y + 40, fontSize: 12, fill: '#ffffff', width: cellW - 24 }), 'body', i),
+    )
+  })
+  const group = new Group(children, { left: 0, top: 0, width: cellW * 2 + gap, height: cellH * 2 + gap, originX: 'left', originY: 'top' })
+  return tagComponent(group, 'swot', data)
+}
+
+interface TimelineDatum {
+  date: string
+  label: string
+  color: string
+}
+const TIMELINE_DATA: TimelineDatum[] = [
+  { date: '2024.01', label: '项目启动', color: '#8b5cf6' },
+  { date: '2024.04', label: '产品上线', color: '#ec4899' },
+  { date: '2024.08', label: '规模增长', color: '#38bdf8' },
+  { date: '2024.12', label: '达成目标', color: '#22c55e' },
+]
+
+/** 时间轴：一条横线上依次排节点，每个节点上方是日期、下方是事件说明，两个都可双击编辑 */
+function buildTimeline(data: TimelineDatum[] = TIMELINE_DATA): FabricObject {
+  const gap = 110
+  const r = 8
+  const lineY = 34
+  const children: FabricObject[] = [mkLine([r, lineY, (data.length - 1) * gap + r, lineY], { stroke: '#d1d5db', strokeWidth: 2 })]
+  data.forEach((d, i) => {
+    const cx = i * gap + r
+    children.push(mkCircle({ left: cx - r, top: lineY - r, radius: r, fill: d.color }))
+    children.push(
+      tagDataChild(
+        mkText(d.date, { left: cx - 40, top: lineY - r - 26, fontSize: 12, fontWeight: 'bold', fill: '#6b7280', width: 80, textAlign: 'center' }),
+        'date',
+        i,
+      ),
+    )
+    children.push(
+      tagDataChild(
+        mkText(d.label, { left: cx - 40, top: lineY + r + 10, fontSize: 13, fill: '#374151', width: 80, textAlign: 'center' }),
+        'label',
+        i,
+      ),
+    )
+  })
+  const chartW = (data.length - 1) * gap + r * 2
+  const group = new Group(children, { left: 0, top: 0, width: chartW, height: 96, originX: 'left', originY: 'top' })
+  return tagComponent(group, 'timeline', data)
+}
+
+/** 进度条：标签 + 圆角进度条 + 百分比，value 就是 0~100 的百分比本身（不像饼图那样要除以总数） */
+function buildProgressBars(data: ChartDatum[] = CHART_DATA): FabricObject {
+  const barW = 180
+  const barH = 14
+  const rowGap = 30
+  const labelW = 56
+  const children: FabricObject[] = []
+  data.forEach((d, i) => {
+    const y = i * rowGap
+    children.push(tagDataChild(mkText(d.label, { left: 0, top: y + 1, fontSize: 12, fill: '#374151', width: labelW }), 'label', i))
+    children.push(mkRect({ left: labelW, top: y, width: barW, height: barH, fill: '#e5e7eb', rx: barH / 2, ry: barH / 2 }))
+    const fillW = Math.min(barW, Math.max(4, (d.value / 100) * barW))
+    children.push(mkRect({ left: labelW, top: y, width: fillW, height: barH, fill: d.color, rx: barH / 2, ry: barH / 2 }))
+    children.push(
+      tagDataChild(mkText(`${d.value}%`, { left: labelW + barW + 8, top: y, fontSize: 12, fill: '#6b7280', width: 40 }), 'value', i),
+    )
+  })
+  const totalH = data.length * rowGap - (rowGap - barH)
+  const group = new Group(children, { left: 0, top: 0, width: labelW + barW + 48, height: totalH, originX: 'left', originY: 'top' })
+  return tagComponent(group, 'progress-bars', data)
+}
+
+interface VsDatum {
+  title: string
+  point1: string
+  point2: string
+  point3: string
+  color: string
+}
+const VS_DATA: VsDatum[] = [
+  { title: '方案 A', point1: '成本更低', point2: '交付更快', point3: '适合中小团队', color: '#8b5cf6' },
+  { title: '方案 B', point1: '功能更全', point2: '扩展性更强', point3: '适合企业级场景', color: '#38bdf8' },
+]
+const VS_POINT_FIELDS = ['point1', 'point2', 'point3'] as const
+
+/** VS 对比框：左右两张色卡各带标题+三条要点，中间一个"VS"圆牌，标题/每条要点都可单独双击编辑 */
+function buildVsCompare(data: VsDatum[] = VS_DATA): FabricObject {
+  const cardW = 140
+  const cardH = 150
+  const gap = 34
+  const children: FabricObject[] = []
+  data.forEach((d, i) => {
+    const x = i * (cardW + gap)
+    children.push(mkRect({ left: x, top: 0, width: cardW, height: cardH, fill: d.color, rx: 10, ry: 10 }))
+    children.push(
+      tagDataChild(mkText(d.title, { left: x + 12, top: 14, fontSize: 16, fontWeight: 'bold', fill: '#ffffff', width: cardW - 24 }), 'title', i),
+    )
+    VS_POINT_FIELDS.forEach((field, pi) => {
+      const py = 52 + pi * 28
+      children.push(mkCircle({ left: x + 12, top: py + 6, radius: 2, fill: '#ffffff' }))
+      children.push(
+        tagDataChild(mkText(d[field], { left: x + 22, top: py, fontSize: 12, fill: '#ffffff', width: cardW - 34 }), field, i),
+      )
+    })
+  })
+  const midX = cardW + gap / 2
+  children.push(mkCircle({ left: midX - 20, top: cardH / 2 - 20, radius: 20, fill: '#1f2937' }))
+  children.push(mkText('VS', { left: midX - 20, top: cardH / 2 - 10, fontSize: 15, fontWeight: 'bold', fill: '#ffffff', width: 40, textAlign: 'center' }))
+  const group = new Group(children, { left: 0, top: 0, width: cardW * 2 + gap, height: cardH, originX: 'left', originY: 'top' })
+  return tagComponent(group, 'vs-compare', data)
+}
+
+/** 图示统一入口：SWOT/时间轴/进度条/VS对比，跟 addChart/addLegend 一样的插入套路 */
+function addDiagram(kind: 'swot' | 'timeline' | 'progress' | 'vs') {
+  if (!canvas) return
+  const builders = {
+    swot: buildSwot,
+    timeline: buildTimeline,
+    progress: buildProgressBars,
+    vs: buildVsCompare,
+  }
+  const obj = builders[kind]()
+  const w = obj.width ?? 200
+  const h = obj.height ?? 160
+  obj.set({ left: canvasSize.width / 2 - w / 2, top: canvasSize.height / 2 - h / 2 })
+  canvas.add(obj)
+  canvas.setActiveObject(obj)
+  canvas.requestRenderAll()
+  pushHistory()
+}
+
+interface TableStyle {
+  rows: string[][]
+  /** TABLE_THEMES 里的 key，缺省/未知 key 一律按 'violet' 处理 */
+  theme: string
+  fontFamily: string
+}
+const DEFAULT_TABLE_STYLE: TableStyle = { rows: DEFAULT_TABLE_ROWS, theme: 'violet', fontFamily: 'sans-serif' }
+
+/** 表格配色预设：表头底色/表头文字色/隔行底色/正文文字色/边框色，插入表格、双击改主题时都读这张表 */
+const TABLE_THEMES: Record<string, { header: string; headerText: string; altRow: string; text: string; border: string }> = {
+  violet: { header: '#8b5cf6', headerText: '#ffffff', altRow: '#f9fafb', text: '#374151', border: '#e5e7eb' },
+  gray: { header: '#4b5563', headerText: '#ffffff', altRow: '#f9fafb', text: '#374151', border: '#e5e7eb' },
+  pink: { header: '#ec4899', headerText: '#ffffff', altRow: '#fdf2f8', text: '#831843', border: '#fbcfe8' },
+  orange: { header: '#f97316', headerText: '#ffffff', altRow: '#fff7ed', text: '#7c2d12', border: '#fed7aa' },
+  blue: { header: '#2563eb', headerText: '#ffffff', altRow: '#eff6ff', text: '#1e3a8a', border: '#bfdbfe' },
+}
+
+function buildGridTable(style: TableStyle = DEFAULT_TABLE_STYLE): FabricObject {
+  const { rows, fontFamily } = style
+  const t = TABLE_THEMES[style.theme] ?? TABLE_THEMES.violet
   const cellW = TABLE_CELL_W
   const cellH = TABLE_CELL_H
   const cols = rows[0]?.length ?? 0
@@ -1215,14 +1450,14 @@ function buildGridTable(rows: string[][] = DEFAULT_TABLE_ROWS): FabricObject {
           top: y,
           width: cellW,
           height: cellH,
-          fill: r === 0 ? '#8b5cf6' : r % 2 === 0 ? '#f9fafb' : '#ffffff',
-          stroke: '#e5e7eb',
+          fill: r === 0 ? t.header : r % 2 === 0 ? t.altRow : '#ffffff',
+          stroke: t.border,
           strokeWidth: 1,
         }),
       )
       children.push(
         tagDataChild(
-          mkText(cellText, { left: x + 8, top: y + 9, fontSize: 13, fill: r === 0 ? '#ffffff' : '#374151', width: cellW - 16 }),
+          mkText(cellText, { left: x + 8, top: y + 9, fontSize: 13, fill: r === 0 ? t.headerText : t.text, width: cellW - 16, fontFamily }),
           'cell',
           r * cols + c,
         ),
@@ -1230,11 +1465,13 @@ function buildGridTable(rows: string[][] = DEFAULT_TABLE_ROWS): FabricObject {
     })
   })
   const group = new Group(children, { left: 0, top: 0, originX: 'left', originY: 'top' })
-  return tagComponent(group, 'grid-table', rows)
+  return tagComponent(group, 'grid-table', style)
 }
 
 /** 无线表格：不画格子背景，只在表头下方和每行下方留一条细分隔线，文字左对齐——常见的"简洁列表"风格 */
-function buildBorderlessTable(rows: string[][] = DEFAULT_TABLE_ROWS): FabricObject {
+function buildBorderlessTable(style: TableStyle = DEFAULT_TABLE_STYLE): FabricObject {
+  const { rows, fontFamily } = style
+  const t = TABLE_THEMES[style.theme] ?? TABLE_THEMES.violet
   const cellW = TABLE_CELL_W
   const cellH = TABLE_CELL_H
   const cols = rows[0]?.length ?? 0
@@ -1250,19 +1487,20 @@ function buildBorderlessTable(rows: string[][] = DEFAULT_TABLE_ROWS): FabricObje
             left: x + 4,
             top: y + 9,
             fontSize: 13,
-            fill: r === 0 ? '#1f2937' : '#4b5563',
+            fill: r === 0 ? t.header : t.text,
             fontWeight: r === 0 ? 'bold' : 'normal',
             width: cellW - 8,
+            fontFamily,
           }),
           'cell',
           r * cols + c,
         ),
       )
     })
-    children.push(mkRect({ left: 0, top: y + cellH - 1, width: tableW, height: r === 0 ? 2 : 1, fill: r === 0 ? '#1f2937' : '#e5e7eb' }))
+    children.push(mkRect({ left: 0, top: y + cellH - 1, width: tableW, height: r === 0 ? 2 : 1, fill: r === 0 ? t.header : t.border }))
   })
   const group = new Group(children, { left: 0, top: 0, originX: 'left', originY: 'top' })
-  return tagComponent(group, 'borderless-table', rows)
+  return tagComponent(group, 'borderless-table', style)
 }
 
 function addDataTable(kind: 'grid' | 'borderless') {
@@ -1278,6 +1516,43 @@ function addDataTable(kind: 'grid' | 'borderless') {
   pushHistory()
 }
 
+/** 表格样式面板用：修改配色主题/字体/行列数，读当前选中表格的 _componentData 合并 patch 后整表重建
+ * （跟双击改单元格走的 commitInlineEdit 是同一套"改数据→调 builder 重建 Group"的模式） */
+function updateTableStyle(patch: Partial<{ theme: string; fontFamily: string; rows: number; cols: number }>) {
+  if (!canvas) return
+  const active = canvas.getActiveObject()
+  if (!active) return
+  const tagged = active as unknown as { _componentKind?: string; _componentData?: TableStyle }
+  if (tagged._componentKind !== 'grid-table' && tagged._componentKind !== 'borderless-table') return
+  if (!tagged._componentData) return
+  const style: TableStyle = JSON.parse(JSON.stringify(tagged._componentData))
+  if (patch.theme !== undefined) style.theme = patch.theme
+  if (patch.fontFamily !== undefined) style.fontFamily = patch.fontFamily
+  if (patch.rows !== undefined) {
+    const cols = style.rows[0]?.length ?? 1
+    const target = Math.max(1, patch.rows)
+    while (style.rows.length < target) style.rows.push(Array.from({ length: cols }, () => ''))
+    if (style.rows.length > target) style.rows.length = target
+  }
+  if (patch.cols !== undefined) {
+    const target = Math.max(1, patch.cols)
+    style.rows = style.rows.map((row) => {
+      const next = row.slice(0, target)
+      while (next.length < target) next.push('')
+      return next
+    })
+  }
+  const builder = tagged._componentKind === 'borderless-table' ? buildBorderlessTable : buildGridTable
+  const newGroup = builder(style)
+  newGroup.set({ left: active.left, top: active.top, angle: active.angle })
+  canvas.remove(active)
+  canvas.add(newGroup)
+  canvas.setActiveObject(newGroup)
+  emit('selection', describeSelection(newGroup))
+  canvas.requestRenderAll()
+  pushHistory()
+}
+
 /** 每种可编辑组件的 kind → 重建函数，双击改完数据后靠这张表拿对应 builder 重新生成整个 Group */
 const COMPONENT_BUILDERS: Record<string, (data: never) => FabricObject> = {
   'bar-chart': addBarChart as (data: never) => FabricObject,
@@ -1286,6 +1561,11 @@ const COMPONENT_BUILDERS: Record<string, (data: never) => FabricObject> = {
   'funnel-chart': addFunnelChart as (data: never) => FabricObject,
   'pie-chart': addPieChart as (data: never) => FabricObject,
   'donut-chart': addDonutChart as (data: never) => FabricObject,
+  'pyramid-chart': addPyramidChart as (data: never) => FabricObject,
+  'swot': buildSwot as (data: never) => FabricObject,
+  'timeline': buildTimeline as (data: never) => FabricObject,
+  'progress-bars': buildProgressBars as (data: never) => FabricObject,
+  'vs-compare': buildVsCompare as (data: never) => FabricObject,
   'swatch-legend': buildSwatchLegend as (data: never) => FabricObject,
   'step-legend': buildStepFlow as (data: never) => FabricObject,
   'grid-table': buildGridTable as (data: never) => FabricObject,
@@ -1296,22 +1576,29 @@ function cloneComponentData(data: unknown): unknown {
   return JSON.parse(JSON.stringify(data))
 }
 
-/** 根据数据形状（表格是二维字符串数组，图表/图例是对象数组）通用地把编辑结果写回去，
- * 不用为每种组件分别写"改哪个字段"的逻辑 */
+/** 根据数据形状通用地把编辑结果写回去：表格是二维字符串数组（或带 rows 字段的 TableStyle 包装），
+ * 图表/图例/图示是对象数组——数组项上任意字段都能编辑，原值是数字就按数字解析，是字符串就直接写回，
+ * 不用为每种组件、每个字段名分别写"改哪个字段"的逻辑 */
 function applyFieldEdit(data: unknown, field: string, index: number, value: string) {
-  if (Array.isArray(data) && data.length > 0 && Array.isArray(data[0])) {
-    const rows = data as string[][]
-    const cols = rows[0]?.length ?? 1
+  const maybeTableWrapper = data as { rows?: unknown } | null
+  const rows2d =
+    Array.isArray(data) && Array.isArray((data as unknown[])[0])
+      ? (data as string[][])
+      : maybeTableWrapper && Array.isArray(maybeTableWrapper.rows)
+        ? (maybeTableWrapper.rows as string[][])
+        : null
+  if (rows2d) {
+    const cols = rows2d[0]?.length ?? 1
     const r = Math.floor(index / cols)
     const c = index % cols
-    if (rows[r]) rows[r][c] = value
+    if (rows2d[r]) rows2d[r][c] = value
     return
   }
   if (Array.isArray(data)) {
-    const item = (data as Array<{ label: string; value?: number }>)[index]
-    if (!item) return
-    if (field === 'value') item.value = parseFloat(value) || 0
-    else if (field === 'label') item.label = value
+    const item = (data as Array<Record<string, unknown>>)[index]
+    if (!item || !(field in item)) return
+    const current = item[field]
+    item[field] = typeof current === 'number' ? parseFloat(value) || 0 : value
   }
 }
 
@@ -1545,7 +1832,9 @@ defineExpose({
   addRect,
   addChart,
   addLegend,
+  addDiagram,
   addDataTable,
+  updateTableStyle,
   setBackground,
   resizeCanvas,
   undo,

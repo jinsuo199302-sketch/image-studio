@@ -7,8 +7,9 @@ import { createSnippet } from '../../../services/snippetApi'
 const emit = defineEmits<{
   (e: 'add', color: string): void
   (e: 'add-image', url: string): void
-  (e: 'add-chart', kind: 'bar' | 'hbar' | 'line' | 'pie' | 'donut' | 'funnel'): void
+  (e: 'add-chart', kind: 'bar' | 'hbar' | 'line' | 'pie' | 'donut' | 'funnel' | 'pyramid'): void
   (e: 'add-legend', kind: 'swatch' | 'steps'): void
+  (e: 'add-diagram', kind: 'swot' | 'timeline' | 'progress' | 'vs'): void
   (e: 'add-table', kind: 'grid' | 'borderless'): void
 }>()
 
@@ -148,6 +149,13 @@ async function generateQrcode() {
           <span class="text-lg">⏳</span>
           漏斗图
         </button>
+        <button
+          class="flex flex-col items-center gap-1 rounded-md border border-gray-200 py-2.5 text-[11px] text-gray-600 hover:border-violet-300 hover:text-violet-600"
+          @click="emit('add-chart', 'pyramid')"
+        >
+          <span class="text-lg">🔺</span>
+          金字塔图
+        </button>
       </div>
     </div>
 
@@ -167,6 +175,40 @@ async function generateQrcode() {
         >
           <span class="text-lg">🔢</span>
           步骤流程
+        </button>
+        <button
+          class="flex flex-col items-center gap-1 rounded-md border border-gray-200 py-2.5 text-[11px] text-gray-600 hover:border-violet-300 hover:text-violet-600"
+          @click="emit('add-diagram', 'timeline')"
+        >
+          <span class="text-lg">📅</span>
+          时间轴
+        </button>
+      </div>
+    </div>
+
+    <div class="mt-5 border-t border-gray-100 pt-4">
+      <p class="mb-2 text-xs font-medium text-gray-600">图示</p>
+      <div class="grid grid-cols-3 gap-2">
+        <button
+          class="flex flex-col items-center gap-1 rounded-md border border-gray-200 py-2.5 text-[11px] text-gray-600 hover:border-violet-300 hover:text-violet-600"
+          @click="emit('add-diagram', 'swot')"
+        >
+          <span class="text-lg">🧩</span>
+          SWOT
+        </button>
+        <button
+          class="flex flex-col items-center gap-1 rounded-md border border-gray-200 py-2.5 text-[11px] text-gray-600 hover:border-violet-300 hover:text-violet-600"
+          @click="emit('add-diagram', 'vs')"
+        >
+          <span class="text-lg">⚔️</span>
+          VS 对比
+        </button>
+        <button
+          class="flex flex-col items-center gap-1 rounded-md border border-gray-200 py-2.5 text-[11px] text-gray-600 hover:border-violet-300 hover:text-violet-600"
+          @click="emit('add-diagram', 'progress')"
+        >
+          <span class="text-lg">📶</span>
+          进度条
         </button>
       </div>
     </div>

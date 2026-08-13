@@ -47,6 +47,10 @@ const emit = defineEmits<{
   (e: 'text-effect-preset', preset: EffectPreset): void
   (e: 'text-warp', kind: WarpKind, intensity: number): void
   (e: 'rect-fill', color: string): void
+  (e: 'table-theme', theme: string): void
+  (e: 'table-font', fontFamily: string): void
+  (e: 'table-rows', count: number): void
+  (e: 'table-cols', count: number): void
   (e: 'opacity', value: number): void
   (e: 'opacity-commit'): void
   (e: 'blend-mode', mode: string): void
@@ -65,6 +69,15 @@ const emit = defineEmits<{
 
 const TEXT_COLORS = ['#1f2937', '#dc2626', '#ea580c', '#16a34a', '#2563eb', '#7c3aed', '#ffffff']
 const BG_COLORS = ['#fde047', '#fca5a5', '#93c5fd', '#86efac', '#e9d5ff', '#1f2937']
+
+/** 跟 CanvasStage.vue 里 TABLE_THEMES 的 key/表头色一一对应，仅用于展示色块 */
+const TABLE_THEME_SWATCHES = [
+  { key: 'violet', color: '#8b5cf6' },
+  { key: 'gray', color: '#4b5563' },
+  { key: 'pink', color: '#ec4899' },
+  { key: 'orange', color: '#f97316' },
+  { key: 'blue', color: '#2563eb' },
+]
 
 const BLEND_MODES = [
   { label: '正常', value: 'source-over' },
@@ -526,6 +539,65 @@ function pickWarp(kind: WarpKind) {
             @click="emit('rect-fill', c)"
           />
           <el-color-picker :model-value="selection.fill" size="small" @change="(c: string) => emit('rect-fill', c)" />
+        </div>
+      </template>
+
+      <template v-if="selection.tableStyle">
+        <p class="mb-1.5 text-xs font-medium text-gray-600">表格配色</p>
+        <div class="flex items-center gap-1.5">
+          <button
+            v-for="t in TABLE_THEME_SWATCHES"
+            :key="t.key"
+            class="h-5 w-5 rounded-full border-2"
+            :style="{ background: t.color }"
+            :class="selection.tableStyle.theme === t.key ? 'border-violet-500' : 'border-gray-200'"
+            @click="emit('table-theme', t.key)"
+          />
+        </div>
+
+        <p class="mb-1.5 mt-3 text-xs font-medium text-gray-600">表格字体</p>
+        <el-select
+          :model-value="selection.tableStyle.fontFamily"
+          size="small"
+          class="!w-full"
+          @update:model-value="(v: string) => emit('table-font', v)"
+        >
+          <el-option v-for="f in FONT_OPTIONS" :key="f.value" :label="f.label" :value="f.value" :style="{ fontFamily: f.value }" />
+        </el-select>
+
+        <div class="mt-3 flex items-center justify-between">
+          <div class="flex items-center gap-1" title="行数">
+            <span class="text-[11px] text-gray-400">行数</span>
+            <button
+              class="flex h-6 w-6 items-center justify-center rounded hover:bg-gray-100"
+              @click="emit('table-rows', Math.max(1, selection.tableStyle.rows - 1))"
+            >
+              <el-icon :size="12"><Minus /></el-icon>
+            </button>
+            <span class="w-6 text-center text-xs text-gray-600">{{ selection.tableStyle.rows }}</span>
+            <button
+              class="flex h-6 w-6 items-center justify-center rounded hover:bg-gray-100"
+              @click="emit('table-rows', selection.tableStyle.rows + 1)"
+            >
+              <el-icon :size="12"><Plus /></el-icon>
+            </button>
+          </div>
+          <div class="flex items-center gap-1" title="列数">
+            <span class="text-[11px] text-gray-400">列数</span>
+            <button
+              class="flex h-6 w-6 items-center justify-center rounded hover:bg-gray-100"
+              @click="emit('table-cols', Math.max(1, selection.tableStyle.cols - 1))"
+            >
+              <el-icon :size="12"><Minus /></el-icon>
+            </button>
+            <span class="w-6 text-center text-xs text-gray-600">{{ selection.tableStyle.cols }}</span>
+            <button
+              class="flex h-6 w-6 items-center justify-center rounded hover:bg-gray-100"
+              @click="emit('table-cols', selection.tableStyle.cols + 1)"
+            >
+              <el-icon :size="12"><Plus /></el-icon>
+            </button>
+          </div>
         </div>
       </template>
 
