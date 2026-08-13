@@ -9,6 +9,7 @@ export type CanvasElement =
       fontWeight?: string
       color: string
       align?: 'left' | 'center' | 'right'
+      fontFamily?: string
     }
   | {
       type: 'image'

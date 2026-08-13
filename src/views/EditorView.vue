@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, RefreshLeft, RefreshRight, Download, Collection, Crop, Clock } from '@element-plus/icons-vue'
 import AppHeader from '../components/AppHeader.vue'
 import CanvasStage, { type SelectionInfo } from '../components/editor/CanvasStage.vue'
@@ -17,8 +17,10 @@ import BackgroundPanel from '../components/editor/panels/BackgroundPanel.vue'
 import ShapePanel from '../components/editor/panels/ShapePanel.vue'
 import UploadPanel from '../components/editor/panels/UploadPanel.vue'
 import ImageToolsPanel from '../components/editor/panels/ImageToolsPanel.vue'
+import AIDesignPanel from '../components/editor/panels/AIDesignPanel.vue'
 import PlaceholderPanel from '../components/editor/panels/PlaceholderPanel.vue'
 import type { Template } from '../data/templates'
+import type { GeneratedDesign } from '../services/designApi'
 import { useTemplateStore } from '../stores/templates'
 import { useAuthStore } from '../stores/auth'
 import { removeBackground } from '../services/backgroundRemovalApi'
@@ -122,6 +124,19 @@ function onSaved(newId: string) {
   router.push(`/design/${newId}`)
 }
 
+async function onApplyDesign(design: GeneratedDesign) {
+  try {
+    await ElMessageBox.confirm('应用 AI 生成的设计会替换当前画布上的全部内容，确定继续吗？', '应用设计', {
+      confirmButtonText: '应用',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
+  await stageRef.value?.applyGeneratedDesign(design.elements, design.background)
+}
+
 async function onRemoveBackground() {
   if (!selection.value?.src || removingBackground.value) return
   removingBackground.value = true
@@ -179,6 +194,12 @@ async function onRemoveBackground() {
 
       <div class="w-72 shrink-0 overflow-hidden border-r border-gray-200 bg-white">
         <TemplateSwitchPanel v-if="activePanel === 'template'" :active-id="currentId" @switch="switchTemplate" />
+        <AIDesignPanel
+          v-else-if="activePanel === 'ai-design' && template"
+          :canvas-width="template.canvasWidth"
+          :canvas-height="template.canvasHeight"
+          @apply-design="onApplyDesign"
+        />
         <ImageToolsPanel v-else-if="activePanel === 'image'" @insert="(url) => stageRef?.addImage(url)" />
         <BackgroundPanel v-else-if="activePanel === 'background'" @pick="(c) => stageRef?.setBackground(c)" />
         <ShapePanel

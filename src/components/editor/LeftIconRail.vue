@@ -1,13 +1,22 @@
 <script setup lang="ts">
-import { Files, Picture, Collection, Brush, MagicStick, Upload, Grid, EditPen } from '@element-plus/icons-vue'
+import { Files, Picture, Collection, Brush, MagicStick, Upload, Grid, EditPen, Sunny } from '@element-plus/icons-vue'
 
-export type RailKey = 'template' | 'image' | 'material' | 'background' | 'shape' | 'upload' | 'ai'
+export type RailKey =
+  | 'template'
+  | 'image'
+  | 'material'
+  | 'background'
+  | 'shape'
+  | 'upload'
+  | 'ai'
+  | 'ai-design'
 
 const props = defineProps<{ active: RailKey }>()
 const emit = defineEmits<{ (e: 'select', key: RailKey): void; (e: 'add-text'): void }>()
 
 const ITEMS: { key: RailKey; label: string; icon: any; ready: boolean }[] = [
   { key: 'template', label: '模板', icon: Files, ready: true },
+  { key: 'ai-design', label: 'AI设计', icon: Sunny, ready: true },
   { key: 'image', label: '图片', icon: Picture, ready: true },
   { key: 'material', label: '素材', icon: Collection, ready: false },
   { key: 'background', label: '背景', icon: Brush, ready: true },

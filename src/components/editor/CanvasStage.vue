@@ -63,14 +63,20 @@ function emitHistory() {
   emit('history', { canUndo: undoStack.length > 1, canRedo: redoStack.length > 0 })
 }
 
-async function buildFromTemplate(template: Template) {
+async function applyElements(
+  elements: CanvasElement[],
+  background: string,
+  width: number,
+  height: number,
+  options: { resetHistory?: boolean } = {},
+) {
   if (!canvas) return
   canvas.clear()
-  canvas.backgroundColor = template.background
-  canvasSize.width = template.canvasWidth
-  canvasSize.height = template.canvasHeight
+  canvas.backgroundColor = background
+  canvasSize.width = width
+  canvasSize.height = height
 
-  for (const el of template.elements) {
+  for (const el of elements) {
     if (el.type === 'text') {
       const text = new Textbox(el.text, {
         left: el.x,
@@ -82,7 +88,7 @@ async function buildFromTemplate(template: Template) {
         fontWeight: el.fontWeight ?? 'normal',
         fill: el.color,
         textAlign: el.align ?? 'left',
-        fontFamily: 'system-ui, "PingFang SC", "Microsoft YaHei", sans-serif',
+        fontFamily: el.fontFamily ?? 'system-ui, "PingFang SC", "Microsoft YaHei", sans-serif',
         splitByGrapheme: true,
       })
       canvas.add(text)
@@ -117,10 +123,24 @@ async function buildFromTemplate(template: Template) {
     }
   }
   canvas.renderAll()
-  undoStack.length = 0
-  redoStack.length = 0
+  if (options.resetHistory ?? true) {
+    undoStack.length = 0
+    redoStack.length = 0
+  } else {
+    redoStack.length = 0
+  }
   undoStack.push(JSON.stringify(canvas.toJSON()))
+  if (undoStack.length > 30) undoStack.shift()
   emitHistory()
+}
+
+async function buildFromTemplate(template: Template) {
+  await applyElements(template.elements, template.background, template.canvasWidth, template.canvasHeight)
+}
+
+/** 应用 AI 生成的设计：作为一步可撤销的操作叠加在历史栈上，不像切换模板那样清空历史 */
+async function applyGeneratedDesign(elements: CanvasElement[], background: string) {
+  await applyElements(elements, background, canvasSize.width, canvasSize.height, { resetHistory: false })
 }
 
 function fitCanvas() {
@@ -947,6 +967,7 @@ function serialize(): SerializedTemplate {
         fontWeight: String(obj.fontWeight ?? 'normal'),
         color: String(obj.fill ?? '#000000'),
         align: (obj.textAlign as 'left' | 'center' | 'right' | undefined) ?? 'left',
+        fontFamily: String(obj.fontFamily ?? 'sans-serif'),
       })
     } else if (obj instanceof FabricImage) {
       elements.push({
@@ -981,6 +1002,7 @@ function serialize(): SerializedTemplate {
 defineExpose({
   addText,
   addImage,
+  applyGeneratedDesign,
   replaceSelectedImage,
   setSelectedTextProp,
   setSelectedTextShadow,

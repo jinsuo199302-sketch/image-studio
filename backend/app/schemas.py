@@ -106,3 +106,15 @@ class VideoGenerateRequest(BaseModel):
     duration: int = 5
     aspect_ratio: str = "9:16"
     bgm: bool = True
+
+
+class FontOption(BaseModel):
+    label: str
+    value: str
+
+
+class DesignGenerateRequest(BaseModel):
+    prompt: str
+    canvas_width: int
+    canvas_height: int
+    fonts: List[FontOption]
