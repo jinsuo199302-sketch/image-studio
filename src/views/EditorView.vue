@@ -6,7 +6,7 @@ import { ArrowLeft, RefreshLeft, RefreshRight, Download, Collection, Crop, Clock
 import AppHeader from '../components/AppHeader.vue'
 import CanvasStage, { type SelectionInfo } from '../components/editor/CanvasStage.vue'
 import LeftIconRail, { type RailKey } from '../components/editor/LeftIconRail.vue'
-import SelectionToolbar from '../components/editor/SelectionToolbar.vue'
+import SelectionPanel from '../components/editor/panels/SelectionPanel.vue'
 import SaveTemplateDialog from '../components/editor/SaveTemplateDialog.vue'
 import ResizeDialog from '../components/editor/ResizeDialog.vue'
 import HistoryDialog from '../components/editor/HistoryDialog.vue'
@@ -193,7 +193,39 @@ async function onRemoveBackground() {
       <LeftIconRail :active="activePanel" @select="selectPanel" @add-text="stageRef?.addText()" />
 
       <div class="w-72 shrink-0 overflow-hidden border-r border-gray-200 bg-white">
-        <TemplateSwitchPanel v-if="activePanel === 'template'" :active-id="currentId" @switch="switchTemplate" />
+        <SelectionPanel
+          v-if="selection"
+          :selection="selection"
+          :removing-background="removingBackground"
+          @close="stageRef?.deselectActive()"
+          @text-prop="onTextProp"
+          @text-shadow="(enabled) => stageRef?.setSelectedTextShadow(enabled)"
+          @text-shadow-detail="(detail) => stageRef?.setSelectedTextShadowDetail(detail)"
+          @text-stroke="(enabled) => stageRef?.setSelectedTextStroke(enabled)"
+          @text-stroke-width="(width) => stageRef?.setSelectedTextStrokeWidth(width)"
+          @text-stroke-color="(color) => stageRef?.setSelectedTextStrokeColor(color)"
+          @text-gradient="(colors) => stageRef?.setSelectedTextGradient(colors)"
+          @text-background="(enabled) => stageRef?.setSelectedTextBackground(enabled)"
+          @text-background-color="(color) => stageRef?.setSelectedTextBackground(true, color)"
+          @text-effect-preset="(preset) => stageRef?.applyTextEffectPreset(preset)"
+          @text-warp="(kind, intensity) => stageRef?.setSelectedTextWarp(kind, intensity)"
+          @rect-fill="(color) => stageRef?.setSelectedRectFill(color)"
+          @opacity="(value) => stageRef?.setSelectedOpacity(value)"
+          @opacity-commit="stageRef?.commitSelectedOpacity()"
+          @blend-mode="(mode) => stageRef?.setSelectedBlendMode(mode)"
+          @toggle-lock="stageRef?.setSelectedLocked(!selection?.locked)"
+          @toggle-vertical="stageRef?.setSelectedVertical(!selection?.vertical)"
+          @list-format="(kind) => stageRef?.applySelectedListFormat(kind)"
+          @bring-forward="stageRef?.bringSelectedForward()"
+          @send-backward="stageRef?.sendSelectedBackward()"
+          @duplicate="stageRef?.duplicateSelected()"
+          @replace-image="replaceViaUpload"
+          @remove-background="onRemoveBackground"
+          @erase-object="eraseDialogOpen = true"
+          @adjust-image="adjustDialogOpen = true"
+          @delete="stageRef?.deleteSelected()"
+        />
+        <TemplateSwitchPanel v-else-if="activePanel === 'template'" :active-id="currentId" @switch="switchTemplate" />
         <AIDesignPanel
           v-else-if="activePanel === 'ai-design' && template"
           :canvas-width="template.canvasWidth"
@@ -222,35 +254,6 @@ async function onRemoveBackground() {
           @selection="selection = $event"
           @history="history = $event"
         />
-
-        <div v-if="selection" class="absolute left-1/2 top-4 -translate-x-1/2">
-          <SelectionToolbar
-            :selection="selection"
-            :removing-background="removingBackground"
-            @text-prop="onTextProp"
-            @text-shadow="(enabled) => stageRef?.setSelectedTextShadow(enabled)"
-            @text-stroke="(enabled) => stageRef?.setSelectedTextStroke(enabled)"
-            @text-stroke-width="(width) => stageRef?.setSelectedTextStrokeWidth(width)"
-            @text-stroke-color="(color) => stageRef?.setSelectedTextStrokeColor(color)"
-            @text-gradient="(colors) => stageRef?.setSelectedTextGradient(colors)"
-            @text-background="(enabled) => stageRef?.setSelectedTextBackground(enabled)"
-            @text-background-color="(color) => stageRef?.setSelectedTextBackground(true, color)"
-            @opacity="(value) => stageRef?.setSelectedOpacity(value)"
-            @opacity-commit="stageRef?.commitSelectedOpacity()"
-            @blend-mode="(mode) => stageRef?.setSelectedBlendMode(mode)"
-            @toggle-lock="stageRef?.setSelectedLocked(!selection?.locked)"
-            @toggle-vertical="stageRef?.setSelectedVertical(!selection?.vertical)"
-            @list-format="(kind) => stageRef?.applySelectedListFormat(kind)"
-            @bring-forward="stageRef?.bringSelectedForward()"
-            @send-backward="stageRef?.sendSelectedBackward()"
-            @duplicate="stageRef?.duplicateSelected()"
-            @replace-image="replaceViaUpload"
-            @remove-background="onRemoveBackground"
-            @erase-object="eraseDialogOpen = true"
-            @adjust-image="adjustDialogOpen = true"
-            @delete="stageRef?.deleteSelected()"
-          />
-        </div>
       </div>
     </div>
 

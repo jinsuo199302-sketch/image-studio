@@ -21,11 +21,16 @@ export interface SelectionInfo {
   lineHeight?: number
   charSpacing?: number
   hasShadow?: boolean
+  shadowColor?: string
+  shadowBlur?: number
+  shadowOffsetX?: number
+  shadowOffsetY?: number
   hasStroke?: boolean
   strokeWidth?: number
   strokeColor?: string
   hasTextBackground?: boolean
   textBackgroundColor?: string
+  warpKind?: 'none' | 'arc-up' | 'arc-down' | 'wave'
   opacity?: number
   blendMode?: string
   locked?: boolean
@@ -290,11 +295,16 @@ function describeSelection(obj: FabricObject | undefined): SelectionInfo | null 
       lineHeight: obj.lineHeight ?? 1.16,
       charSpacing: obj.charSpacing ?? 0,
       hasShadow: !!obj.shadow,
+      shadowColor: String(obj.shadow?.color ?? 'rgba(0,0,0,0.35)'),
+      shadowBlur: obj.shadow?.blur ?? 6,
+      shadowOffsetX: obj.shadow?.offsetX ?? 2,
+      shadowOffsetY: obj.shadow?.offsetY ?? 2,
       hasStroke: !!(obj.stroke && (obj.strokeWidth ?? 0) > 0),
       strokeWidth: obj.strokeWidth ?? 0,
       strokeColor: String(obj.stroke ?? '#ffffff'),
       hasTextBackground: !!obj.textBackgroundColor,
       textBackgroundColor: obj.textBackgroundColor || '#fde047',
+      warpKind: (obj as unknown as { _warpKind?: SelectionInfo['warpKind'] })._warpKind ?? 'none',
       opacity: obj.opacity ?? 1,
       blendMode: obj.globalCompositeOperation ?? 'source-over',
       locked: !!obj.lockMovementX,
@@ -535,6 +545,113 @@ function setSelectedTextBackground(enabled: boolean, color?: string) {
   canvas.requestRenderAll()
   pushHistory()
   emit('selection', describeSelection(active))
+}
+
+function setSelectedRectFill(color: string) {
+  if (!canvas) return
+  const active = canvas.getActiveObject()
+  if (!(active instanceof Rect)) return
+  active.set('fill', color)
+  canvas.requestRenderAll()
+  pushHistory()
+  emit('selection', describeSelection(active))
+}
+
+function setSelectedTextShadowDetail({
+  color,
+  blur,
+  offsetX,
+  offsetY,
+}: {
+  color: string
+  blur: number
+  offsetX: number
+  offsetY: number
+}) {
+  if (!canvas) return
+  const active = canvas.getActiveObject()
+  if (!(active instanceof IText)) return
+  active.set('shadow', new Shadow({ color, blur, offsetX, offsetY }))
+  canvas.requestRenderAll()
+  pushHistory()
+  emit('selection', describeSelection(active))
+}
+
+const TEXT_EFFECT_PRESETS: Record<
+  'outline' | 'emboss' | 'neon',
+  { stroke: string; strokeWidth: number; shadow: { color: string; blur: number; offsetX: number; offsetY: number } }
+> = {
+  outline: {
+    stroke: '#1f2329',
+    strokeWidth: 3,
+    shadow: { color: 'rgba(0,0,0,0.25)', blur: 4, offsetX: 2, offsetY: 2 },
+  },
+  emboss: {
+    stroke: '#ffffff',
+    strokeWidth: 1,
+    shadow: { color: 'rgba(0,0,0,0.45)', blur: 10, offsetX: 4, offsetY: 6 },
+  },
+  neon: {
+    stroke: '#ffffff',
+    strokeWidth: 2,
+    shadow: { color: '#7c3aed', blur: 20, offsetX: 0, offsetY: 0 },
+  },
+}
+
+/** 一键叠加描边+阴影的特效预设，批量改完属性后只统一渲染/记一步历史，不分别调用现有 setter（避免撤销栈里多留几步） */
+function applyTextEffectPreset(preset: 'none' | 'outline' | 'emboss' | 'neon') {
+  if (!canvas) return
+  const active = canvas.getActiveObject()
+  if (!(active instanceof IText)) return
+  if (preset === 'none') {
+    active.set({ stroke: undefined, strokeWidth: 0, shadow: null })
+  } else {
+    const p = TEXT_EFFECT_PRESETS[preset]
+    active.set({ stroke: p.stroke, strokeWidth: p.strokeWidth, paintFirst: 'stroke', shadow: new Shadow(p.shadow) })
+  }
+  canvas.requestRenderAll()
+  pushHistory()
+  emit('selection', describeSelection(active))
+}
+
+function buildWarpPath(kind: 'arc-up' | 'arc-down' | 'wave', width: number, intensity: number): string {
+  const w = Math.max(width, 1)
+  if (kind === 'arc-up') return `M 0 0 Q ${w / 2} ${-intensity} ${w} 0`
+  if (kind === 'arc-down') return `M 0 0 Q ${w / 2} ${intensity} ${w} 0`
+  return `M 0 0 Q ${w / 4} ${-intensity} ${w / 2} 0 Q ${(w * 3) / 4} ${intensity} ${w} 0`
+}
+
+/** 文字沿弧形/波浪路径排列；切回"无"时要把设置 path 前暂存的原始宽度还原——
+ * Fabric 设置 path 后会用路径包围盒覆盖对象的 width/height，不会自动恢复 */
+function setSelectedTextWarp(kind: 'none' | 'arc-up' | 'arc-down' | 'wave', intensity: number) {
+  if (!canvas) return
+  const active = canvas.getActiveObject()
+  if (!(active instanceof IText)) return
+  const withStash = active as unknown as { _warpKind?: string; _preWarpWidth?: number }
+
+  if (kind === 'none') {
+    active.set({ path: undefined, width: withStash._preWarpWidth ?? active.width })
+    withStash._warpKind = 'none'
+  } else {
+    if (withStash._preWarpWidth === undefined) withStash._preWarpWidth = active.width ?? 200
+    active.set({
+      path: new Path(buildWarpPath(kind, withStash._preWarpWidth, intensity), { visible: false }),
+      pathAlign: 'center',
+      pathSide: 'left',
+      pathStartOffset: 0,
+    })
+    withStash._warpKind = kind
+  }
+  active.setCoords()
+  canvas.requestRenderAll()
+  pushHistory()
+  emit('selection', describeSelection(active))
+}
+
+function deselectActive() {
+  if (!canvas) return
+  canvas.discardActiveObject()
+  canvas.requestRenderAll()
 }
 
 function setSelectedOpacity(value: number) {
@@ -1127,6 +1244,11 @@ defineExpose({
   setSelectedTextStrokeColor,
   setSelectedTextGradient,
   setSelectedTextBackground,
+  setSelectedTextShadowDetail,
+  applyTextEffectPreset,
+  setSelectedTextWarp,
+  setSelectedRectFill,
+  deselectActive,
   setSelectedOpacity,
   commitSelectedOpacity,
   setSelectedBlendMode,
