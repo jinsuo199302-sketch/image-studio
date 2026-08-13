@@ -110,6 +110,12 @@ const warpOpen = ref(false)
 const shadowOpen = ref(false)
 const bgOpen = ref(false)
 const warpIntensity = ref(30)
+const customGradientStart = ref('#f87171')
+const customGradientEnd = ref('#fbbf24')
+
+function applyCustomGradient() {
+  emit('text-gradient', [customGradientStart.value, customGradientEnd.value])
+}
 
 function bump(delta: number) {
   const size = Math.max(8, (props.selection.fontSize ?? 24) + delta)
@@ -254,6 +260,10 @@ function pickWarp(kind: WarpKind) {
               :style="{ background: `linear-gradient(90deg, ${g[0]}, ${g[1]})` }"
               @click="emit('text-gradient', g)"
             />
+            <span class="text-[11px] text-gray-400">自定义</span>
+            <el-color-picker v-model="customGradientStart" size="small" @change="applyCustomGradient" />
+            <span class="text-[11px] text-gray-400">→</span>
+            <el-color-picker v-model="customGradientEnd" size="small" @change="applyCustomGradient" />
           </div>
         </div>
 

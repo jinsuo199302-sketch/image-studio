@@ -28,6 +28,23 @@ export type CanvasElement =
       fill: string
       rx?: number
     }
+  | {
+      type: 'group'
+      x: number
+      y: number
+      width?: number
+      height?: number
+      angle?: number
+      children: GroupChildElement[]
+    }
+
+/** 组件（图表/图例/表格）内部的基础图形，坐标相对组内原点，用于把 Fabric Group 完整存进/读出模板 */
+export type GroupChildElement =
+  | { type: 'rect'; x: number; y: number; width: number; height: number; fill: string; stroke?: string; strokeWidth?: number; rx?: number }
+  | { type: 'text'; x: number; y: number; width?: number; text: string; fontSize: number; fill: string; fontWeight?: string; textAlign?: string }
+  | { type: 'circle'; x: number; y: number; radius: number; fill: string; stroke?: string; strokeWidth?: number }
+  | { type: 'line'; x1: number; y1: number; x2: number; y2: number; stroke: string; strokeWidth: number; strokeLineCap?: string }
+  | { type: 'path'; path: unknown; fill?: string; stroke?: string; strokeWidth?: number }
 
 export interface Template {
   id: string

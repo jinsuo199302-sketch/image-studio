@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { Canvas, Circle, FabricImage, Gradient, Group, IText, Line, Path, Rect, Shadow, Textbox, filters, type FabricObject } from 'fabric'
-import type { CanvasElement, Template } from '../../data/templates'
+import type { CanvasElement, GroupChildElement, Template } from '../../data/templates'
 
 const props = defineProps<{ template: Template }>()
 const emit = defineEmits<{
@@ -239,6 +239,16 @@ async function applyElements(
       } catch {
         // 图片加载失败时跳过，不阻塞其它元素渲染
       }
+    } else if (el.type === 'group') {
+      const children = el.children.map(buildGroupChild).filter((c): c is FabricObject => c !== null)
+      const group = new Group(children, {
+        left: el.x,
+        top: el.y,
+        originX: 'left',
+        originY: 'top',
+        angle: el.angle ?? 0,
+      })
+      canvas.add(group)
     }
   }
   canvas.renderAll()
@@ -838,6 +848,36 @@ function mkLine(points: [number, number, number, number], opts: ConstructorParam
   return new Line(points, { originX: 'left', originY: 'top', ...opts })
 }
 
+/** Group 组件（图表/图例/表格）落盘/读盘的通用往返：把已知的几种基础图形和它们互转，
+ * 这样任何用 mkRect/mkText/mkCircle/mkLine/Path 拼出来的 Group 存模板都不会丢，不用为每种图表单独写序列化逻辑 */
+function buildGroupChild(child: GroupChildElement): FabricObject | null {
+  if (child.type === 'rect')
+    return mkRect({ left: child.x, top: child.y, width: child.width, height: child.height, fill: child.fill, stroke: child.stroke, strokeWidth: child.strokeWidth, rx: child.rx ?? 0, ry: child.rx ?? 0 })
+  if (child.type === 'text')
+    return mkText(child.text, { left: child.x, top: child.y, width: child.width, fontSize: child.fontSize, fill: child.fill, fontWeight: child.fontWeight ?? 'normal', textAlign: (child.textAlign as 'left' | 'center' | 'right') ?? 'left' })
+  if (child.type === 'circle')
+    return mkCircle({ left: child.x, top: child.y, radius: child.radius, fill: child.fill, stroke: child.stroke, strokeWidth: child.strokeWidth })
+  if (child.type === 'line')
+    return mkLine([child.x1, child.y1, child.x2, child.y2], { stroke: child.stroke, strokeWidth: child.strokeWidth, strokeLineCap: child.strokeLineCap as CanvasLineCap | undefined })
+  if (child.type === 'path')
+    return new Path(child.path as ConstructorParameters<typeof Path>[0], { fill: child.fill, stroke: child.stroke, strokeWidth: child.strokeWidth, originX: 'left', originY: 'top' })
+  return null
+}
+
+function serializeGroupChild(obj: FabricObject): GroupChildElement | null {
+  if (obj instanceof IText)
+    return { type: 'text', x: obj.left ?? 0, y: obj.top ?? 0, width: obj.width, text: obj.text ?? '', fontSize: obj.fontSize ?? 14, fill: String(obj.fill ?? '#000000'), fontWeight: String(obj.fontWeight ?? 'normal'), textAlign: obj.textAlign }
+  if (obj instanceof Circle)
+    return { type: 'circle', x: obj.left ?? 0, y: obj.top ?? 0, radius: obj.radius ?? 0, fill: String(obj.fill ?? '#000000'), stroke: obj.stroke ? String(obj.stroke) : undefined, strokeWidth: obj.strokeWidth }
+  if (obj instanceof Line)
+    return { type: 'line', x1: obj.x1 ?? 0, y1: obj.y1 ?? 0, x2: obj.x2 ?? 0, y2: obj.y2 ?? 0, stroke: String(obj.stroke ?? '#000000'), strokeWidth: obj.strokeWidth ?? 1, strokeLineCap: obj.strokeLineCap }
+  if (obj instanceof Path)
+    return { type: 'path', path: obj.toObject().path, fill: obj.fill ? String(obj.fill) : undefined, stroke: obj.stroke ? String(obj.stroke) : undefined, strokeWidth: obj.strokeWidth }
+  if (obj instanceof Rect)
+    return { type: 'rect', x: obj.left ?? 0, y: obj.top ?? 0, width: obj.getScaledWidth(), height: obj.getScaledHeight(), fill: String(obj.fill ?? '#000000'), stroke: obj.stroke ? String(obj.stroke) : undefined, strokeWidth: obj.strokeWidth, rx: (obj.rx as number | undefined) ?? 0 }
+  return null
+}
+
 function addBarChart(): FabricObject {
   const data = CHART_DATA
   const chartH = 160
@@ -1239,6 +1279,20 @@ function serialize(): SerializedTemplate {
         height: obj.getScaledHeight(),
         fill: String(obj.fill ?? '#000000'),
         rx: (obj.rx as number | undefined) ?? 0,
+      })
+    } else if (obj instanceof Group) {
+      const children = obj
+        .getObjects()
+        .map(serializeGroupChild)
+        .filter((c): c is GroupChildElement => c !== null)
+      elements.push({
+        type: 'group',
+        x: obj.left ?? 0,
+        y: obj.top ?? 0,
+        width: obj.width,
+        height: obj.height,
+        angle: obj.angle || undefined,
+        children,
       })
     }
   }
