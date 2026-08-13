@@ -30,7 +30,7 @@ export interface SelectionInfo {
   strokeColor?: string
   hasTextBackground?: boolean
   textBackgroundColor?: string
-  warpKind?: 'none' | 'arc-up' | 'arc-down' | 'wave'
+  warpKind?: WarpKind
   opacity?: number
   blendMode?: string
   locked?: boolean
@@ -618,27 +618,42 @@ function applyTextEffectPreset(preset: 'none' | 'outline' | 'emboss' | 'neon') {
   emit('selection', describeSelection(active))
 }
 
-function buildWarpPath(kind: 'arc-up' | 'arc-down' | 'wave', width: number, intensity: number): string {
+type PathWarpKind = 'arc-up' | 'arc-down' | 'fan' | 'wave' | 'flag' | 'ring'
+export type WarpKind = 'none' | PathWarpKind | 'skew'
+
+function buildWarpPath(kind: PathWarpKind, width: number, intensity: number): string {
   const w = Math.max(width, 1)
   if (kind === 'arc-up') return `M 0 0 Q ${w / 2} ${-intensity} ${w} 0`
   if (kind === 'arc-down') return `M 0 0 Q ${w / 2} ${intensity} ${w} 0`
-  return `M 0 0 Q ${w / 4} ${-intensity} ${w / 2} 0 Q ${(w * 3) / 4} ${intensity} ${w} 0`
+  if (kind === 'fan') {
+    // 圆弧的正矢公式：已知弦长 w、拱高 intensity，反推半径，画出真正等曲率的圆弧（跟贝塞尔的拱形手感不同）
+    const sagitta = Math.max(intensity, 1)
+    const r = (w * w) / (8 * sagitta) + sagitta / 2
+    return `M 0 0 A ${r} ${r} 0 0 1 ${w} 0`
+  }
+  if (kind === 'wave') return `M 0 0 Q ${w / 4} ${-intensity} ${w / 2} 0 Q ${(w * 3) / 4} ${intensity} ${w} 0`
+  if (kind === 'flag')
+    return `M 0 0 Q ${w / 6} ${-intensity} ${w / 3} 0 Q ${w / 2} ${intensity} ${(w * 2) / 3} 0 Q ${(w * 5) / 6} ${-intensity} ${w} 0`
+  // ring：整圈闭合路径，半径按周长=文字宽度反推，让文字正好绕一圈
+  const r = w / (2 * Math.PI)
+  return `M ${w / 2} ${-r} A ${r} ${r} 0 1 1 ${w / 2 - 0.01} ${-r}`
 }
 
-/** 文字沿弧形/波浪路径排列；切回"无"时要把设置 path 前暂存的原始宽度还原——
- * Fabric 设置 path 后会用路径包围盒覆盖对象的 width/height，不会自动恢复 */
-function setSelectedTextWarp(kind: 'none' | 'arc-up' | 'arc-down' | 'wave', intensity: number) {
+/** 文字沿弧形/波浪/圆环路径排列，或用 skewX 做平行四边形斜切；切回"无"/"斜切"时要把设置 path 前
+ * 暂存的原始宽度还原——Fabric 设置 path 后会用路径包围盒覆盖对象的 width/height，不会自动恢复 */
+function setSelectedTextWarp(kind: WarpKind, intensity: number) {
   if (!canvas) return
   const active = canvas.getActiveObject()
   if (!(active instanceof IText)) return
   const withStash = active as unknown as { _warpKind?: string; _preWarpWidth?: number }
 
-  if (kind === 'none') {
-    active.set({ path: undefined, width: withStash._preWarpWidth ?? active.width })
-    withStash._warpKind = 'none'
+  if (kind === 'none' || kind === 'skew') {
+    active.set({ path: undefined, width: withStash._preWarpWidth ?? active.width, skewX: kind === 'skew' ? Math.min(intensity, 60) : 0 })
+    withStash._warpKind = kind
   } else {
     if (withStash._preWarpWidth === undefined) withStash._preWarpWidth = active.width ?? 200
     active.set({
+      skewX: 0,
       path: new Path(buildWarpPath(kind, withStash._preWarpWidth, intensity), { visible: false }),
       pathAlign: 'center',
       pathSide: 'left',

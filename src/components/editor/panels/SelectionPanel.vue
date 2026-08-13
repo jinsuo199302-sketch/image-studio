@@ -15,7 +15,7 @@ import {
   Lock,
   Unlock,
 } from '@element-plus/icons-vue'
-import type { SelectionInfo } from '../CanvasStage.vue'
+import type { SelectionInfo, WarpKind } from '../CanvasStage.vue'
 import { FONT_OPTIONS } from '../../../data/fonts'
 
 type TextProp =
@@ -31,7 +31,6 @@ type TextProp =
 
 type ShadowDetail = { color: string; blur: number; offsetX: number; offsetY: number }
 type EffectPreset = 'none' | 'outline' | 'emboss' | 'neon'
-type WarpKind = 'none' | 'arc-up' | 'arc-down' | 'wave'
 
 const props = defineProps<{ selection: SelectionInfo; removingBackground?: boolean }>()
 const emit = defineEmits<{
@@ -93,9 +92,13 @@ const EFFECT_PRESETS: { key: EffectPreset; label: string }[] = [
 
 const WARP_KINDS: { key: WarpKind; label: string }[] = [
   { key: 'none', label: '无' },
-  { key: 'arc-up', label: '上弧' },
+  { key: 'arc-up', label: '拱形' },
   { key: 'arc-down', label: '下弧' },
+  { key: 'fan', label: '扇形' },
   { key: 'wave', label: '波浪' },
+  { key: 'flag', label: '旗帜' },
+  { key: 'ring', label: '圆环' },
+  { key: 'skew', label: '斜切' },
 ]
 
 const title = computed(() =>
@@ -232,6 +235,11 @@ function pickWarp(kind: WarpKind) {
               class="h-5 w-5 rounded-full border border-gray-200"
               :style="{ background: c }"
               @click="emit('text-prop', 'fill', c)"
+            />
+            <el-color-picker
+              :model-value="typeof selection.fill === 'string' ? selection.fill : undefined"
+              size="small"
+              @change="(c: string) => emit('text-prop', 'fill', c)"
             />
           </div>
         </div>
