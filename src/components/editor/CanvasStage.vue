@@ -63,6 +63,116 @@ function emitHistory() {
   emit('history', { canUndo: undoStack.length > 1, canRedo: redoStack.length > 0 })
 }
 
+/** 拖拽时的吸附候选位置（画布边缘/中心 + 其它对象边缘/中心），一次拖拽只算一次 */
+let dragStaticTargets: { v: number[]; h: number[] } | null = null
+const GUIDE_COLOR = '#f43f5e'
+
+function computeStaticTargets(moving: FabricObject) {
+  const v = [0, canvasSize.width / 2, canvasSize.width]
+  const h = [0, canvasSize.height / 2, canvasSize.height]
+  for (const obj of canvas?.getObjects() ?? []) {
+    if (obj === moving) continue
+    const left = obj.left ?? 0
+    const top = obj.top ?? 0
+    const w = obj.getScaledWidth()
+    const objHeight = obj.getScaledHeight()
+    v.push(left, left + w / 2, left + w)
+    h.push(top, top + objHeight / 2, top + objHeight)
+  }
+  dragStaticTargets = { v, h }
+}
+
+function closestMatch(
+  candidates: number[],
+  targets: number[],
+  threshold: number,
+): { value: number; delta: number } | null {
+  let best: { value: number; delta: number } | null = null
+  for (const c of candidates) {
+    for (const t of targets) {
+      const diff = Math.abs(t - c)
+      if (diff <= threshold && (!best || diff < Math.abs(best.delta))) {
+        best = { value: t, delta: t - c }
+      }
+    }
+  }
+  return best
+}
+
+/** 拖拽移动时吸附到画布边缘/中心/其它对象边缘并画参考线；多选或有旋转角度时跳过（左上角原点假设不成立） */
+function updateAlignmentGuides(target: FabricObject) {
+  if (!canvas) return
+  if (canvas.getActiveObjects().length > 1 || Math.abs(target.angle ?? 0) > 0.01) {
+    clearAlignmentGuides()
+    return
+  }
+  if (!dragStaticTargets) computeStaticTargets(target)
+
+  const left = target.left ?? 0
+  const top = target.top ?? 0
+  const w = target.getScaledWidth()
+  const objHeight = target.getScaledHeight()
+  const threshold = 8 / canvas.getZoom()
+
+  const xMatch = closestMatch([left, left + w / 2, left + w], dragStaticTargets!.v, threshold)
+  if (xMatch) target.set({ left: left + xMatch.delta })
+
+  const yMatch = closestMatch([top, top + objHeight / 2, top + objHeight], dragStaticTargets!.h, threshold)
+  if (yMatch) target.set({ top: top + yMatch.delta })
+
+  if (xMatch || yMatch) target.setCoords()
+
+  drawAlignmentGuides(xMatch ? xMatch.value : null, yMatch ? yMatch.value : null)
+}
+
+function drawAlignmentGuides(matchedX: number | null, matchedY: number | null) {
+  if (!canvas) return
+  const ctx = canvas.contextTop
+  canvas.clearContext(ctx)
+  if (matchedX === null && matchedY === null) return
+
+  const zoom = canvas.getZoom()
+  ctx.save()
+  ctx.strokeStyle = GUIDE_COLOR
+  ctx.lineWidth = 1
+  ctx.setLineDash([4, 4])
+  if (matchedX !== null) {
+    const x = matchedX * zoom
+    ctx.beginPath()
+    ctx.moveTo(x, 0)
+    ctx.lineTo(x, canvasSize.height * zoom)
+    ctx.stroke()
+  }
+  if (matchedY !== null) {
+    const y = matchedY * zoom
+    ctx.beginPath()
+    ctx.moveTo(0, y)
+    ctx.lineTo(canvasSize.width * zoom, y)
+    ctx.stroke()
+  }
+  ctx.restore()
+
+  const activeTarget = canvas.getActiveObject()
+  if (activeTarget) {
+    const labelX = (activeTarget.left ?? 0) * zoom
+    const labelY = (activeTarget.top ?? 0) * zoom
+    const label = `${Math.round(activeTarget.left ?? 0)}, ${Math.round(activeTarget.top ?? 0)}`
+    ctx.save()
+    ctx.font = '11px sans-serif'
+    const textWidth = ctx.measureText(label).width
+    ctx.fillStyle = 'rgba(0,0,0,0.7)'
+    ctx.fillRect(labelX, labelY - 20, textWidth + 8, 16)
+    ctx.fillStyle = '#ffffff'
+    ctx.fillText(label, labelX + 4, labelY - 8)
+    ctx.restore()
+  }
+}
+
+function clearAlignmentGuides() {
+  if (canvas) canvas.clearContext(canvas.contextTop)
+  dragStaticTargets = null
+}
+
 async function applyElements(
   elements: CanvasElement[],
   background: string,
@@ -221,13 +331,19 @@ onMounted(async () => {
   canvas = new Canvas(canvasEl.value, { preserveObjectStacking: true })
   canvas.on('selection:created', (e) => emit('selection', describeSelection(e.selected?.[0])))
   canvas.on('selection:updated', (e) => emit('selection', describeSelection(e.selected?.[0])))
-  canvas.on('selection:cleared', () => emit('selection', null))
+  canvas.on('selection:cleared', () => {
+    emit('selection', null)
+    clearAlignmentGuides()
+  })
   canvas.on('text:changed', (e) => {
     if (canvas?.getActiveObject() === e.target) emit('selection', describeSelection(e.target))
   })
   canvas.on('object:modified', pushHistory)
   canvas.on('object:added', pushHistory)
   canvas.on('object:removed', pushHistory)
+  canvas.on('object:modified', clearAlignmentGuides)
+  canvas.on('object:moving', (e) => updateAlignmentGuides(e.target))
+  canvas.on('mouse:up', clearAlignmentGuides)
 
   await buildFromTemplate(props.template)
   fitCanvas()
