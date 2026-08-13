@@ -71,6 +71,8 @@ function emitHistory() {
 /** 拖拽时的吸附候选位置（画布边缘/中心 + 其它对象边缘/中心），一次拖拽只算一次 */
 let dragStaticTargets: { v: number[]; h: number[] } | null = null
 const GUIDE_COLOR = '#f43f5e'
+/** 像素→毫米换算比例，跟 ResizeDialog.vue 里"A4 文档"预设（700×990px＝210×297mm）保持一致 */
+const PX_PER_MM = 700 / 210
 
 function computeStaticTargets(moving: FabricObject) {
   const v = [0, canvasSize.width / 2, canvasSize.width]
@@ -161,7 +163,9 @@ function drawAlignmentGuides(matchedX: number | null, matchedY: number | null) {
   if (activeTarget) {
     const labelX = (activeTarget.left ?? 0) * zoom
     const labelY = (activeTarget.top ?? 0) * zoom
-    const label = `${Math.round(activeTarget.left ?? 0)}, ${Math.round(activeTarget.top ?? 0)}`
+    const mmX = (activeTarget.left ?? 0) / PX_PER_MM
+    const mmY = (activeTarget.top ?? 0) / PX_PER_MM
+    const label = `${mmX.toFixed(1)}mm, ${mmY.toFixed(1)}mm`
     ctx.save()
     ctx.font = '11px sans-serif'
     const textWidth = ctx.measureText(label).width
