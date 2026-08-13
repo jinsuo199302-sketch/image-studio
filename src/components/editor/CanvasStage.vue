@@ -380,10 +380,24 @@ onMounted(async () => {
     const scenePoint = (opt as unknown as { scenePoint?: ReturnType<Canvas['getScenePoint']> }).scenePoint
     if (!scenePoint) return
     const children = group.getObjects()
+    // Group 刚生成/刚替换时，子元素的 aCoords 命中坐标缓存不会自动刷新，跟实际画出来的位置对不上
+    // （画的时候用的是实时变换，命中检测用的是缓存）——命中检测前必须强制刷新一次，不然点在数字正上方也点不中
+    group.setCoords()
+    children.forEach((c) => c.setCoords())
+    const HIT_PADDING = 6 // 留一点点容差，不用太大
     for (let i = children.length - 1; i >= 0; i--) {
       const c = children[i]
       const dataTag = c as unknown as { _dataField?: string; _dataIndex?: number }
-      if (dataTag._dataField !== undefined && c.visible && c.containsPoint(scenePoint)) {
+      if (dataTag._dataField === undefined || !c.visible) continue
+      const coords = c.getCoords()
+      const xs = coords.map((p) => p.x)
+      const ys = coords.map((p) => p.y)
+      const hit =
+        scenePoint.x >= Math.min(...xs) - HIT_PADDING &&
+        scenePoint.x <= Math.max(...xs) + HIT_PADDING &&
+        scenePoint.y >= Math.min(...ys) - HIT_PADDING &&
+        scenePoint.y <= Math.max(...ys) + HIT_PADDING
+      if (hit) {
         openInlineEdit(group, c, dataTag._dataField, dataTag._dataIndex ?? 0)
         break
       }
