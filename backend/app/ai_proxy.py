@@ -43,12 +43,15 @@ async def images_generations(
     _user: models.User = Depends(auth.get_current_user),
 ):
     _require_openlux()
-    async with httpx.AsyncClient(timeout=120) as client:
-        res = await client.post(
-            f"{OPENLUX_BASE_URL}/images/generations",
-            headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
-            json=payload.model_dump(),
-        )
+    try:
+        async with httpx.AsyncClient(timeout=170) as client:
+            res = await client.post(
+                f"{OPENLUX_BASE_URL}/images/generations",
+                headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
+                json=payload.model_dump(),
+            )
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=504, detail=f"生成接口请求超时或网络异常，请重试：{exc}")
     if res.status_code >= 400:
         raise HTTPException(status_code=502, detail=f"生成接口请求失败：{res.status_code} {res.text}")
     return res.json()
@@ -66,16 +69,19 @@ async def images_edits(
     _require_openlux()
     image_bytes = await image.read()
     mask_bytes = await mask.read()
-    async with httpx.AsyncClient(timeout=120) as client:
-        res = await client.post(
-            f"{OPENLUX_BASE_URL}/images/edits",
-            headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
-            data={"model": model, "prompt": prompt, "n": str(n)},
-            files={
-                "image": (image.filename or "image.png", image_bytes, image.content_type or "image/png"),
-                "mask": (mask.filename or "mask.png", mask_bytes, mask.content_type or "image/png"),
-            },
-        )
+    try:
+        async with httpx.AsyncClient(timeout=170) as client:
+            res = await client.post(
+                f"{OPENLUX_BASE_URL}/images/edits",
+                headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
+                data={"model": model, "prompt": prompt, "n": str(n)},
+                files={
+                    "image": (image.filename or "image.png", image_bytes, image.content_type or "image/png"),
+                    "mask": (mask.filename or "mask.png", mask_bytes, mask.content_type or "image/png"),
+                },
+            )
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=504, detail=f"消除接口请求超时或网络异常，请重试：{exc}")
     if res.status_code >= 400:
         raise HTTPException(status_code=502, detail=f"消除接口请求失败：{res.status_code} {res.text}")
     return res.json()
@@ -87,12 +93,15 @@ async def chat_completions(
     _user: models.User = Depends(auth.get_current_user),
 ):
     _require_openlux()
-    async with httpx.AsyncClient(timeout=60) as client:
-        res = await client.post(
-            f"{OPENLUX_BASE_URL}/chat/completions",
-            headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
-            json=payload.model_dump(),
-        )
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            res = await client.post(
+                f"{OPENLUX_BASE_URL}/chat/completions",
+                headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
+                json=payload.model_dump(),
+            )
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=504, detail=f"生成接口请求超时或网络异常，请重试：{exc}")
     if res.status_code >= 400:
         raise HTTPException(status_code=502, detail=f"生成接口请求失败：{res.status_code} {res.text}")
     return res.json()
