@@ -37,23 +37,36 @@ def _require_vidu():
         raise HTTPException(status_code=503, detail="AI 视频服务未配置，请联系管理员")
 
 
+async def _post_openlux(url: str, timeout: float, max_retries: int = 2, **kwargs) -> httpx.Response:
+    """统一处理超时异常 + 429（"上游负载已饱和"，官方原话是临时性的、稍后重试即可）自动退避重试，
+    避免每个转发接口都重复写这段逻辑。detail 里不带中文前缀——前端 authPostJson 自己会按各自场景拼
+    "生成接口请求失败"/"消除接口请求失败"这类 label，后端再拼一遍会导致文案重复两遍。"""
+    for attempt in range(max_retries + 1):
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                res = await client.post(url, **kwargs)
+        except httpx.HTTPError as exc:
+            raise HTTPException(status_code=504, detail=f"请求超时或网络异常，请重试：{exc}")
+        if res.status_code != 429 or attempt == max_retries:
+            return res
+        await asyncio.sleep(3 * (attempt + 1))
+    return res  # 理论上循环内已经 return，这行只是让类型检查满意
+
+
 @router.post("/images/generations")
 async def images_generations(
     payload: ImageGenerationRequest,
     _user: models.User = Depends(auth.get_current_user),
 ):
     _require_openlux()
-    try:
-        async with httpx.AsyncClient(timeout=170) as client:
-            res = await client.post(
-                f"{OPENLUX_BASE_URL}/images/generations",
-                headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
-                json=payload.model_dump(),
-            )
-    except httpx.HTTPError as exc:
-        raise HTTPException(status_code=504, detail=f"生成接口请求超时或网络异常，请重试：{exc}")
+    res = await _post_openlux(
+        f"{OPENLUX_BASE_URL}/images/generations",
+        timeout=170,
+        headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
+        json=payload.model_dump(),
+    )
     if res.status_code >= 400:
-        raise HTTPException(status_code=502, detail=f"生成接口请求失败：{res.status_code} {res.text}")
+        raise HTTPException(status_code=502, detail=f"{res.status_code} {res.text}")
     return res.json()
 
 
@@ -69,21 +82,18 @@ async def images_edits(
     _require_openlux()
     image_bytes = await image.read()
     mask_bytes = await mask.read()
-    try:
-        async with httpx.AsyncClient(timeout=170) as client:
-            res = await client.post(
-                f"{OPENLUX_BASE_URL}/images/edits",
-                headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
-                data={"model": model, "prompt": prompt, "n": str(n)},
-                files={
-                    "image": (image.filename or "image.png", image_bytes, image.content_type or "image/png"),
-                    "mask": (mask.filename or "mask.png", mask_bytes, mask.content_type or "image/png"),
-                },
-            )
-    except httpx.HTTPError as exc:
-        raise HTTPException(status_code=504, detail=f"消除接口请求超时或网络异常，请重试：{exc}")
+    res = await _post_openlux(
+        f"{OPENLUX_BASE_URL}/images/edits",
+        timeout=170,
+        headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
+        data={"model": model, "prompt": prompt, "n": str(n)},
+        files={
+            "image": (image.filename or "image.png", image_bytes, image.content_type or "image/png"),
+            "mask": (mask.filename or "mask.png", mask_bytes, mask.content_type or "image/png"),
+        },
+    )
     if res.status_code >= 400:
-        raise HTTPException(status_code=502, detail=f"消除接口请求失败：{res.status_code} {res.text}")
+        raise HTTPException(status_code=502, detail=f"{res.status_code} {res.text}")
     return res.json()
 
 
@@ -93,17 +103,14 @@ async def chat_completions(
     _user: models.User = Depends(auth.get_current_user),
 ):
     _require_openlux()
-    try:
-        async with httpx.AsyncClient(timeout=60) as client:
-            res = await client.post(
-                f"{OPENLUX_BASE_URL}/chat/completions",
-                headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
-                json=payload.model_dump(),
-            )
-    except httpx.HTTPError as exc:
-        raise HTTPException(status_code=504, detail=f"生成接口请求超时或网络异常，请重试：{exc}")
+    res = await _post_openlux(
+        f"{OPENLUX_BASE_URL}/chat/completions",
+        timeout=60,
+        headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
+        json=payload.model_dump(),
+    )
     if res.status_code >= 400:
-        raise HTTPException(status_code=502, detail=f"生成接口请求失败：{res.status_code} {res.text}")
+        raise HTTPException(status_code=502, detail=f"{res.status_code} {res.text}")
     return res.json()
 
 
