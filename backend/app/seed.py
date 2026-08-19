@@ -576,6 +576,22 @@ SEED_TEMPLATES = [
             {"type": "text", "x": 0, "y": 830, "width": 700, "text": "地址：XX市XX路惠民超市  电话：XXX-XXXXXXX", "fontSize": 14, "color": "#ffffff", "align": "center"},
         ],
     },
+    {
+        "id": "tpl-board-party-building",
+        "name": "党建主题宣传展板",
+        "category": "广告设计",
+        "scene": "宣传展板",
+        "industry": "企业办公",
+        "canvas_width": 1000,
+        "canvas_height": 1000,
+        "background": "#c1272d",
+        "thumbnail": "/templates/party-building-bg.png",
+        "elements": [
+            {"type": "image", "x": 0, "y": 0, "width": 1000, "height": 1000, "src": "/templates/party-building-bg.png"},
+            {"type": "text", "x": 100, "y": 260, "width": 800, "text": "喜迎华诞 礼赞盛世", "fontSize": 62, "fontWeight": "bold", "color": "#fde047", "align": "center"},
+            {"type": "text", "x": 100, "y": 370, "width": 800, "text": "党建引领 · 凝心聚力 · 共谱新篇", "fontSize": 26, "color": "#fef3c7", "align": "center"},
+        ],
+    },
 ]
 
 
