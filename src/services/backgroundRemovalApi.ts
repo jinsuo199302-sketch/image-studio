@@ -1,3 +1,5 @@
+import { authPostForm } from './httpClient'
+
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -11,12 +13,27 @@ async function mockRemoveBackground(imageDataUrl: string): Promise<string> {
   return imageDataUrl
 }
 
+async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
+  const res = await fetch(dataUrl)
+  return res.blob()
+}
+
 /**
- * TODO: 接入真实抠图接口后在此实现，常见服务如 remove.bg，需要先在后端 ai_proxy.py 里加一个转发路由
- * （参考 images/edits 那个路由的写法），前端这里再改成调用 authPostForm('/background-removal', ...)
+ * 走后端代理 /api/ai/background-removal：后端本地跑 rembg（开源模型，不依赖任何第三方 key），
+ * 结果是真透明背景的 PNG。首次调用后端要下载模型，会明显慢一次。
  */
-async function realRemoveBackground(_imageDataUrl: string): Promise<string> {
-  throw new Error('尚未接入真实抠图接口')
+async function realRemoveBackground(imageDataUrl: string): Promise<string> {
+  const form = new FormData()
+  form.append('image', await dataUrlToBlob(imageDataUrl), 'image.png')
+
+  const data = await authPostForm<{ data: Array<{ url?: string; b64_json?: string }> }>(
+    '/background-removal',
+    form,
+    '抠图接口请求失败',
+  )
+  const item = data.data?.[0]
+  if (!item) throw new Error('抠图接口返回结果为空')
+  return item.url ?? `data:image/png;base64,${item.b64_json}`
 }
 
 export async function removeBackground(authenticated: boolean, imageDataUrl: string): Promise<string> {

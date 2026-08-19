@@ -1,6 +1,9 @@
 import asyncio
+import base64
 import json
 import re
+import subprocess
+import sys
 
 import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -95,6 +98,40 @@ async def images_edits(
     if res.status_code >= 400:
         raise HTTPException(status_code=502, detail=f"{res.status_code} {res.text}")
     return res.json()
+
+
+def _run_bg_removal_subprocess(image_bytes: bytes) -> subprocess.CompletedProcess:
+    """用同步 subprocess.run（不是 asyncio.create_subprocess_exec）——后者在 Windows 上
+    uvicorn --reload 强制用的 SelectorEventLoop 下会直接抛 NotImplementedError（Windows
+    独有的坑，asyncio 文档里写明 selector loop 不支持子进程；Linux 生产环境不受影响，
+    但这样写本地 Windows 开发环境也能跑通同一条代码路径，不用靠"生产是 Linux 应该没事"硬赌）。
+    外层用 asyncio.to_thread 扔到线程池，不阻塞事件循环。"""
+    return subprocess.run(
+        [sys.executable, "-m", "app.bg_removal_worker"],
+        input=image_bytes,
+        capture_output=True,
+        timeout=170,
+    )
+
+
+@router.post("/background-removal")
+async def background_removal(
+    image: UploadFile = File(...),
+    _user: models.User = Depends(auth.get_current_user),
+):
+    """本地跑 rembg（u2net 模型），不依赖任何第三方 key。放到独立子进程里跑（见
+    bg_removal_worker.py）——模型稳定态占约 1GB RSS，不能常驻在主 uvicorn 进程里，
+    不然这台 2 核 2GB 的机器迟早被这个功能拖垮。首次调用要下载模型（~176MB），
+    会明显慢一次，之后走本地缓存就快了（现测 <1s）。"""
+    image_bytes = await image.read()
+    try:
+        proc = await asyncio.to_thread(_run_bg_removal_subprocess, image_bytes)
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="抠图处理超时，请重试")
+    if proc.returncode != 0:
+        raise HTTPException(status_code=502, detail=f"抠图处理失败：{proc.stderr.decode(errors='ignore')[:500]}")
+    b64 = base64.b64encode(proc.stdout).decode()
+    return {"data": [{"b64_json": b64}]}
 
 
 @router.post("/chat/completions")
