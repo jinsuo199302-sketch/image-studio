@@ -5,8 +5,9 @@ import AIWriteTab from './ai/AIWriteTab.vue'
 import AITranslateTab from './ai/AITranslateTab.vue'
 import AIVideoTab from './ai/AIVideoTab.vue'
 import AIPdfTab from './ai/AIPdfTab.vue'
+import AICutoutTab from './ai/AICutoutTab.vue'
 
-type TabKey = 'image' | 'write' | 'translate' | 'video' | 'pdf'
+type TabKey = 'image' | 'write' | 'translate' | 'video' | 'pdf' | 'cutout'
 
 const props = defineProps<{ selectedText: string | null; initialTab?: TabKey }>()
 const emit = defineEmits<{
@@ -31,6 +32,7 @@ function pickTab(key: string) {
           { key: 'translate', label: '翻译' },
           { key: 'video', label: '视频' },
           { key: 'pdf', label: 'PDF' },
+          { key: 'cutout', label: '抠图' },
         ]"
         :key="tab.key"
         class="flex-1 rounded-t-md px-1 py-2 text-xs transition"
@@ -55,7 +57,8 @@ function pickTab(key: string) {
         @replace-selected="(text) => emit('replace-selected-text', text)"
       />
       <AIVideoTab v-else-if="activeTab === 'video'" />
-      <AIPdfTab v-else />
+      <AIPdfTab v-else-if="activeTab === 'pdf'" />
+      <AICutoutTab v-else />
     </div>
   </div>
 </template>
