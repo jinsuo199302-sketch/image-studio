@@ -8,7 +8,7 @@ const emit = defineEmits<{
   (e: 'add', color: string): void
   (e: 'add-image', url: string): void
   (e: 'add-chart', kind: 'bar' | 'hbar' | 'line' | 'pie' | 'donut' | 'funnel' | 'pyramid'): void
-  (e: 'add-legend', kind: 'swatch' | 'steps'): void
+  (e: 'add-legend', kind: 'swatch' | 'steps' | 'icon-list'): void
   (e: 'add-diagram', kind: 'swot' | 'timeline' | 'progress' | 'vs'): void
   (e: 'add-table', kind: 'grid' | 'borderless'): void
 }>()
@@ -205,6 +205,13 @@ async function generateQrcode() {
           >
             <span class="text-lg">📅</span>
             时间轴
+          </button>
+          <button
+            class="flex flex-col items-center gap-1 rounded-md border border-gray-200 py-2.5 text-[11px] text-gray-600 hover:border-violet-300 hover:text-violet-600"
+            @click="emit('add-legend', 'icon-list')"
+          >
+            <span class="text-lg">📋</span>
+            图标清单
           </button>
         </div>
       </template>

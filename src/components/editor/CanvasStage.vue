@@ -260,6 +260,8 @@ async function applyElements(
         builder && el.componentData
           ? builder(el.componentData as never)
           : new Group(el.children.map(buildGroupChild).filter((c): c is FabricObject => c !== null), {
+              left: 0,
+              top: 0,
               originX: 'left',
               originY: 'top',
             })
@@ -927,6 +929,22 @@ const DEFAULT_STEP_LEGEND: LegendDatum[] = [
   { label: '第三步', color: '#22c55e' },
 ]
 
+interface IconListDatum {
+  shape: 'circle' | 'square'
+  color: string
+  icon: string
+  label: string
+}
+const DEFAULT_ICON_LIST: IconListDatum[] = [
+  { shape: 'circle', color: '#c1272d', icon: '1', label: '第一条说明文字' },
+  { shape: 'circle', color: '#c1272d', icon: '2', label: '第二条说明文字' },
+  { shape: 'circle', color: '#16a34a', icon: '✓', label: '第三条说明文字' },
+  { shape: 'circle', color: '#dc2626', icon: '✕', label: '第四条说明文字' },
+]
+const ICON_LIST_ROW_H = 34
+const ICON_LIST_BADGE = 22
+const ICON_LIST_LABEL_W = 180
+
 const DEFAULT_TABLE_ROWS: string[][] = [
   ['列1', '列2', '列3'],
   ['内容1-1', '内容1-2', '内容1-3'],
@@ -982,17 +1000,28 @@ function mkLine(points: [number, number, number, number], opts: ConstructorParam
 
 /** Group 组件（图表/图例/表格）落盘/读盘的通用往返：把已知的几种基础图形和它们互转，
  * 这样任何用 mkRect/mkText/mkCircle/mkLine/Path 拼出来的 Group 存模板都不会丢，不用为每种图表单独写序列化逻辑 */
+/** stroke/strokeWidth 是可选字段，不能无脑把 undefined 也当"真的传了"塞进 Fabric 构造选项——
+ * 会覆盖掉 Circle/Rect 类的默认值（比如 strokeWidth 默认是 1），变成显式 undefined，
+ * 导致 Group 用 fit-content 布局算包围盒时算出 NaN，整个 Group 连带子元素全部不可见
+ * （跟 mkText 那个 fontFamily:undefined 的坑是同一类问题，这里也得一样处理）*/
+function optionalStroke(child: { stroke?: string; strokeWidth?: number }) {
+  const opts: { stroke?: string; strokeWidth?: number } = {}
+  if (child.stroke !== undefined) opts.stroke = child.stroke
+  if (child.strokeWidth !== undefined) opts.strokeWidth = child.strokeWidth
+  return opts
+}
+
 function buildGroupChild(child: GroupChildElement): FabricObject | null {
   if (child.type === 'rect')
-    return mkRect({ left: child.x, top: child.y, width: child.width, height: child.height, fill: child.fill, stroke: child.stroke, strokeWidth: child.strokeWidth, rx: child.rx ?? 0, ry: child.rx ?? 0 })
+    return mkRect({ left: child.x, top: child.y, width: child.width, height: child.height, fill: child.fill, rx: child.rx ?? 0, ry: child.rx ?? 0, ...optionalStroke(child) })
   if (child.type === 'text')
     return mkText(child.text, { left: child.x, top: child.y, width: child.width, fontSize: child.fontSize, fill: child.fill, fontWeight: child.fontWeight ?? 'normal', textAlign: (child.textAlign as 'left' | 'center' | 'right') ?? 'left' })
   if (child.type === 'circle')
-    return mkCircle({ left: child.x, top: child.y, radius: child.radius, fill: child.fill, stroke: child.stroke, strokeWidth: child.strokeWidth })
+    return mkCircle({ left: child.x, top: child.y, radius: child.radius, fill: child.fill, ...optionalStroke(child) })
   if (child.type === 'line')
     return mkLine([child.x1, child.y1, child.x2, child.y2], { stroke: child.stroke, strokeWidth: child.strokeWidth, strokeLineCap: child.strokeLineCap as CanvasLineCap | undefined })
   if (child.type === 'path')
-    return new Path(child.path as ConstructorParameters<typeof Path>[0], { fill: child.fill, stroke: child.stroke, strokeWidth: child.strokeWidth, originX: 'left', originY: 'top' })
+    return new Path(child.path as ConstructorParameters<typeof Path>[0], { fill: child.fill, originX: 'left', originY: 'top', ...optionalStroke(child) })
   return null
 }
 
@@ -1281,9 +1310,51 @@ function buildStepFlow(data: LegendDatum[] = DEFAULT_STEP_LEGEND): FabricObject 
   return tagComponent(group, 'step-legend', data)
 }
 
-function addLegend(kind: 'swatch' | 'steps') {
+/** 图标清单：竖排"圆形/方形徽标 + 一行说明文字"，密排信息看板/展板类模板里常见的编号列表、
+ * 勾叉清单都是这个形状——喂一个数据数组就整组生成，不用像手摆安全月看板那次一样一条条摆坐标。
+ * label 支持双击编辑，shape/color/icon 走 componentData 配置，不做双击编辑（跟其它组件的图标/颜色一致）。*/
+function buildIconList(data: IconListDatum[] = DEFAULT_ICON_LIST): FabricObject {
+  const children: FabricObject[] = []
+  data.forEach((it, i) => {
+    const y = i * ICON_LIST_ROW_H
+    const badge =
+      it.shape === 'circle'
+        ? mkCircle({ left: 0, top: y, radius: ICON_LIST_BADGE / 2, fill: it.color })
+        : mkRect({ left: 0, top: y, width: ICON_LIST_BADGE, height: ICON_LIST_BADGE, fill: it.color, rx: 5, ry: 5 })
+    children.push(badge)
+    children.push(
+      mkText(it.icon, {
+        left: 0,
+        top: y + ICON_LIST_BADGE / 2 - 8,
+        width: ICON_LIST_BADGE,
+        fontSize: 12,
+        fontWeight: 'bold',
+        fill: '#ffffff',
+        textAlign: 'center',
+      }),
+    )
+    children.push(
+      tagDataChild(
+        mkText(it.label, { left: ICON_LIST_BADGE + 10, top: y + 1, width: ICON_LIST_LABEL_W, fontSize: 13, fill: '#374151' }),
+        'label',
+        i,
+      ),
+    )
+  })
+  const group = new Group(children, {
+    left: 0,
+    top: 0,
+    width: ICON_LIST_BADGE + 10 + ICON_LIST_LABEL_W,
+    height: data.length * ICON_LIST_ROW_H,
+    originX: 'left',
+    originY: 'top',
+  })
+  return tagComponent(group, 'icon-list', data)
+}
+
+function addLegend(kind: 'swatch' | 'steps' | 'icon-list') {
   if (!canvas) return
-  const obj = kind === 'steps' ? buildStepFlow() : buildSwatchLegend()
+  const obj = kind === 'steps' ? buildStepFlow() : kind === 'icon-list' ? buildIconList() : buildSwatchLegend()
   const w = obj.width ?? 160
   const h = obj.height ?? 80
   obj.set({ left: canvasSize.width / 2 - w / 2, top: canvasSize.height / 2 - h / 2 })
@@ -1706,6 +1777,7 @@ const COMPONENT_BUILDERS: Record<string, (data: never) => FabricObject> = {
   'vs-compare': buildVsCompare as (data: never) => FabricObject,
   'swatch-legend': buildSwatchLegend as (data: never) => FabricObject,
   'step-legend': buildStepFlow as (data: never) => FabricObject,
+  'icon-list': buildIconList as (data: never) => FabricObject,
   'grid-table': buildGridTable as (data: never) => FabricObject,
   'borderless-table': buildBorderlessTable as (data: never) => FabricObject,
 }
