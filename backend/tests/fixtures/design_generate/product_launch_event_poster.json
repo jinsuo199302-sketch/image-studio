@@ -1,0 +1,149 @@
+{
+  "case_name": "product_launch_event_poster",
+  "note": "产品发布会流程海报——议程/流程类内容，验证 icon-list 用于时间线场景",
+  "prompt": "产品发布会流程海报，科技感蓝紫配色，需要列出上午到下午的完整议程安排（签到、主题演讲、产品演示、圆桌讨论、闭幕）",
+  "canvas_width": 1000,
+  "canvas_height": 1400,
+  "fonts": [
+    {
+      "label": "默认",
+      "value": "sans-serif"
+    },
+    {
+      "label": "思源黑体",
+      "value": "Noto Sans SC"
+    }
+  ],
+  "endpoint": "https://picflowlab.cn/api/ai/design/generate",
+  "model": "gemini-3-flash-preview",
+  "requested_at": "2026-08-20T16:00:00+08:00",
+  "duration_seconds": 136.758028,
+  "http_status": 200,
+  "response": {
+    "background": "#060515",
+    "elements": [
+      {
+        "type": "text",
+        "x": 100,
+        "y": 140,
+        "width": 800,
+        "text": "NEXT INNO 2026",
+        "fontSize": 64,
+        "fontWeight": "bold",
+        "color": "#00f0ff",
+        "align": "center",
+        "fontFamily": "Noto Sans SC"
+      },
+      {
+        "type": "text",
+        "x": 100,
+        "y": 230,
+        "width": 800,
+        "text": "智能涌现 · 年度新品发布会",
+        "fontSize": 34,
+        "fontWeight": "bold",
+        "color": "#ffffff",
+        "align": "center",
+        "fontFamily": "Noto Sans SC"
+      },
+      {
+        "type": "text",
+        "x": 100,
+        "y": 300,
+        "width": 800,
+        "text": "时间：2026.11.18 | 地点：未来科技前沿中心",
+        "fontSize": 18,
+        "fontWeight": "normal",
+        "color": "#a5a8fc",
+        "align": "center",
+        "fontFamily": "sans-serif"
+      },
+      {
+        "type": "group",
+        "x": 390,
+        "y": 540,
+        "children": [],
+        "componentKind": "ribbon-title",
+        "componentData": [
+          {
+            "text": "会议日程",
+            "color": "#8b2eff",
+            "width": 220
+          }
+        ]
+      },
+      {
+        "type": "rect",
+        "x": 250,
+        "y": 630,
+        "width": 500,
+        "height": 340,
+        "fill": "#110e30",
+        "rx": 16
+      },
+      {
+        "type": "group",
+        "x": 410,
+        "y": 680,
+        "children": [],
+        "componentKind": "icon-list",
+        "componentData": [
+          {
+            "shape": "circle",
+            "color": "#00f0ff",
+            "icon": "1",
+            "label": "09:30 嘉宾签到"
+          },
+          {
+            "shape": "circle",
+            "color": "#00f0ff",
+            "icon": "2",
+            "label": "10:00 主题演讲"
+          },
+          {
+            "shape": "circle",
+            "color": "#00f0ff",
+            "icon": "3",
+            "label": "14:00 产品演示"
+          },
+          {
+            "shape": "circle",
+            "color": "#00f0ff",
+            "icon": "4",
+            "label": "15:30 圆桌讨论"
+          },
+          {
+            "shape": "circle",
+            "color": "#00f0ff",
+            "icon": "5",
+            "label": "16:30 闭幕致辞"
+          }
+        ]
+      },
+      {
+        "type": "text",
+        "x": 100,
+        "y": 1160,
+        "width": 800,
+        "text": "扫描二维码 预约线上同步直播间",
+        "fontSize": 16,
+        "fontWeight": "normal",
+        "color": "#ffffff",
+        "align": "center",
+        "fontFamily": "Noto Sans SC"
+      },
+      {
+        "type": "text",
+        "x": 100,
+        "y": 1300,
+        "width": 800,
+        "text": "© 2026 NEXT INNO 科技组委会. All rights reserved.",
+        "fontSize": 12,
+        "fontWeight": "normal",
+        "color": "#4e5178",
+        "align": "center",
+        "fontFamily": "sans-serif"
+      }
+    ]
+  }
+}

@@ -1,0 +1,187 @@
+{
+  "case_name": "safety_month_2026",
+  "note": "2026年安全生产月宣传主题——政务/campaign类内容，验证组件感知规则最初触发场景",
+  "prompt": "2026年安全生产月宣传海报，主题是人人讲安全、个个会应急，红蓝配色，要有具体的安全提示要点",
+  "canvas_width": 1200,
+  "canvas_height": 1600,
+  "fonts": [
+    {
+      "label": "默认",
+      "value": "sans-serif"
+    },
+    {
+      "label": "思源黑体",
+      "value": "Noto Sans SC"
+    }
+  ],
+  "endpoint": "https://picflowlab.cn/api/ai/design/generate",
+  "model": "gemini-3-flash-preview",
+  "requested_at": "2026-08-20T15:40:00+08:00",
+  "duration_seconds": 115.150435,
+  "http_status": 200,
+  "response": {
+    "background": "#f4f7fc",
+    "elements": [
+      {
+        "type": "rect",
+        "x": 0,
+        "y": 0,
+        "width": 1200,
+        "height": 30,
+        "fill": "#d32f2f",
+        "rx": 0
+      },
+      {
+        "type": "text",
+        "x": 100,
+        "y": 100,
+        "width": 1000,
+        "text": "2026年安全生产月宣传",
+        "fontSize": 52,
+        "fontWeight": "bold",
+        "color": "#0d47a1",
+        "align": "center",
+        "fontFamily": "Noto Sans SC"
+      },
+      {
+        "type": "text",
+        "x": 100,
+        "y": 180,
+        "width": 1000,
+        "text": "人人讲安全 个个会应急",
+        "fontSize": 80,
+        "fontWeight": "bold",
+        "color": "#d32f2f",
+        "align": "center",
+        "fontFamily": "Noto Sans SC"
+      },
+      {
+        "type": "rect",
+        "x": 150,
+        "y": 850,
+        "width": 900,
+        "height": 4,
+        "fill": "#0d47a1",
+        "rx": 0
+      },
+      {
+        "type": "group",
+        "x": 200,
+        "y": 890,
+        "children": [],
+        "componentKind": "ribbon-title",
+        "componentData": [
+          {
+            "text": "日常安全守则",
+            "color": "#d32f2f",
+            "width": 240
+          }
+        ]
+      },
+      {
+        "type": "group",
+        "x": 200,
+        "y": 970,
+        "children": [],
+        "componentKind": "icon-list",
+        "componentData": [
+          {
+            "shape": "circle",
+            "color": "#d32f2f",
+            "icon": "1",
+            "label": "规范佩戴安全帽"
+          },
+          {
+            "shape": "circle",
+            "color": "#d32f2f",
+            "icon": "2",
+            "label": "严格遵守操作规程"
+          },
+          {
+            "shape": "circle",
+            "color": "#d32f2f",
+            "icon": "3",
+            "label": "定期排查安全隐患"
+          },
+          {
+            "shape": "circle",
+            "color": "#d32f2f",
+            "icon": "4",
+            "label": "保持消防通道畅通"
+          }
+        ]
+      },
+      {
+        "type": "group",
+        "x": 680,
+        "y": 890,
+        "children": [],
+        "componentKind": "ribbon-title",
+        "componentData": [
+          {
+            "text": "应急处置要点",
+            "color": "#0d47a1",
+            "width": 240
+          }
+        ]
+      },
+      {
+        "type": "group",
+        "x": 680,
+        "y": 970,
+        "children": [],
+        "componentKind": "icon-list",
+        "componentData": [
+          {
+            "shape": "square",
+            "color": "#0d47a1",
+            "icon": "✓",
+            "label": "遇火警速拨119"
+          },
+          {
+            "shape": "square",
+            "color": "#0d47a1",
+            "icon": "✓",
+            "label": "熟悉安全逃生路线"
+          },
+          {
+            "shape": "square",
+            "color": "#0d47a1",
+            "icon": "✓",
+            "label": "掌握灭火器用法"
+          },
+          {
+            "shape": "square",
+            "color": "#0d47a1",
+            "icon": "✓",
+            "label": "学会基础急救技能"
+          }
+        ]
+      },
+      {
+        "type": "text",
+        "x": 100,
+        "y": 1400,
+        "width": 1000,
+        "text": "安全第一 · 预防为主 · 综合治理",
+        "fontSize": 36,
+        "fontWeight": "bold",
+        "color": "#0d47a1",
+        "align": "center",
+        "fontFamily": "Noto Sans SC"
+      },
+      {
+        "type": "text",
+        "x": 100,
+        "y": 1470,
+        "width": 1000,
+        "text": "国务院安全生产委员会办公室 宣",
+        "fontSize": 24,
+        "fontWeight": "normal",
+        "color": "#555555",
+        "align": "center",
+        "fontFamily": "sans-serif"
+      }
+    ]
+  }
+}

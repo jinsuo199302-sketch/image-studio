@@ -1,0 +1,178 @@
+{
+  "case_name": "corporate_annual_gala_invitation",
+  "note": "企业年会邀请函——正式/邀请函类内容，验证跟安全生产月完全不同的领域",
+  "prompt": "企业年会邀请函，红金配色，正式典雅风格，需要包含活动时间地点、当晚流程环节（签到、致辞、晚宴、抽奖）",
+  "canvas_width": 1000,
+  "canvas_height": 1400,
+  "fonts": [
+    {
+      "label": "默认",
+      "value": "sans-serif"
+    },
+    {
+      "label": "思源黑体",
+      "value": "Noto Sans SC"
+    }
+  ],
+  "endpoint": "https://picflowlab.cn/api/ai/design/generate",
+  "model": "gemini-3-flash-preview",
+  "requested_at": "2026-08-20T16:00:00+08:00",
+  "duration_seconds": 44.094857,
+  "http_status": 200,
+  "response": {
+    "background": "#7D0A15",
+    "elements": [
+      {
+        "type": "text",
+        "x": 100,
+        "y": 480,
+        "width": 800,
+        "text": "诚挚邀请 · 2025年度盛典",
+        "fontSize": 28,
+        "fontWeight": "bold",
+        "color": "#E6C587",
+        "align": "center",
+        "fontFamily": "Noto Sans SC"
+      },
+      {
+        "type": "text",
+        "x": 100,
+        "y": 540,
+        "width": 800,
+        "text": "璀璨筑梦 聚力同行",
+        "fontSize": 56,
+        "fontWeight": "bold",
+        "color": "#F5E3BE",
+        "align": "center",
+        "fontFamily": "Noto Sans SC"
+      },
+      {
+        "type": "text",
+        "x": 150,
+        "y": 630,
+        "width": 700,
+        "text": "致各位合作伙伴与同仁：特此诚邀您出席我司举办的年度盛典，共同见证荣耀时刻，共叙未来美好篇章。",
+        "fontSize": 20,
+        "fontWeight": "normal",
+        "color": "#FFFFFF",
+        "align": "center",
+        "fontFamily": "sans-serif"
+      },
+      {
+        "type": "rect",
+        "x": 200,
+        "y": 710,
+        "width": 600,
+        "height": 2,
+        "fill": "#B38F4D",
+        "rx": 0
+      },
+      {
+        "type": "group",
+        "x": 390,
+        "y": 740,
+        "children": [],
+        "componentKind": "ribbon-title",
+        "componentData": [
+          {
+            "text": "晚宴盛典流程",
+            "color": "#B38F4D",
+            "width": 220
+          }
+        ]
+      },
+      {
+        "type": "group",
+        "x": 410,
+        "y": 800,
+        "children": [],
+        "componentKind": "icon-list",
+        "componentData": [
+          {
+            "shape": "circle",
+            "color": "#B38F4D",
+            "icon": "1",
+            "label": "17:30 嘉宾签到入场"
+          },
+          {
+            "shape": "circle",
+            "color": "#B38F4D",
+            "icon": "2",
+            "label": "18:30 领导致辞环节"
+          },
+          {
+            "shape": "circle",
+            "color": "#B38F4D",
+            "icon": "3",
+            "label": "19:00 盛大晚宴开幕"
+          },
+          {
+            "shape": "circle",
+            "color": "#B38F4D",
+            "icon": "4",
+            "label": "20:30 幸运抽奖互动"
+          }
+        ]
+      },
+      {
+        "type": "rect",
+        "x": 200,
+        "y": 980,
+        "width": 600,
+        "height": 2,
+        "fill": "#B38F4D",
+        "rx": 0
+      },
+      {
+        "type": "group",
+        "x": 390,
+        "y": 1010,
+        "children": [],
+        "componentKind": "ribbon-title",
+        "componentData": [
+          {
+            "text": "盛典时间地点",
+            "color": "#B38F4D",
+            "width": 220
+          }
+        ]
+      },
+      {
+        "type": "text",
+        "x": 150,
+        "y": 1080,
+        "width": 700,
+        "text": "时间：2025年01月18日 17:30 准时入场",
+        "fontSize": 20,
+        "fontWeight": "normal",
+        "color": "#F5E3BE",
+        "align": "center",
+        "fontFamily": "sans-serif"
+      },
+      {
+        "type": "text",
+        "x": 150,
+        "y": 1130,
+        "width": 700,
+        "text": "地点：北京·万豪大酒店 三楼大宴会厅",
+        "fontSize": 20,
+        "fontWeight": "normal",
+        "color": "#F5E3BE",
+        "align": "center",
+        "fontFamily": "sans-serif"
+      },
+      {
+        "type": "text",
+        "x": 150,
+        "y": 1220,
+        "width": 700,
+        "text": "期待您的光临 | Please RSVP by January 10",
+        "fontSize": 16,
+        "fontWeight": "normal",
+        "color": "#FFFFFF",
+        "align": "center",
+        "fontFamily": "sans-serif"
+      }
+    ]
+  }
+}

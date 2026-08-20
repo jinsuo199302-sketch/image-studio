@@ -1,0 +1,167 @@
+{
+  "case_name": "coffee_shop_promo_poster",
+  "note": "咖啡店促销海报——零售营销类内容，验证跟政务/企业场景完全不同的轻松语域",
+  "prompt": "咖啡店新品促销海报，温暖橙棕色调，需要列出本月主打饮品和优惠信息（买一送一、会员折扣、第二杯半价）",
+  "canvas_width": 1000,
+  "canvas_height": 1400,
+  "fonts": [
+    {
+      "label": "默认",
+      "value": "sans-serif"
+    },
+    {
+      "label": "思源黑体",
+      "value": "Noto Sans SC"
+    }
+  ],
+  "endpoint": "https://picflowlab.cn/api/ai/design/generate",
+  "model": "gemini-3-flash-preview",
+  "requested_at": "2026-08-20T16:00:00+08:00",
+  "duration_seconds": 74.372693,
+  "http_status": 200,
+  "response": {
+    "background": "#FDF8F4",
+    "elements": [
+      {
+        "type": "rect",
+        "x": 0,
+        "y": 0,
+        "width": 1000,
+        "height": 16,
+        "fill": "#D35400",
+        "rx": 0
+      },
+      {
+        "type": "text",
+        "x": 500,
+        "y": 90,
+        "width": 800,
+        "text": "☕ MELLOW COFFEE",
+        "fontSize": 26,
+        "fontWeight": "bold",
+        "color": "#8B4513",
+        "align": "center",
+        "fontFamily": "Noto Sans SC"
+      },
+      {
+        "type": "text",
+        "x": 500,
+        "y": 170,
+        "width": 800,
+        "text": "秋日特调 · 温暖上新",
+        "fontSize": 56,
+        "fontWeight": "bold",
+        "color": "#3E2723",
+        "align": "center",
+        "fontFamily": "Noto Sans SC"
+      },
+      {
+        "type": "text",
+        "x": 500,
+        "y": 230,
+        "width": 800,
+        "text": "用一杯暖咖，唤醒秋日的惬意时光",
+        "fontSize": 22,
+        "fontWeight": "normal",
+        "color": "#D35400",
+        "align": "center",
+        "fontFamily": "sans-serif"
+      },
+      {
+        "type": "rect",
+        "x": 100,
+        "y": 790,
+        "width": 800,
+        "height": 380,
+        "fill": "#F5EBE0",
+        "rx": 16
+      },
+      {
+        "type": "group",
+        "x": 390,
+        "y": 765,
+        "children": [],
+        "componentKind": "ribbon-title",
+        "componentData": [
+          {
+            "text": "限时福利",
+            "color": "#D35400",
+            "width": 220
+          }
+        ]
+      },
+      {
+        "type": "group",
+        "x": 380,
+        "y": 845,
+        "children": [],
+        "componentKind": "icon-list",
+        "componentData": [
+          {
+            "shape": "circle",
+            "color": "#D35400",
+            "icon": "1",
+            "label": "限时体验：买一送一"
+          },
+          {
+            "shape": "circle",
+            "color": "#D35400",
+            "icon": "2",
+            "label": "会员尊享：专属折扣"
+          },
+          {
+            "shape": "circle",
+            "color": "#D35400",
+            "icon": "3",
+            "label": "超值尝鲜：第二杯半价"
+          }
+        ]
+      },
+      {
+        "type": "text",
+        "x": 500,
+        "y": 1025,
+        "width": 700,
+        "text": "本月主打：桂花酒酿拿铁 ｜ 枫糖焦糖玛奇朵",
+        "fontSize": 22,
+        "fontWeight": "bold",
+        "color": "#3E2723",
+        "align": "center",
+        "fontFamily": "Noto Sans SC"
+      },
+      {
+        "type": "text",
+        "x": 500,
+        "y": 1075,
+        "width": 700,
+        "text": "*活动时间：即日起至本月末 | 仅限指定门店参与",
+        "fontSize": 16,
+        "fontWeight": "normal",
+        "color": "#8B7E74",
+        "align": "center",
+        "fontFamily": "sans-serif"
+      },
+      {
+        "type": "text",
+        "x": 500,
+        "y": 1280,
+        "width": 800,
+        "text": "地址：暖阳路88号咖啡工坊 | 电话：400-123-4567",
+        "fontSize": 18,
+        "fontWeight": "normal",
+        "color": "#8B7E74",
+        "align": "center",
+        "fontFamily": "sans-serif"
+      },
+      {
+        "type": "rect",
+        "x": 460,
+        "y": 1320,
+        "width": 80,
+        "height": 4,
+        "fill": "#D35400",
+        "rx": 2
+      }
+    ]
+  }
+}
