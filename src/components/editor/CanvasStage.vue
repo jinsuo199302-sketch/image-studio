@@ -948,6 +948,7 @@ const ICON_LIST_LABEL_W = 180
 interface RibbonTitleDatum {
   text: string
   color: string
+  width?: number
 }
 /** 单元素数组，不是裸对象——applyFieldEdit 双击编辑写回只认数组形状（跟其它组件保持一致） */
 const DEFAULT_RIBBON_TITLE: RibbonTitleDatum[] = [{ text: '标题文字', color: '#c1272d' }]
@@ -1383,22 +1384,23 @@ function buildIconList(data: IconListDatum[] = DEFAULT_ICON_LIST): FabricObject 
  * text 支持双击编辑，color 走 componentData 配置。*/
 function buildRibbonTitle(data: RibbonTitleDatum[] = DEFAULT_RIBBON_TITLE): FabricObject {
   const item = data[0] ?? DEFAULT_RIBBON_TITLE[0]
+  const w = item.width ?? RIBBON_W
   const dark = darkenHex(item.color, 45)
   const children: FabricObject[] = [
-    mkRect({ left: 0, top: 0, width: RIBBON_W, height: RIBBON_H, fill: item.color }),
+    mkRect({ left: 0, top: 0, width: w, height: RIBBON_H, fill: item.color }),
     new Path(`M 0 0 L ${-RIBBON_TAIL_W} ${RIBBON_H / 2} L 0 ${RIBBON_H} Z`, { fill: dark, originX: 'left', originY: 'top' }),
-    new Path(`M ${RIBBON_W} 0 L ${RIBBON_W + RIBBON_TAIL_W} ${RIBBON_H / 2} L ${RIBBON_W} ${RIBBON_H} Z`, {
+    new Path(`M ${w} 0 L ${w + RIBBON_TAIL_W} ${RIBBON_H / 2} L ${w} ${RIBBON_H} Z`, {
       fill: dark,
       originX: 'left',
       originY: 'top',
     }),
     tagDataChild(
-      mkText(item.text, { left: 0, top: RIBBON_H / 2 - 10, width: RIBBON_W, fontSize: 16, fontWeight: 'bold', fill: '#ffffff', textAlign: 'center' }),
+      mkText(item.text, { left: 0, top: RIBBON_H / 2 - 10, width: w, fontSize: 16, fontWeight: 'bold', fill: '#ffffff', textAlign: 'center' }),
       'text',
       0,
     ),
   ]
-  const group = new Group(children, { left: 0, top: 0, width: RIBBON_W, height: RIBBON_H, originX: 'left', originY: 'top' })
+  const group = new Group(children, { left: 0, top: 0, width: w, height: RIBBON_H, originX: 'left', originY: 'top' })
   return tagComponent(group, 'ribbon-title', data)
 }
 
