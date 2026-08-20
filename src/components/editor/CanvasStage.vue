@@ -930,7 +930,7 @@ const DEFAULT_STEP_LEGEND: LegendDatum[] = [
 ]
 
 interface IconListDatum {
-  shape: 'circle' | 'square'
+  shape: 'circle' | 'square' | 'diamond'
   color: string
   icon: string
   label: string
@@ -944,6 +944,25 @@ const DEFAULT_ICON_LIST: IconListDatum[] = [
 const ICON_LIST_ROW_H = 34
 const ICON_LIST_BADGE = 22
 const ICON_LIST_LABEL_W = 180
+
+interface RibbonTitleDatum {
+  text: string
+  color: string
+}
+/** 单元素数组，不是裸对象——applyFieldEdit 双击编辑写回只认数组形状（跟其它组件保持一致） */
+const DEFAULT_RIBBON_TITLE: RibbonTitleDatum[] = [{ text: '标题文字', color: '#c1272d' }]
+const RIBBON_W = 220
+const RIBBON_H = 32
+const RIBBON_TAIL_W = 9
+
+/** 十六进制颜色调暗，给丝带两端的小三角尾巴用一个更深的同色系，不用额外配色 */
+function darkenHex(hex: string, amount: number): string {
+  const n = parseInt(hex.slice(1), 16)
+  const r = Math.max(0, ((n >> 16) & 0xff) - amount)
+  const g = Math.max(0, ((n >> 8) & 0xff) - amount)
+  const b = Math.max(0, (n & 0xff) - amount)
+  return `#${((r << 16) + (g << 8) + b).toString(16).padStart(6, '0')}`
+}
 
 const DEFAULT_TABLE_ROWS: string[][] = [
   ['列1', '列2', '列3'],
@@ -1317,10 +1336,17 @@ function buildIconList(data: IconListDatum[] = DEFAULT_ICON_LIST): FabricObject 
   const children: FabricObject[] = []
   data.forEach((it, i) => {
     const y = i * ICON_LIST_ROW_H
+    const half = ICON_LIST_BADGE / 2
     const badge =
       it.shape === 'circle'
-        ? mkCircle({ left: 0, top: y, radius: ICON_LIST_BADGE / 2, fill: it.color })
-        : mkRect({ left: 0, top: y, width: ICON_LIST_BADGE, height: ICON_LIST_BADGE, fill: it.color, rx: 5, ry: 5 })
+        ? mkCircle({ left: 0, top: y, radius: half, fill: it.color })
+        : it.shape === 'diamond'
+          ? new Path(`M ${half} ${y} L ${ICON_LIST_BADGE} ${y + half} L ${half} ${y + ICON_LIST_BADGE} L 0 ${y + half} Z`, {
+              fill: it.color,
+              originX: 'left',
+              originY: 'top',
+            })
+          : mkRect({ left: 0, top: y, width: ICON_LIST_BADGE, height: ICON_LIST_BADGE, fill: it.color, rx: 5, ry: 5 })
     children.push(badge)
     children.push(
       mkText(it.icon, {
@@ -1352,9 +1378,40 @@ function buildIconList(data: IconListDatum[] = DEFAULT_ICON_LIST): FabricObject 
   return tagComponent(group, 'icon-list', data)
 }
 
-function addLegend(kind: 'swatch' | 'steps' | 'icon-list') {
+/** 丝带标题条：密排信息看板/展板类模板的分区小标题常用样式——通栏色块 + 两端小三角"旗尾"
+ * + 居中白色粗体文字，比之前"细色条+左对齐彩色文字"的写法更接近稿得快那类模板的视觉。
+ * text 支持双击编辑，color 走 componentData 配置。*/
+function buildRibbonTitle(data: RibbonTitleDatum[] = DEFAULT_RIBBON_TITLE): FabricObject {
+  const item = data[0] ?? DEFAULT_RIBBON_TITLE[0]
+  const dark = darkenHex(item.color, 45)
+  const children: FabricObject[] = [
+    mkRect({ left: 0, top: 0, width: RIBBON_W, height: RIBBON_H, fill: item.color }),
+    new Path(`M 0 0 L ${-RIBBON_TAIL_W} ${RIBBON_H / 2} L 0 ${RIBBON_H} Z`, { fill: dark, originX: 'left', originY: 'top' }),
+    new Path(`M ${RIBBON_W} 0 L ${RIBBON_W + RIBBON_TAIL_W} ${RIBBON_H / 2} L ${RIBBON_W} ${RIBBON_H} Z`, {
+      fill: dark,
+      originX: 'left',
+      originY: 'top',
+    }),
+    tagDataChild(
+      mkText(item.text, { left: 0, top: RIBBON_H / 2 - 10, width: RIBBON_W, fontSize: 16, fontWeight: 'bold', fill: '#ffffff', textAlign: 'center' }),
+      'text',
+      0,
+    ),
+  ]
+  const group = new Group(children, { left: 0, top: 0, width: RIBBON_W, height: RIBBON_H, originX: 'left', originY: 'top' })
+  return tagComponent(group, 'ribbon-title', data)
+}
+
+function addLegend(kind: 'swatch' | 'steps' | 'icon-list' | 'ribbon-title') {
   if (!canvas) return
-  const obj = kind === 'steps' ? buildStepFlow() : kind === 'icon-list' ? buildIconList() : buildSwatchLegend()
+  const obj =
+    kind === 'steps'
+      ? buildStepFlow()
+      : kind === 'icon-list'
+        ? buildIconList()
+        : kind === 'ribbon-title'
+          ? buildRibbonTitle()
+          : buildSwatchLegend()
   const w = obj.width ?? 160
   const h = obj.height ?? 80
   obj.set({ left: canvasSize.width / 2 - w / 2, top: canvasSize.height / 2 - h / 2 })
@@ -1778,6 +1835,7 @@ const COMPONENT_BUILDERS: Record<string, (data: never) => FabricObject> = {
   'swatch-legend': buildSwatchLegend as (data: never) => FabricObject,
   'step-legend': buildStepFlow as (data: never) => FabricObject,
   'icon-list': buildIconList as (data: never) => FabricObject,
+  'ribbon-title': buildRibbonTitle as (data: never) => FabricObject,
   'grid-table': buildGridTable as (data: never) => FabricObject,
   'borderless-table': buildBorderlessTable as (data: never) => FabricObject,
 }
