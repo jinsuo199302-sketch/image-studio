@@ -84,7 +84,7 @@ async def fetch_page_text(url: str, max_chars: int = MAX_SOURCE_CHARS) -> str | 
         return None
 
 
-def _normalize(text: str) -> str:
+def normalize_for_match(text: str) -> str:
     """校验引用时统一口径：全角转半角、折叠空白，不然一个全角逗号就会让明明对得上的引用判定失败。"""
     text = unicodedata.normalize("NFKC", text)
     return re.sub(r"\s+", "", text)
@@ -93,7 +93,7 @@ def _normalize(text: str) -> str:
 def verify_quote(quote: str, source_text: str) -> bool:
     if not quote or not source_text:
         return False
-    return _normalize(quote) in _normalize(source_text)
+    return normalize_for_match(quote) in normalize_for_match(source_text)
 
 
 def _build_extraction_prompt(topic: str, sources: list[dict]) -> tuple[str, str]:

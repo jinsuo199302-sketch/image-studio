@@ -17,6 +17,7 @@ from app.schemas import (
     ChatCompletionRequest,
     ContentResearchRequest,
     DesignGenerateRequest,
+    DesignLayoutRequest,
     ImageGenerationRequest,
     VideoGenerateRequest,
 )
@@ -204,6 +205,30 @@ def _nearest_image_size(width: float, height: float) -> str:
 
 _ICON_LIST_SHAPES = ("circle", "square", "diamond")
 _ICON_LIST_MAX_ITEMS = 12
+
+# design/generate 和 design/layout 两个接口共用的元素类型/组件 JSON 结构说明——两边的
+# system prompt 其余部分差别很大（一个是"帮我编内容"，一个是"内容都写好了，只排版"），
+# 但"可以用哪些元素类型、每种长什么样"这部分是同一套渲染管线，两边必须保持一致，
+# 抽出来是为了避免以后改了一边、另一边忘了同步改。
+_COMPONENT_JSON_SCHEMA_DOC = (
+    "可以使用四种元素类型：\n"
+    "- text：{type:'text', x, y, width, text, fontSize, fontWeight, color, align, fontFamily}\n"
+    "- image：{type:'image', x, y, width, height, imagePrompt}（用 imagePrompt 描述这张图应该是什么内容，不要写 src）\n"
+    "- rect：{type:'rect', x, y, width, height, fill, rx}\n"
+    "- group：结构化组件，两种 componentKind 可选，内容类型和它们匹配时优先用这个而不是堆多个 text：\n"
+    "  1. icon-list（编号/勾选/要点清单，3~9 条短句时用这个）：\n"
+    "     {type:'group', x, y, children:[], componentKind:'icon-list', componentData:[\n"
+    "       {shape:'circle'|'square'|'diamond', color:'#c8161d', icon:'1', label:'一句话要点（12字以内）'}, ...\n"
+    "     ]}\n"
+    "     componentData 是数组，每项一条列表内容；icon 通常是序号（'1'/'2'）或单字（'✓'/'✕'），最多2个字符；\n"
+    "     渲染时每项固定占 34px 高、180px 宽的文字区，label 太长会被截断，务必控制在 12 个汉字以内。\n"
+    "  2. ribbon-title（分区小标题，通栏色块+居中白字）：\n"
+    "     {type:'group', x, y, children:[], componentKind:'ribbon-title', componentData:[{text:'小标题（8字以内）', color:'#c8161d', width:220}]}\n"
+    "     componentData 必须是单元素数组（哪怕只有一项也要包成数组），不能是裸对象。\n"
+    "  什么时候该用 group 而不是普通 text：一段内容如果是"
+    "「3条以上并列的短要点」，用 icon-list；一段内容如果是「引出下面一块信息的小标题」，用 ribbon-title；"
+    "长段落说明文字、单独一句话的大标题，仍然用普通 text，不要什么都往组件里塞。\n"
+)
 
 
 def _sanitize_icon_list_data(raw: object) -> list[dict] | None:
@@ -402,24 +427,8 @@ async def design_generate(
 
     system_prompt = (
         f"你是专业的平面设计师。请为一个宽 {payload.canvas_width}px、高 {payload.canvas_height}px 的画布设计一版海报/宣传图版式。\n"
-        "可以使用四种元素类型：\n"
-        "- text：{type:'text', x, y, width, text, fontSize, fontWeight, color, align, fontFamily}\n"
-        "- image：{type:'image', x, y, width, height, imagePrompt}（用 imagePrompt 描述这张图应该是什么内容，不要写 src）\n"
-        "- rect：{type:'rect', x, y, width, height, fill, rx}\n"
-        "- group：结构化组件，两种 componentKind 可选，内容类型和它们匹配时优先用这个而不是堆多个 text：\n"
-        "  1. icon-list（编号/勾选/要点清单，3~9 条短句时用这个）：\n"
-        "     {type:'group', x, y, children:[], componentKind:'icon-list', componentData:[\n"
-        "       {shape:'circle'|'square'|'diamond', color:'#c8161d', icon:'1', label:'一句话要点（12字以内）'}, ...\n"
-        "     ]}\n"
-        "     componentData 是数组，每项一条列表内容；icon 通常是序号（'1'/'2'）或单字（'✓'/'✕'），最多2个字符；\n"
-        "     渲染时每项固定占 34px 高、180px 宽的文字区，label 太长会被截断，务必控制在 12 个汉字以内。\n"
-        "  2. ribbon-title（分区小标题，通栏色块+居中白字）：\n"
-        "     {type:'group', x, y, children:[], componentKind:'ribbon-title', componentData:[{text:'小标题（8字以内）', color:'#c8161d', width:220}]}\n"
-        "     componentData 必须是单元素数组（哪怕只有一项也要包成数组），不能是裸对象。\n"
-        "  什么时候该用 group 而不是普通 text：一段内容如果是"
-        "「3条以上并列的短要点」，用 icon-list；一段内容如果是「引出下面一块信息的小标题」，用 ribbon-title；"
-        "长段落说明文字、单独一句话的大标题，仍然用普通 text，不要什么都往组件里塞。\n"
-        f"可选字体（fontFamily 必须从下面列表里原样选一个，不要自己编）：\n{font_list_text}\n\n"
+        + _COMPONENT_JSON_SCHEMA_DOC
+        + f"可选字体（fontFamily 必须从下面列表里原样选一个，不要自己编）：\n{font_list_text}\n\n"
         "只返回一个严格的 JSON 对象，不要 markdown 代码块，不要任何多余说明文字，形如：\n"
         '{"background": "#ffffff", "elements": [ ... ]}\n'
         "要求：elements 数量 4~12 个（一个 group 算一个元素，不受它内部 componentData 条数影响）；"
@@ -498,6 +507,116 @@ async def design_generate(
             final_elements.append(el)
 
     return {"background": background, "elements": final_elements}
+
+
+def _build_layout_prompt(canvas_width: int, canvas_height: int, blocks: list[str] | None, raw_text: str | None) -> tuple[str, str]:
+    system_prompt = (
+        "你是专业的排版设计师。下面是用户已经写好的正文内容——这是最重要的规则：\n"
+        "你绝对不能改写、删减、替换、精简、润色、翻译用户提供的原文任何一个字，你的任务只有排版，不是写作。\n\n"
+        f"具体要做两件事，画布宽 {canvas_width}px、高 {canvas_height}px：\n"
+        "1. 判断内容在语义上怎么拆成几个逻辑段落（如果输入已经按段落给出，直接按给定的分段来，不要重新合并/拆分）。"
+        "每段归类成以下几种之一：「标题」（一句话，通常最短最醒目）、「要点列表」（3条以上并列的短句/短语）、"
+        "「正文说明」（一段连续叙述）。\n"
+        "2. 给每个逻辑段落分配版面位置和展示方式：\n"
+        + _COMPONENT_JSON_SCHEMA_DOC
+        + "\n再次强调最重要的规则：\n"
+        "- 每个元素的 text/label 字段的内容，必须是从用户原文里逐字截取的连续一段，不能是你概括/重写/翻译/精简后的版本，一个字都不能改。\n"
+        "- 唯一允许的操作是“在原文的自然断句处切开”（按标点、按换行、按逻辑段落切分成多段），切分内部不能改字、加字、减字。\n"
+        "- 如果某一段原文太长装不进一个元素，可以原样拆成前后衔接的多个元素，但拼起来必须跟原文一字不差，不能省略中间内容、不能概括。\n"
+        "- 不需要凭空加装饰性文案（比如联系方式、口号）——原文没有的内容，版面上也不应该出现。\n"
+        "只返回一个严格的 JSON 对象，不要 markdown 代码块，不要任何多余说明文字，形如：\n"
+        '{"background": "#ffffff", "elements": [ ... ]}\n'
+    )
+    if blocks:
+        content_desc = "\n".join(f"[{i}] {b}" for i, b in enumerate(blocks))
+        user_prompt = f"用户已经把内容分好段了，请分别给每段选合适的展示方式和位置，不要合并/拆分/改写这些段落原文：\n\n{content_desc}"
+    else:
+        user_prompt = f"用户原文（还没有分段，请你先按语义切分，再分别排版，原文一个字都不能改）：\n\n{raw_text}"
+    return system_prompt, user_prompt
+
+
+def _check_verbatim_fidelity(elements: list[dict], source_text: str) -> dict:
+    """核对排版结果里每一段文字，是不是真的从用户原文逐字截取的，不是模型概括/改写过的版本。
+    不能只在 prompt 里嘱咐一句就信——这条经验是从联网搜索那条链路的 quote 校验机制照搬过来的：
+    模型自己说"我没有改写"不可信，字符串层面能校验的东西就不要指望模型自觉。
+    允许兜底截断留下的结尾"…"不算破坏逐字性（那是 _sanitize_design_elements 自己加的安全网，不是模型编的）。"""
+    normalized_source = content_research.normalize_for_match(source_text)
+    checks: list[dict] = []
+
+    def check_one(kind: str, text: str) -> None:
+        candidate = text[:-1] if text.endswith("…") else text
+        verbatim = bool(candidate) and content_research.normalize_for_match(candidate) in normalized_source
+        checks.append({"type": kind, "text": text, "verbatim": verbatim})
+
+    for el in elements:
+        if el["type"] == "text":
+            check_one("text", el["text"])
+        elif el["type"] == "group":
+            if el.get("componentKind") == "ribbon-title":
+                for item in el.get("componentData") or []:
+                    check_one("ribbon-title", str(item.get("text", "")))
+            elif el.get("componentKind") == "icon-list":
+                for item in el.get("componentData") or []:
+                    check_one("icon-list", str(item.get("label", "")))
+
+    verbatim_count = sum(1 for c in checks if c["verbatim"])
+    return {
+        "total": len(checks),
+        "verbatim_count": verbatim_count,
+        "all_verbatim": verbatim_count == len(checks) if checks else True,
+        "checks": checks,
+    }
+
+
+@router.post("/design/layout")
+async def design_layout(
+    payload: DesignLayoutRequest,
+    _user: models.User = Depends(auth.get_current_user),
+):
+    """跟 /design/generate 是两条独立的链路，不共用 system prompt——那边是"帮我编内容"，
+    这边是"内容都写好了，只排版、只选组件"。逐字校验见 _check_verbatim_fidelity。"""
+    _require_openlux()
+
+    blocks = [b.strip() for b in (payload.blocks or []) if b and b.strip()]
+    raw_text = (payload.raw_text or "").strip()
+    if not blocks and not raw_text:
+        raise HTTPException(status_code=400, detail="raw_text 和 blocks 至少要提供一个")
+    source_text = "".join(blocks) if blocks else raw_text
+
+    system_prompt, user_prompt = _build_layout_prompt(
+        payload.canvas_width, payload.canvas_height, blocks or None, raw_text or None
+    )
+
+    async with httpx.AsyncClient(timeout=90) as client:
+        chat_res = await client.post(
+            f"{OPENLUX_BASE_URL}/chat/completions",
+            headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
+            json={
+                "model": "gemini-3-flash-preview",
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+            },
+        )
+    if chat_res.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"排版接口请求失败：{chat_res.status_code} {chat_res.text}")
+
+    content = chat_res.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+    match = re.search(r"\{[\s\S]*\}", content)
+    try:
+        parsed = json.loads(match.group(0) if match else content)
+    except (json.JSONDecodeError, AttributeError):
+        raise HTTPException(status_code=502, detail="排版结果解析失败，请重试")
+    if not isinstance(parsed, dict):
+        raise HTTPException(status_code=502, detail="排版结果解析失败，请重试")
+
+    allowed_fonts = [f.value for f in payload.fonts] or ["sans-serif"]
+    background = str(parsed.get("background") or "#ffffff")
+    elements = _sanitize_design_elements(parsed.get("elements"), payload.canvas_width, payload.canvas_height, allowed_fonts)
+    fidelity = _check_verbatim_fidelity(elements, source_text)
+
+    return {"background": background, "elements": elements, "fidelity": fidelity}
 
 
 @router.post("/content/research")

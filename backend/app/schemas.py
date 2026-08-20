@@ -126,3 +126,13 @@ class DesignGenerateRequest(BaseModel):
 
 class ContentResearchRequest(BaseModel):
     topic: str
+
+
+class DesignLayoutRequest(BaseModel):
+    """跟 DesignGenerateRequest 是两码事——这个是用户已经写好正文的场景，AI 只负责排版/选组件，
+    不负责编内容。prompt 类接口（"设计一版海报，主题是..."）走的还是 DesignGenerateRequest。"""
+    canvas_width: int
+    canvas_height: int
+    fonts: List[FontOption]
+    raw_text: Optional[str] = None
+    blocks: Optional[List[str]] = None
