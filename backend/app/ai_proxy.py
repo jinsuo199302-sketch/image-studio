@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import json
+import math
 import re
 import subprocess
 import sys
@@ -11,6 +12,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from app import auth, models
 from app import content_research
 from app.config import OPENLUX_API_KEY, OPENLUX_BASE_URL, VIDU_API_KEY, VIDU_BASE_URL
+from app.design_tokens import COMPONENT_SIZE
 from app.schemas import (
     ChatCompletionRequest,
     ContentResearchRequest,
@@ -242,6 +244,69 @@ def _sanitize_ribbon_title_data(raw: object) -> list[dict] | None:
     return [item]
 
 
+_TEXT_LINE_HEIGHT_RATIO = 1.16  # 跟 Fabric Textbox 的默认 lineHeight 保持一致，不然估算跟实际渲染对不上
+_TEXT_MAX_LINES = 8  # 单个文字元素允许撑到的最大行数，超过就截断——防止极端情况下的连锁下推把画布挤爆
+
+
+def _chars_per_line(width: float, font_size: float) -> int:
+    return max(1, int(width / (font_size * 1.02)))
+
+
+def _estimate_text_lines(text: str, width: float, font_size: float) -> int:
+    if not text:
+        return 1
+    return max(1, math.ceil(len(text) / _chars_per_line(width, font_size)))
+
+
+def _estimate_text_height(text: str, width: float, font_size: float) -> float:
+    return _estimate_text_lines(text, width, font_size) * font_size * _TEXT_LINE_HEIGHT_RATIO
+
+
+def _truncate_to_max_lines(text: str, width: float, font_size: float) -> str:
+    """兜底：AI 给的文字量跟它给的框完全不匹配（比如一大段话塞进一个小框）时，
+    与其让它在渲染时无限撑高、把下面所有元素连环顶飞，不如硬截断加省略号。
+    正常情况下走的是 _reflow_avoid_overlap 顺势下推，不会碰到这个分支。"""
+    if _estimate_text_lines(text, width, font_size) <= _TEXT_MAX_LINES:
+        return text
+    max_chars = max(1, _chars_per_line(width, font_size) * _TEXT_MAX_LINES - 1)
+    return text[:max_chars].rstrip() + "…"
+
+
+def _element_width(el: dict) -> float:
+    if el["type"] in ("text", "rect", "image"):
+        return el["width"]
+    if el["type"] == "group":
+        if el.get("componentKind") == "ribbon-title":
+            data = el.get("componentData") or [{}]
+            return data[0].get("width", COMPONENT_SIZE["ribbon"]["defaultW"])
+        if el.get("componentKind") == "icon-list":
+            return COMPONENT_SIZE["iconList"]["badge"] + 10 + COMPONENT_SIZE["iconList"]["labelW"]
+    return 200
+
+
+def _ranges_overlap(a0: float, a1: float, b0: float, b1: float) -> bool:
+    return a0 < b1 and b0 < a1
+
+
+def _reflow_avoid_overlap(elements: list[dict]) -> None:
+    """原地调整：AI 给文字元素的坐标是"凭感觉"定的，没有真的算过换行后会撑多高。
+    Fabric 的 Textbox 不会裁切溢出内容，只会把自己撑高，直接压到下一个元素身上。
+    这里按估算高度，把跟它横向范围有重叠（真正会被压到的，不是并排的另一栏）的
+    后续元素顺势下移，避免遮挡/重叠。按数组顺序单趟扫描，靠"后面元素用的是已经
+    调整过的 y"自然实现连锁下推，不需要额外的多轮迭代。"""
+    for i, el in enumerate(elements):
+        if el["type"] != "text":
+            continue
+        est_bottom = el["y"] + _estimate_text_height(el["text"], el["width"], el["fontSize"])
+        x0, x1 = el["x"], el["x"] + el["width"]
+        for other in elements[i + 1 :]:
+            ox0, ox1 = other["x"], other["x"] + _element_width(other)
+            if not _ranges_overlap(x0, x1, ox0, ox1):
+                continue
+            if other["y"] < est_bottom:
+                other["y"] = int(est_bottom) + 4
+
+
 def _sanitize_design_elements(
     raw_elements: object, canvas_width: int, canvas_height: int, allowed_fonts: list[str]
 ) -> list[dict]:
@@ -275,6 +340,7 @@ def _sanitize_design_elements(
             }
             if font_family:
                 item["fontFamily"] = font_family
+            item["text"] = _truncate_to_max_lines(item["text"], item["width"], item["fontSize"])
             sanitized.append(item)
         elif el["type"] == "rect":
             height = int(_clamp_num(el.get("height"), 1, canvas_height, min(200, canvas_height)))
@@ -315,6 +381,7 @@ def _sanitize_design_elements(
             if data is None:
                 continue
             sanitized.append({"type": "group", "x": x, "y": y, "children": [], "componentKind": kind, "componentData": data})
+    _reflow_avoid_overlap(sanitized)
     return sanitized
 
 
