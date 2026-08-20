@@ -91,6 +91,10 @@ class ChatMessage(BaseModel):
 class ChatCompletionRequest(BaseModel):
     model: str = "gemini-3-flash-preview"
     messages: List[ChatMessage]
+    # 透传给 OPENLUX/底层模型的可选工具声明（比如 Gemini 原生的 Search grounding：
+    # [{"google_search": {}}]）——不设置就完全不影响现有行为，只有联网检索这类需要真实
+    # 引用来源的场景才会用到。
+    tools: Optional[List[dict]] = None
 
 
 class ImageGenerationRequest(BaseModel):

@@ -144,7 +144,7 @@ async def chat_completions(
         f"{OPENLUX_BASE_URL}/chat/completions",
         timeout=60,
         headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
-        json=payload.model_dump(),
+        json=payload.model_dump(exclude_none=True),
     )
     if res.status_code >= 400:
         raise HTTPException(status_code=502, detail=f"{res.status_code} {res.text}")
