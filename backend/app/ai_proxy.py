@@ -33,6 +33,11 @@ _ASPECT_SIZES: list[tuple[str, int, int]] = [
     ("16:9", 1024, 576),
 ]
 _DESIGN_MAX_ELEMENTS = 12
+# /design/layout 的元素上限比 /design/generate 高不少——那边是"AI 自己编内容"，
+# 丢一个装饰性元素问题不大；这边是"用户原文一个字都不能丢"，同一份内容切分成的
+# text/icon-list 项数天然就比一版凭空创作的海报多，加上 AI 还会自己加几个装饰性
+# 色块/图片，12 个很容易在内容还没排完之前就被截断（实测过：真的截断过一次）。
+_LAYOUT_MAX_ELEMENTS = 24
 
 
 def _require_openlux():
@@ -333,12 +338,16 @@ def _reflow_avoid_overlap(elements: list[dict]) -> None:
 
 
 def _sanitize_design_elements(
-    raw_elements: object, canvas_width: int, canvas_height: int, allowed_fonts: list[str]
+    raw_elements: object,
+    canvas_width: int,
+    canvas_height: int,
+    allowed_fonts: list[str],
+    max_elements: int = _DESIGN_MAX_ELEMENTS,
 ) -> list[dict]:
     if not isinstance(raw_elements, list):
         return []
     sanitized: list[dict] = []
-    for el in raw_elements[:_DESIGN_MAX_ELEMENTS]:
+    for el in raw_elements[:max_elements]:
         if not isinstance(el, dict) or el.get("type") not in ("text", "image", "rect", "group"):
             continue
         x = int(_clamp_num(el.get("x"), 0, canvas_width, 0))
@@ -524,6 +533,7 @@ def _build_layout_prompt(canvas_width: int, canvas_height: int, blocks: list[str
         "- 唯一允许的操作是“在原文的自然断句处切开”（按标点、按换行、按逻辑段落切分成多段），切分内部不能改字、加字、减字。\n"
         "- 如果某一段原文太长装不进一个元素，可以原样拆成前后衔接的多个元素，但拼起来必须跟原文一字不差，不能省略中间内容、不能概括。\n"
         "- 不需要凭空加装饰性文案（比如联系方式、口号）——原文没有的内容，版面上也不应该出现。\n"
+        "- 内容完整性优先于版面美观：宁可少加几个纯装饰用的色块/配图，也不能因为元素数量超限把用户原文的某一段挤丢。\n"
         "只返回一个严格的 JSON 对象，不要 markdown 代码块，不要任何多余说明文字，形如：\n"
         '{"background": "#ffffff", "elements": [ ... ]}\n'
     )
@@ -613,7 +623,9 @@ async def design_layout(
 
     allowed_fonts = [f.value for f in payload.fonts] or ["sans-serif"]
     background = str(parsed.get("background") or "#ffffff")
-    elements = _sanitize_design_elements(parsed.get("elements"), payload.canvas_width, payload.canvas_height, allowed_fonts)
+    elements = _sanitize_design_elements(
+        parsed.get("elements"), payload.canvas_width, payload.canvas_height, allowed_fonts, max_elements=_LAYOUT_MAX_ELEMENTS
+    )
     fidelity = _check_verbatim_fidelity(elements, source_text)
 
     return {"background": background, "elements": elements, "fidelity": fidelity}
