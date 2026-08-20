@@ -528,6 +528,7 @@ def _build_layout_prompt(canvas_width: int, canvas_height: int, blocks: list[str
         "「正文说明」（一段连续叙述）。\n"
         "2. 给每个逻辑段落分配版面位置和展示方式：\n"
         + _COMPONENT_JSON_SCHEMA_DOC
+        + "这个模式暂不支持自动配图——不要生成 type:'image' 的元素，只用 text/rect/group 这三种。\n"
         + "\n再次强调最重要的规则：\n"
         "- 每个元素的 text/label 字段的内容，必须是从用户原文里逐字截取的连续一段，不能是你概括/重写/翻译/精简后的版本，一个字都不能改。\n"
         "- 唯一允许的操作是“在原文的自然断句处切开”（按标点、按换行、按逻辑段落切分成多段），切分内部不能改字、加字、减字。\n"
@@ -626,6 +627,9 @@ async def design_layout(
     elements = _sanitize_design_elements(
         parsed.get("elements"), payload.canvas_width, payload.canvas_height, allowed_fonts, max_elements=_LAYOUT_MAX_ELEMENTS
     )
+    # 双保险：prompt 里已经说了这个模式不生成 image 元素，但指令不可靠（这次会话已经在别的地方
+    # 踩过这个坑），万一模型还是给了，这里直接过滤掉——总比留一个没有 src 的残缺元素在版面里好。
+    elements = [el for el in elements if el["type"] != "image"]
     fidelity = _check_verbatim_fidelity(elements, source_text)
 
     return {"background": background, "elements": elements, "fidelity": fidelity}
