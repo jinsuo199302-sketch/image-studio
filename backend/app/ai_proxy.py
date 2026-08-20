@@ -9,9 +9,11 @@ import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from app import auth, models
+from app import content_research
 from app.config import OPENLUX_API_KEY, OPENLUX_BASE_URL, VIDU_API_KEY, VIDU_BASE_URL
 from app.schemas import (
     ChatCompletionRequest,
+    ContentResearchRequest,
     DesignGenerateRequest,
     ImageGenerationRequest,
     VideoGenerateRequest,
@@ -429,3 +431,23 @@ async def design_generate(
             final_elements.append(el)
 
     return {"background": background, "elements": final_elements}
+
+
+@router.post("/content/research")
+async def content_research_endpoint(
+    payload: ContentResearchRequest,
+    _user: models.User = Depends(auth.get_current_user),
+):
+    """联网搜索一个主题 -> 抓取排名靠前页面的全文 -> 喂给 gemini-3-flash-preview 提炼成
+    {claim, quote, source_url, site_name, confidence} 列表。confidence 不是模型自报的分数，
+    是拿 quote 去抓到的原文里做字符串校验算出来的（verified/extracted_unverified/not_found，
+    具体规则见 content_research.py 顶部注释）。"""
+    topic = payload.topic.strip()
+    if not topic:
+        raise HTTPException(status_code=400, detail="topic 不能为空")
+    try:
+        return await content_research.research_topic(topic)
+    except content_research.ResearchUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))

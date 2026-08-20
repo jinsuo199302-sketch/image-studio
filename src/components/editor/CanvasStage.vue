@@ -4,6 +4,8 @@ import { Canvas, Circle, FabricImage, Gradient, Group, IText, Line, Path, Rect, 
 import type { CanvasElement, GroupChildElement, Template } from '../../data/templates'
 import { NEUTRAL, STATUS, CHART_PALETTE, CIVIC_THEME, COMPONENT_SIZE } from '../../theme/tokens'
 
+type TextSource = { url: string; siteName: string; confidence: 'verified' | 'extracted_unverified' }
+
 const props = defineProps<{ template: Template }>()
 const emit = defineEmits<{
   (e: 'selection', payload: SelectionInfo | null): void
@@ -50,6 +52,8 @@ export interface SelectionInfo {
   vertical?: boolean
   text?: string
   src?: string
+  /** 只有联网搜索提炼出来的文字才有，选中面板据此显示"来源"这一行 */
+  source?: TextSource
 }
 
 const canvasEl = ref<HTMLCanvasElement>()
@@ -66,7 +70,7 @@ let restoring = false
 let historyTimer: ReturnType<typeof setTimeout> | null = null
 /** 撤销/重做走 Fabric 自己的 canvas.toObject()/loadFromJSON()，默认不会带上我们自己塞在实例上的自定义属性——
  * 显式声明这两个才能让"双击编辑"这个组件标记在撤销/重做之后还活着 */
-const HISTORY_EXTRA_PROPS = ['_componentKind', '_componentData']
+const HISTORY_EXTRA_PROPS = ['_componentKind', '_componentData', '_source']
 
 function pushHistory() {
   if (!canvas || restoring) return
@@ -240,6 +244,9 @@ async function applyElements(
         })
       }
       const text = new Textbox(el.text, textOpts)
+      if (el.source) {
+        ;(text as unknown as { _source?: TextSource })._source = el.source
+      }
       canvas.add(text)
     } else if (el.type === 'rect') {
       const rect = new Rect({
@@ -357,6 +364,7 @@ function describeSelection(obj: FabricObject | undefined): SelectionInfo | null 
       locked: !!obj.lockMovementX,
       vertical: !!(obj as unknown as { isVerticalText?: boolean }).isVerticalText,
       text: obj.text ?? '',
+      source: (obj as unknown as { _source?: TextSource })._source,
     }
   }
   if (obj instanceof FabricImage)

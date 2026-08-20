@@ -39,3 +39,8 @@ OPENLUX_API_KEY = os.environ.get("OPENLUX_API_KEY", "")
 # 如果视频用的是不同账号/域名，用 VIDU_BASE_URL / VIDU_API_KEY 单独覆盖
 VIDU_BASE_URL = os.environ.get("VIDU_BASE_URL") or _origin(OPENLUX_BASE_URL)
 VIDU_API_KEY = os.environ.get("VIDU_API_KEY") or OPENLUX_API_KEY
+
+# 博查 Web Search API——联网搜索→提炼内容→写 source 字段这条链路用，
+# 跟生图/文字生成是完全独立的账号体系，不共用 openlux 的 key
+BOCHA_BASE_URL = os.environ.get("BOCHA_BASE_URL", "https://api.bochaai.com/v1")
+BOCHA_API_KEY = os.environ.get("BOCHA_API_KEY", "")

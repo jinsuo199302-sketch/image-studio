@@ -197,6 +197,28 @@ function pickWarp(kind: WarpKind) {
 
     <div class="min-h-0 flex-1 overflow-y-auto p-3">
       <template v-if="selection.type === 'text'">
+        <div
+          v-if="selection.source"
+          class="mb-3 flex items-start gap-1.5 rounded-md border px-2.5 py-2 text-xs"
+          :class="selection.source.confidence === 'verified' ? 'border-green-200 bg-green-50 text-green-700' : 'border-amber-200 bg-amber-50 text-amber-700'"
+        >
+          <span class="mt-px shrink-0">{{ selection.source.confidence === 'verified' ? '✓' : '⚠' }}</span>
+          <div class="min-w-0">
+            <p class="font-medium">
+              来源{{ selection.source.confidence === 'verified' ? '已核实' : '未核实，建议人工核对' }}
+            </p>
+            <a
+              :href="selection.source.url"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="block truncate underline decoration-dotted underline-offset-2 hover:opacity-80"
+              :title="selection.source.url"
+            >
+              {{ selection.source.siteName || selection.source.url }}
+            </a>
+          </div>
+        </div>
+
         <p class="mb-2 text-xs font-medium text-gray-600">字体</p>
         <el-select
           :model-value="selection.fontFamily"

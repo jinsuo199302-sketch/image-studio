@@ -16,6 +16,12 @@ export type CanvasElement =
       shadowBlur?: number
       shadowOffsetX?: number
       shadowOffsetY?: number
+      /** 联网搜索提炼出的内容才有——来源链接 + 校验状态，编辑器选中面板会展示，不影响渲染 */
+      source?: {
+        url: string
+        siteName: string
+        confidence: 'verified' | 'extracted_unverified'
+      }
     }
   | {
       type: 'image'

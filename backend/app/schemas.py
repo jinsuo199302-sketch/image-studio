@@ -122,3 +122,7 @@ class DesignGenerateRequest(BaseModel):
     canvas_width: int
     canvas_height: int
     fonts: List[FontOption]
+
+
+class ContentResearchRequest(BaseModel):
+    topic: str
