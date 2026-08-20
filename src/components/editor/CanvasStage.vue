@@ -2,6 +2,7 @@
 import { nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { Canvas, Circle, FabricImage, Gradient, Group, IText, Line, Path, Rect, Shadow, Textbox, filters, type FabricObject } from 'fabric'
 import type { CanvasElement, GroupChildElement, Template } from '../../data/templates'
+import { NEUTRAL, STATUS, CHART_PALETTE, CIVIC_THEME, COMPONENT_SIZE } from '../../theme/tokens'
 
 const props = defineProps<{ template: Template }>()
 const emit = defineEmits<{
@@ -925,22 +926,22 @@ interface LegendDatum {
 }
 
 const CHART_DATA: ChartDatum[] = [
-  { label: 'A', value: 60, color: '#8b5cf6' },
-  { label: 'B', value: 90, color: '#ec4899' },
-  { label: 'C', value: 45, color: '#38bdf8' },
-  { label: 'D', value: 75, color: '#22c55e' },
+  { label: 'A', value: 60, color: CHART_PALETTE[0] },
+  { label: 'B', value: 90, color: CHART_PALETTE[1] },
+  { label: 'C', value: 45, color: CHART_PALETTE[2] },
+  { label: 'D', value: 75, color: CHART_PALETTE[3] },
 ]
 
 const DEFAULT_SWATCH_LEGEND: LegendDatum[] = [
-  { label: '系列一', color: '#8b5cf6' },
-  { label: '系列二', color: '#ec4899' },
-  { label: '系列三', color: '#38bdf8' },
+  { label: '系列一', color: CHART_PALETTE[0] },
+  { label: '系列二', color: CHART_PALETTE[1] },
+  { label: '系列三', color: CHART_PALETTE[2] },
 ]
 
 const DEFAULT_STEP_LEGEND: LegendDatum[] = [
-  { label: '第一步', color: '#8b5cf6' },
-  { label: '第二步', color: '#ec4899' },
-  { label: '第三步', color: '#22c55e' },
+  { label: '第一步', color: CHART_PALETTE[0] },
+  { label: '第二步', color: CHART_PALETTE[1] },
+  { label: '第三步', color: CHART_PALETTE[3] },
 ]
 
 interface IconListDatum {
@@ -950,14 +951,14 @@ interface IconListDatum {
   label: string
 }
 const DEFAULT_ICON_LIST: IconListDatum[] = [
-  { shape: 'circle', color: '#c1272d', icon: '1', label: '第一条说明文字' },
-  { shape: 'circle', color: '#c1272d', icon: '2', label: '第二条说明文字' },
-  { shape: 'circle', color: '#16a34a', icon: '✓', label: '第三条说明文字' },
-  { shape: 'circle', color: '#dc2626', icon: '✕', label: '第四条说明文字' },
+  { shape: 'circle', color: CIVIC_THEME.red, icon: '1', label: '第一条说明文字' },
+  { shape: 'circle', color: CIVIC_THEME.red, icon: '2', label: '第二条说明文字' },
+  { shape: 'circle', color: STATUS.success, icon: '✓', label: '第三条说明文字' },
+  { shape: 'circle', color: STATUS.danger, icon: '✕', label: '第四条说明文字' },
 ]
-const ICON_LIST_ROW_H = 34
-const ICON_LIST_BADGE = 22
-const ICON_LIST_LABEL_W = 180
+const ICON_LIST_ROW_H = COMPONENT_SIZE.iconList.rowH
+const ICON_LIST_BADGE = COMPONENT_SIZE.iconList.badge
+const ICON_LIST_LABEL_W = COMPONENT_SIZE.iconList.labelW
 
 interface RibbonTitleDatum {
   text: string
@@ -965,10 +966,10 @@ interface RibbonTitleDatum {
   width?: number
 }
 /** 单元素数组，不是裸对象——applyFieldEdit 双击编辑写回只认数组形状（跟其它组件保持一致） */
-const DEFAULT_RIBBON_TITLE: RibbonTitleDatum[] = [{ text: '标题文字', color: '#c1272d' }]
-const RIBBON_W = 220
-const RIBBON_H = 32
-const RIBBON_TAIL_W = 9
+const DEFAULT_RIBBON_TITLE: RibbonTitleDatum[] = [{ text: '标题文字', color: CIVIC_THEME.red }]
+const RIBBON_W = COMPONENT_SIZE.ribbon.defaultW
+const RIBBON_H = COMPONENT_SIZE.ribbon.height
+const RIBBON_TAIL_W = COMPONENT_SIZE.ribbon.tailW
 
 /** 十六进制颜色调暗，给丝带两端的小三角尾巴用一个更深的同色系，不用额外配色 */
 function darkenHex(hex: string, amount: number): string {
@@ -984,8 +985,8 @@ const DEFAULT_TABLE_ROWS: string[][] = [
   ['内容1-1', '内容1-2', '内容1-3'],
   ['内容2-1', '内容2-2', '内容2-3'],
 ]
-const TABLE_CELL_W = 90
-const TABLE_CELL_H = 36
+const TABLE_CELL_W = COMPONENT_SIZE.table.cellW
+const TABLE_CELL_H = COMPONENT_SIZE.table.cellH
 
 /** 给图表/图例/表格里"承载数据"的子元素打标记，双击命中测试时用来反查该改 _componentData 里的哪一项 */
 function tagDataChild<T extends FabricObject>(obj: T, field: string, index: number): T {
@@ -1370,13 +1371,13 @@ function buildIconList(data: IconListDatum[] = DEFAULT_ICON_LIST): FabricObject 
         width: ICON_LIST_BADGE,
         fontSize: 12,
         fontWeight: 'bold',
-        fill: '#ffffff',
+        fill: NEUTRAL.white,
         textAlign: 'center',
       }),
     )
     children.push(
       tagDataChild(
-        mkText(it.label, { left: ICON_LIST_BADGE + 10, top: y + 1, width: ICON_LIST_LABEL_W, fontSize: 13, fill: '#374151' }),
+        mkText(it.label, { left: ICON_LIST_BADGE + 10, top: y + 1, width: ICON_LIST_LABEL_W, fontSize: 13, fill: NEUTRAL.textPrimary }),
         'label',
         i,
       ),
@@ -1409,7 +1410,7 @@ function buildRibbonTitle(data: RibbonTitleDatum[] = DEFAULT_RIBBON_TITLE): Fabr
       originY: 'top',
     }),
     tagDataChild(
-      mkText(item.text, { left: 0, top: RIBBON_H / 2 - 10, width: w, fontSize: 16, fontWeight: 'bold', fill: '#ffffff', textAlign: 'center' }),
+      mkText(item.text, { left: 0, top: RIBBON_H / 2 - 10, width: w, fontSize: 16, fontWeight: 'bold', fill: NEUTRAL.white, textAlign: 'center' }),
       'text',
       0,
     ),
@@ -1443,10 +1444,10 @@ interface SwotDatum {
   color: string
 }
 const SWOT_DATA: SwotDatum[] = [
-  { title: '优势 S', body: '核心竞争力\n产品/团队优势', color: '#22c55e' },
-  { title: '劣势 W', body: '待改进的短板', color: '#ef4444' },
-  { title: '机会 O', body: '可以把握的\n市场机会', color: '#3b82f6' },
-  { title: '威胁 T', body: '需要警惕的\n外部风险', color: '#f59e0b' },
+  { title: '优势 S', body: '核心竞争力\n产品/团队优势', color: STATUS.success },
+  { title: '劣势 W', body: '待改进的短板', color: STATUS.danger },
+  { title: '机会 O', body: '可以把握的\n市场机会', color: STATUS.info },
+  { title: '威胁 T', body: '需要警惕的\n外部风险', color: STATUS.warning },
 ]
 
 /** SWOT 四象限：2x2 彩色格子，每格一个标题+一段说明，标题/说明分别可双击编辑 */
@@ -1478,10 +1479,10 @@ interface TimelineDatum {
   color: string
 }
 const TIMELINE_DATA: TimelineDatum[] = [
-  { date: '2024.01', label: '项目启动', color: '#8b5cf6' },
-  { date: '2024.04', label: '产品上线', color: '#ec4899' },
-  { date: '2024.08', label: '规模增长', color: '#38bdf8' },
-  { date: '2024.12', label: '达成目标', color: '#22c55e' },
+  { date: '2024.01', label: '项目启动', color: CHART_PALETTE[0] },
+  { date: '2024.04', label: '产品上线', color: CHART_PALETTE[1] },
+  { date: '2024.08', label: '规模增长', color: CHART_PALETTE[2] },
+  { date: '2024.12', label: '达成目标', color: CHART_PALETTE[3] },
 ]
 
 /** 时间轴：一条横线上依次排节点，每个节点上方是日期、下方是事件说明，两个都可双击编辑 */
@@ -1543,8 +1544,8 @@ interface VsDatum {
   color: string
 }
 const VS_DATA: VsDatum[] = [
-  { title: '方案 A', point1: '成本更低', point2: '交付更快', point3: '适合中小团队', color: '#8b5cf6' },
-  { title: '方案 B', point1: '功能更全', point2: '扩展性更强', point3: '适合企业级场景', color: '#38bdf8' },
+  { title: '方案 A', point1: '成本更低', point2: '交付更快', point3: '适合中小团队', color: CHART_PALETTE[0] },
+  { title: '方案 B', point1: '功能更全', point2: '扩展性更强', point3: '适合企业级场景', color: CHART_PALETTE[2] },
 ]
 const VS_POINT_FIELDS = ['point1', 'point2', 'point3'] as const
 
@@ -1628,11 +1629,11 @@ const DEFAULT_TABLE_STYLE: TableStyle = {
 
 /** 表格配色预设：表头底色/表头文字色/隔行底色/正文文字色/边框色，插入表格、双击改主题时都读这张表 */
 const TABLE_THEMES: Record<string, { header: string; headerText: string; altRow: string; text: string; border: string }> = {
-  violet: { header: '#8b5cf6', headerText: '#ffffff', altRow: '#f9fafb', text: '#374151', border: '#e5e7eb' },
-  gray: { header: '#4b5563', headerText: '#ffffff', altRow: '#f9fafb', text: '#374151', border: '#e5e7eb' },
-  pink: { header: '#ec4899', headerText: '#ffffff', altRow: '#fdf2f8', text: '#831843', border: '#fbcfe8' },
-  orange: { header: '#f97316', headerText: '#ffffff', altRow: '#fff7ed', text: '#7c2d12', border: '#fed7aa' },
-  blue: { header: '#2563eb', headerText: '#ffffff', altRow: '#eff6ff', text: '#1e3a8a', border: '#bfdbfe' },
+  violet: { header: CHART_PALETTE[0], headerText: NEUTRAL.white, altRow: '#f9fafb', text: NEUTRAL.textPrimary, border: NEUTRAL.border },
+  gray: { header: '#4b5563', headerText: NEUTRAL.white, altRow: '#f9fafb', text: NEUTRAL.textPrimary, border: NEUTRAL.border },
+  pink: { header: CHART_PALETTE[1], headerText: NEUTRAL.white, altRow: '#fdf2f8', text: '#831843', border: '#fbcfe8' },
+  orange: { header: '#f97316', headerText: NEUTRAL.white, altRow: '#fff7ed', text: '#7c2d12', border: '#fed7aa' },
+  blue: { header: '#2563eb', headerText: NEUTRAL.white, altRow: '#eff6ff', text: '#1e3a8a', border: '#bfdbfe' },
 }
 
 /** 某个格子如果落在某个合并范围内，返回那个范围；不是锚点也会返回（调用方自己判断 r/c 是不是等于 r1/c1） */

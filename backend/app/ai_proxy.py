@@ -198,6 +198,48 @@ def _nearest_image_size(width: float, height: float) -> str:
     return f"{w}x{h}"
 
 
+_ICON_LIST_SHAPES = ("circle", "square", "diamond")
+_ICON_LIST_MAX_ITEMS = 12
+
+
+def _sanitize_icon_list_data(raw: object) -> list[dict] | None:
+    """对应前端 IconListDatum[]（CanvasStage.vue 的 buildIconList）——数组形状是硬要求，
+    applyFieldEdit 双击编辑回写只认数组，裸对象会导致编辑框弹得出来但提交静默不生效。"""
+    if not isinstance(raw, list) or not raw:
+        return None
+    items = []
+    for it in raw[:_ICON_LIST_MAX_ITEMS]:
+        if not isinstance(it, dict):
+            continue
+        label = str(it.get("label") or "").strip()[:24]
+        if not label:
+            continue
+        shape = it.get("shape") if it.get("shape") in _ICON_LIST_SHAPES else "circle"
+        items.append(
+            {
+                "shape": shape,
+                "color": str(it.get("color") or "#c8161d"),
+                "icon": str(it.get("icon") or "").strip()[:2] or "•",
+                "label": label,
+            }
+        )
+    return items or None
+
+
+def _sanitize_ribbon_title_data(raw: object) -> list[dict] | None:
+    """对应前端 RibbonTitleDatum[]（buildRibbonTitle）——同样必须是单元素数组，不是裸对象。"""
+    if not isinstance(raw, list) or not raw or not isinstance(raw[0], dict):
+        return None
+    text = str(raw[0].get("text") or "").strip()[:20]
+    if not text:
+        return None
+    item: dict = {"text": text, "color": str(raw[0].get("color") or "#c8161d")}
+    width = raw[0].get("width")
+    if isinstance(width, (int, float)):
+        item["width"] = int(_clamp_num(width, 80, 1000, 220))
+    return [item]
+
+
 def _sanitize_design_elements(
     raw_elements: object, canvas_width: int, canvas_height: int, allowed_fonts: list[str]
 ) -> list[dict]:
@@ -205,7 +247,7 @@ def _sanitize_design_elements(
         return []
     sanitized: list[dict] = []
     for el in raw_elements[:_DESIGN_MAX_ELEMENTS]:
-        if not isinstance(el, dict) or el.get("type") not in ("text", "image", "rect"):
+        if not isinstance(el, dict) or el.get("type") not in ("text", "image", "rect", "group"):
             continue
         x = int(_clamp_num(el.get("x"), 0, canvas_width, 0))
         y = int(_clamp_num(el.get("y"), 0, canvas_height, 0))
@@ -260,6 +302,17 @@ def _sanitize_design_elements(
                     "imagePrompt": image_prompt.strip()[:300],
                 }
             )
+        elif el["type"] == "group":
+            kind = el.get("componentKind")
+            if kind == "icon-list":
+                data = _sanitize_icon_list_data(el.get("componentData"))
+            elif kind == "ribbon-title":
+                data = _sanitize_ribbon_title_data(el.get("componentData"))
+            else:
+                continue
+            if data is None:
+                continue
+            sanitized.append({"type": "group", "x": x, "y": y, "children": [], "componentKind": kind, "componentData": data})
     return sanitized
 
 
@@ -280,14 +333,28 @@ async def design_generate(
 
     system_prompt = (
         f"你是专业的平面设计师。请为一个宽 {payload.canvas_width}px、高 {payload.canvas_height}px 的画布设计一版海报/宣传图版式。\n"
-        "只能使用三种元素类型：\n"
+        "可以使用四种元素类型：\n"
         "- text：{type:'text', x, y, width, text, fontSize, fontWeight, color, align, fontFamily}\n"
         "- image：{type:'image', x, y, width, height, imagePrompt}（用 imagePrompt 描述这张图应该是什么内容，不要写 src）\n"
         "- rect：{type:'rect', x, y, width, height, fill, rx}\n"
+        "- group：结构化组件，两种 componentKind 可选，内容类型和它们匹配时优先用这个而不是堆多个 text：\n"
+        "  1. icon-list（编号/勾选/要点清单，3~9 条短句时用这个）：\n"
+        "     {type:'group', x, y, children:[], componentKind:'icon-list', componentData:[\n"
+        "       {shape:'circle'|'square'|'diamond', color:'#c8161d', icon:'1', label:'一句话要点（12字以内）'}, ...\n"
+        "     ]}\n"
+        "     componentData 是数组，每项一条列表内容；icon 通常是序号（'1'/'2'）或单字（'✓'/'✕'），最多2个字符；\n"
+        "     渲染时每项固定占 34px 高、180px 宽的文字区，label 太长会被截断，务必控制在 12 个汉字以内。\n"
+        "  2. ribbon-title（分区小标题，通栏色块+居中白字）：\n"
+        "     {type:'group', x, y, children:[], componentKind:'ribbon-title', componentData:[{text:'小标题（8字以内）', color:'#c8161d', width:220}]}\n"
+        "     componentData 必须是单元素数组（哪怕只有一项也要包成数组），不能是裸对象。\n"
+        "  什么时候该用 group 而不是普通 text：一段内容如果是"
+        "「3条以上并列的短要点」，用 icon-list；一段内容如果是「引出下面一块信息的小标题」，用 ribbon-title；"
+        "长段落说明文字、单独一句话的大标题，仍然用普通 text，不要什么都往组件里塞。\n"
         f"可选字体（fontFamily 必须从下面列表里原样选一个，不要自己编）：\n{font_list_text}\n\n"
         "只返回一个严格的 JSON 对象，不要 markdown 代码块，不要任何多余说明文字，形如：\n"
         '{"background": "#ffffff", "elements": [ ... ]}\n'
-        "要求：elements 数量 4~12 个；所有坐标、宽高不能超出画布范围；文案要贴合用户描述的主题，"
+        "要求：elements 数量 4~12 个（一个 group 算一个元素，不受它内部 componentData 条数影响）；"
+        "所有坐标、宽高不能超出画布范围；文案要贴合用户描述的主题，"
         "写真实、具体的中文文案，不要用「标题」「正文」这类占位字样；整体版面要有主次层次（标题/副标题/正文/装饰色块）。\n"
         "字体选择要有主次区分，不要所有文字都用同一个字体：标题、副标题这类需要吸引注意力的文字，"
         "优先挑选列表里风格醒目/有辨识度的字体（比如手写体、圆体、书法风格），不要默认全用「默认」这个选项；"
