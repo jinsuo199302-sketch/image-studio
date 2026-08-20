@@ -212,7 +212,7 @@ async function applyElements(
 
   for (const el of elements) {
     if (el.type === 'text') {
-      const text = new Textbox(el.text, {
+      const textOpts: ConstructorParameters<typeof Textbox>[1] = {
         left: el.x,
         top: el.y,
         originX: 'left',
@@ -224,7 +224,21 @@ async function applyElements(
         textAlign: el.align ?? 'left',
         fontFamily: el.fontFamily ?? 'system-ui, "PingFang SC", "Microsoft YaHei", sans-serif',
         splitByGrapheme: true,
-      })
+      }
+      if (el.stroke !== undefined) {
+        textOpts.stroke = el.stroke
+        textOpts.strokeWidth = el.strokeWidth ?? 2
+        textOpts.paintFirst = 'stroke'
+      }
+      if (el.shadowColor !== undefined) {
+        textOpts.shadow = new Shadow({
+          color: el.shadowColor,
+          blur: el.shadowBlur ?? 6,
+          offsetX: el.shadowOffsetX ?? 2,
+          offsetY: el.shadowOffsetY ?? 2,
+        })
+      }
+      const text = new Textbox(el.text, textOpts)
       canvas.add(text)
     } else if (el.type === 'rect') {
       const rect = new Rect({

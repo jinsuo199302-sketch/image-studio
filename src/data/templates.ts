@@ -10,6 +10,12 @@ export type CanvasElement =
       color: string
       align?: 'left' | 'center' | 'right'
       fontFamily?: string
+      stroke?: string
+      strokeWidth?: number
+      shadowColor?: string
+      shadowBlur?: number
+      shadowOffsetX?: number
+      shadowOffsetY?: number
     }
   | {
       type: 'image'
