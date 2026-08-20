@@ -51,6 +51,10 @@ async def bocha_search(query: str, count: int = SEARCH_RESULT_COUNT) -> list[dic
         raise RuntimeError(f"博查搜索请求失败：{res.status_code} {res.text[:300]}")
     data = res.json()
     values = ((data.get("webPages") or {}).get("value")) or []
+    if not values:
+        # 临时诊断：如果解析出来是空的，把原始响应体抛出来，先确认是真的没搜到，
+        # 还是我们对博查返回结构的假设跟实际不符（当时查的文档明确说是"部分示例"）。
+        raise RuntimeError(f"博查搜索返回空结果，原始响应：{json.dumps(data, ensure_ascii=False)[:800]}")
     return [
         {
             "name": v.get("name", ""),
