@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict
 
@@ -136,3 +136,21 @@ class DesignLayoutRequest(BaseModel):
     fonts: List[FontOption]
     raw_text: Optional[str] = None
     blocks: Optional[List[str]] = None
+
+
+class LayoutPresetSection(BaseModel):
+    heading: str
+    items: List[str]
+
+
+class LayoutPresetRequest(BaseModel):
+    """参数化排版预设——不调用 AI，纯确定性代码排版，见 app/layout_presets.py。
+    跟 DesignLayoutRequest 的区别：那边靠 AI 判断怎么切分/排版；这边内容已经是
+    调用方分好类的结构化数据（标题/引言/要点，或者标题/若干分区），系统只管算坐标。"""
+    structure: Literal["bullet-list", "dense-board"]
+    canvas_width: int
+    canvas_height: int
+    title: str
+    intro: Optional[str] = None
+    items: Optional[List[str]] = None  # structure == 'bullet-list' 时用
+    sections: Optional[List[LayoutPresetSection]] = None  # structure == 'dense-board' 时用

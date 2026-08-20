@@ -13,11 +13,14 @@ from app import auth, models
 from app import content_research
 from app.config import OPENLUX_API_KEY, OPENLUX_BASE_URL, VIDU_API_KEY, VIDU_BASE_URL
 from app.design_tokens import COMPONENT_SIZE
+from app.text_metrics import chars_per_line, estimate_text_height, estimate_text_lines
+from app import layout_presets
 from app.schemas import (
     ChatCompletionRequest,
     ContentResearchRequest,
     DesignGenerateRequest,
     DesignLayoutRequest,
+    LayoutPresetRequest,
     ImageGenerationRequest,
     VideoGenerateRequest,
 )
@@ -274,31 +277,16 @@ def _sanitize_ribbon_title_data(raw: object) -> list[dict] | None:
     return [item]
 
 
-_TEXT_LINE_HEIGHT_RATIO = 1.16  # 跟 Fabric Textbox 的默认 lineHeight 保持一致，不然估算跟实际渲染对不上
 _TEXT_MAX_LINES = 8  # 单个文字元素允许撑到的最大行数，超过就截断——防止极端情况下的连锁下推把画布挤爆
-
-
-def _chars_per_line(width: float, font_size: float) -> int:
-    return max(1, int(width / (font_size * 1.02)))
-
-
-def _estimate_text_lines(text: str, width: float, font_size: float) -> int:
-    if not text:
-        return 1
-    return max(1, math.ceil(len(text) / _chars_per_line(width, font_size)))
-
-
-def _estimate_text_height(text: str, width: float, font_size: float) -> float:
-    return _estimate_text_lines(text, width, font_size) * font_size * _TEXT_LINE_HEIGHT_RATIO
 
 
 def _truncate_to_max_lines(text: str, width: float, font_size: float) -> str:
     """兜底：AI 给的文字量跟它给的框完全不匹配（比如一大段话塞进一个小框）时，
     与其让它在渲染时无限撑高、把下面所有元素连环顶飞，不如硬截断加省略号。
     正常情况下走的是 _reflow_avoid_overlap 顺势下推，不会碰到这个分支。"""
-    if _estimate_text_lines(text, width, font_size) <= _TEXT_MAX_LINES:
+    if estimate_text_lines(text, width, font_size) <= _TEXT_MAX_LINES:
         return text
-    max_chars = max(1, _chars_per_line(width, font_size) * _TEXT_MAX_LINES - 1)
+    max_chars = max(1, chars_per_line(width, font_size) * _TEXT_MAX_LINES - 1)
     return text[:max_chars].rstrip() + "…"
 
 
@@ -327,7 +315,7 @@ def _reflow_avoid_overlap(elements: list[dict]) -> None:
     for i, el in enumerate(elements):
         if el["type"] != "text":
             continue
-        est_bottom = el["y"] + _estimate_text_height(el["text"], el["width"], el["fontSize"])
+        est_bottom = el["y"] + estimate_text_height(el["text"], el["width"], el["fontSize"])
         x0, x1 = el["x"], el["x"] + el["width"]
         for other in elements[i + 1 :]:
             ox0, ox1 = other["x"], other["x"] + _element_width(other)
@@ -633,6 +621,28 @@ async def design_layout(
     fidelity = _check_verbatim_fidelity(elements, source_text)
 
     return {"background": background, "elements": elements, "fidelity": fidelity}
+
+
+@router.post("/design/layout-preset")
+async def design_layout_preset(
+    payload: LayoutPresetRequest,
+    _user: models.User = Depends(auth.get_current_user),
+):
+    """参数化排版预设——不调用任何 AI，纯确定性代码（见 app/layout_presets.py），
+    输入已经是分好类的结构化内容，系统只管按选定结构算坐标。跟 /design/layout 的区别：
+    这里没有 AI 猜坐标那种"数值判断不准"的风险，也没有网络延迟。"""
+    if payload.structure == "bullet-list":
+        if not payload.items:
+            raise HTTPException(status_code=400, detail="bullet-list 结构需要提供 items")
+        result = layout_presets.build_bullet_list(payload.canvas_width, payload.canvas_height, payload.title, payload.intro, payload.items)
+    elif payload.structure == "dense-board":
+        if not payload.sections:
+            raise HTTPException(status_code=400, detail="dense-board 结构需要提供 sections")
+        sections = [{"heading": s.heading, "items": s.items} for s in payload.sections]
+        result = layout_presets.build_dense_board(payload.canvas_width, payload.canvas_height, payload.title, sections)
+    else:
+        raise HTTPException(status_code=400, detail=f"未知的 structure：{payload.structure}")
+    return result
 
 
 @router.post("/content/research")
