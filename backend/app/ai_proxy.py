@@ -113,6 +113,73 @@ async def images_edits(
     return res.json()
 
 
+# 参考图→整图背景生成这条链路专用：只要求视觉模型输出"氛围/色调 + 元素类别 + 构图留白说明"
+# 这个粒度的风格描述，不要具体坐标/精确外形/可读文字——这是守住"参考图边界判断指南"里
+# 版权红线的关键机制，格式严格照抄党建展板那次人工写的 prompt 验证过管用的结构。
+_REFERENCE_STYLE_PROMPT_INSTRUCTION = """You are extracting a STYLE-DESCRIPTION prompt from a reference poster image, to be used as input for a text-to-image generation model. Write ONE paragraph in Chinese, following exactly this structure: [整体氛围/光影/色调] + [核心视觉元素类别，用类别名词，不是精确外形] + [构图与留白说明，供后续叠加文字用]。
+
+Strict rules:
+- Do NOT include precise coordinates, exact positions, exact sizes/proportions, or counts.
+- Do NOT transcribe or describe any specific readable text/words visible in the image.
+- Do NOT describe exact rendering details that would let someone reconstruct the image precisely. Describe visual elements only as CATEGORY/TYPE the way a mood-board brief would, not as a blueprint.
+- Match the length, tone, and format of this reference example exactly:
+"国风，柔和金色光影，飘扬的五星红旗元素、华表、长城剪影、和平鸽、祥云纹样、飘带，简约肌理底纹，画面上方三分之一留白，不能出现文字"
+- Output ONLY the style-description paragraph itself, in Chinese, no markdown, no extra commentary, no quotation marks around it."""
+
+
+@router.post("/design/reference-to-background")
+async def design_reference_to_background(
+    image: UploadFile = File(...),
+    _user: models.User = Depends(auth.get_current_user),
+):
+    """参考图 → 风格描述（视觉模型，只提取氛围/元素类别/构图留白，不提取可判定为复刻的精确细节）
+    → 整图背景生成（gpt-image-2）。三次跨风格实测（国风红金/卡通插画/极简科技）验证过，
+    质量稳定在 tpl-board-party-building 那次人工调用的水准，全部一次生成成功。
+    标题/副标题文字层不在这里加——那部分复用前端已有的文字编辑能力，用户自己调。"""
+    _require_openlux()
+    image_bytes = await image.read()
+    b64_in = base64.b64encode(image_bytes).decode()
+    media_type = image.content_type or "image/png"
+
+    vision_res = await _post_openlux(
+        f"{OPENLUX_BASE_URL}/chat/completions",
+        timeout=60,
+        headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
+        json={
+            "model": "gemini-3-flash-preview",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": _REFERENCE_STYLE_PROMPT_INSTRUCTION},
+                        {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{b64_in}"}},
+                    ],
+                }
+            ],
+        },
+    )
+    if vision_res.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"参考图风格分析失败：{vision_res.status_code} {vision_res.text}")
+    style_description = vision_res.json()["choices"][0]["message"]["content"].strip()
+
+    gen_res = await _post_openlux(
+        f"{OPENLUX_BASE_URL}/images/generations",
+        timeout=170,
+        headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
+        json={"model": "gpt-image-2", "prompt": style_description, "n": 1, "size": "1024x1536"},
+    )
+    if gen_res.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"背景图生成失败：{gen_res.status_code} {gen_res.text}")
+    data = (gen_res.json().get("data") or [None])[0]
+    if not data:
+        raise HTTPException(status_code=502, detail="背景图生成未返回图片数据")
+    src = data.get("url") or (f"data:image/png;base64,{data['b64_json']}" if data.get("b64_json") else None)
+    if not src:
+        raise HTTPException(status_code=502, detail="背景图生成未返回可用图片数据")
+
+    return {"backgroundSrc": src, "styleDescription": style_description}
+
+
 def _run_bg_removal_subprocess(image_bytes: bytes) -> subprocess.CompletedProcess:
     """用同步 subprocess.run（不是 asyncio.create_subprocess_exec）——后者在 Windows 上
     uvicorn --reload 强制用的 SelectorEventLoop 下会直接抛 NotImplementedError（Windows
