@@ -1,6 +1,6 @@
 import type { CanvasElement } from '../data/templates'
 import { FONT_OPTIONS } from '../data/fonts'
-import { authPostJson } from './httpClient'
+import { authPostForm, authPostJson } from './httpClient'
 
 export interface GeneratedDesign {
   background: string
@@ -125,4 +125,54 @@ export async function generateDesign(
     return realGenerate(prompt, canvasWidth, canvasHeight)
   }
   return mockGenerate(prompt, canvasWidth, canvasHeight)
+}
+
+export interface LayoutPresetSection {
+  heading: string
+  items: string[]
+}
+
+/**
+ * 走后端代理 /api/ai/design/layout-preset——纯确定性代码排版，不调用 AI，不存在生成失败/
+ * 内容跑偏的问题，只会因为输入不合法（比如没填标题）报错。跟 generateDesign 是两条不同的
+ * 链路，不共用 mock/demo 逻辑：这个不需要真实 key，只需要登录（跟别的 /api/ai/* 接口保持
+ * 权限一致，虽然它本身不花 AI 额度）。
+ */
+export async function generateLayoutPreset(
+  structure: 'bullet-list' | 'dense-board',
+  canvasWidth: number,
+  canvasHeight: number,
+  params: { title: string; intro?: string; items?: string[]; sections?: LayoutPresetSection[] },
+): Promise<GeneratedDesign> {
+  return authPostJson<GeneratedDesign>(
+    '/design/layout-preset',
+    {
+      structure,
+      canvas_width: canvasWidth,
+      canvas_height: canvasHeight,
+      title: params.title,
+      intro: params.intro || undefined,
+      items: params.items,
+      sections: params.sections,
+    },
+    '排版生成失败',
+  )
+}
+
+/**
+ * 走后端代理 /api/ai/design/reference-to-background：上传一张参考图，后端先用视觉模型
+ * 提炼出"氛围/元素类别/构图留白"这个粒度的风格描述（不提取可判定为复刻的具体细节），
+ * 再喂给 gpt-image-2 生成一张全新的整图背景。只返回背景图，不含标题文字——文字层由调用方
+ * （AIDesignPanel 的"参考图生成"tab）按默认样式叠加，用户再在编辑器里自由调整。
+ */
+export async function generateBackgroundFromReference(
+  imageFile: File,
+): Promise<{ backgroundSrc: string; styleDescription: string }> {
+  const form = new FormData()
+  form.append('image', imageFile, imageFile.name || 'reference.png')
+  return authPostForm<{ backgroundSrc: string; styleDescription: string }>(
+    '/design/reference-to-background',
+    form,
+    '参考图背景生成失败',
+  )
 }
