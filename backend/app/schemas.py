@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict
 
@@ -85,7 +85,11 @@ class TokenResponse(BaseModel):
 
 class ChatMessage(BaseModel):
     role: str
-    content: str
+    # 一次性诊断用：content 支持 str（原有全部调用点）或 OpenAI vision 格式的
+    # content-part 数组（[{"type":"text",...},{"type":"image_url",...}]），
+    # 用来验证 OpenLux 代理是否真的转发多模态输入——不是长期要保留的设计，
+    # 验证完看结果决定要不要正式做「参考图生成」功能再说
+    content: Union[str, List[Dict[str, Any]]]
 
 
 class ChatCompletionRequest(BaseModel):
