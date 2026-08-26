@@ -2030,6 +2030,24 @@ function exportPNG(): string {
   return captureDataUrl(2)
 }
 
+/** 矢量导出——Fabric 的 toSVG() 按对象坐标序列化，不是截图，图表/图示/文字这些矢量内容
+ * 导出后还是矢量（可在 AI/Illustrator 里编辑），只有背景图这类本身就是位图的元素会被内嵌成
+ * base64 <image>。用跟 captureDataUrl 一样的"临时清零缩放再还原"套路，避免画布当前的缩放
+ * 倍数混进导出坐标里。 */
+function exportSVG(): string {
+  if (!canvas) return ''
+  const currentZoom = canvas.getZoom()
+  canvas.setZoom(1)
+  canvas.setDimensions({ width: canvasSize.width, height: canvasSize.height })
+  const svg = canvas.toSVG()
+  canvas.setZoom(currentZoom)
+  canvas.setDimensions({
+    width: canvasSize.width * currentZoom,
+    height: canvasSize.height * currentZoom,
+  })
+  return svg
+}
+
 interface SerializedTemplate {
   elements: CanvasElement[]
   thumbnail: string
@@ -2117,6 +2135,7 @@ defineExpose({
   applyTextEffectPreset,
   setSelectedTextWarp,
   selectObjectAt,
+  exportSVG,
   setSelectedRectFill,
   deselectActive,
   setSelectedOpacity,

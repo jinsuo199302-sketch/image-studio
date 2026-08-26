@@ -119,6 +119,25 @@ function download() {
   a.click()
 }
 
+/** SVG 是矢量序列化（Fabric toSVG()），不是截图——所以走 Blob URL 而不是直接用 dataURL，
+ * 避免大体积 SVG（背景图内嵌成 base64 后文本会很长）撑爆 <a href> 的实际长度限制。 */
+function downloadSVG() {
+  const svg = stageRef.value?.exportSVG()
+  if (!svg || !template.value) return
+  const blob = new Blob([svg], { type: 'image/svg+xml' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${template.value.name}.svg`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function onDownloadCommand(command: string) {
+  if (command === 'svg') downloadSVG()
+  else download()
+}
+
 function onSaved(newId: string) {
   saveDialogOpen.value = false
   router.push(`/design/${newId}`)
@@ -178,15 +197,23 @@ async function onRemoveBackground() {
         <el-button :icon="Collection" :disabled="!template" @click="saveDialogOpen = true">
           另存为模板
         </el-button>
-        <el-button
+        <el-dropdown
+          split-button
           type="primary"
-          :icon="Download"
+          class="!ml-1 [&_.el-button--primary]:!bg-violet-500 [&_.el-button--primary]:!border-none"
           :disabled="!template"
-          class="!bg-violet-500 !border-none"
           @click="download"
+          @command="onDownloadCommand"
         >
+          <el-icon class="mr-1"><Download /></el-icon>
           下载
-        </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="png">下载 PNG</el-dropdown-item>
+              <el-dropdown-item command="svg">下载 SVG</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </div>
     </div>
 
