@@ -8,6 +8,7 @@ import {
   generateLayoutPreset,
   type GeneratedDesign,
   type LayoutPresetSection,
+  type TitleStyleHint,
 } from '../../../services/designApi'
 
 const props = defineProps<{ canvasWidth: number; canvasHeight: number }>()
@@ -120,6 +121,7 @@ const refGenerating = ref(false)
 const refError = ref('')
 const refBackgroundSrc = ref('')
 const refStyleDescription = ref('')
+const refTitleStyle = ref<TitleStyleHint>({ effect: 'none', warp: 'none' })
 
 function onRefFileChange(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
@@ -140,6 +142,7 @@ async function generateFromReference() {
     const result = await generateBackgroundFromReference(refFile.value)
     refBackgroundSrc.value = result.backgroundSrc
     refStyleDescription.value = result.styleDescription
+    refTitleStyle.value = result.titleStyle
   } catch (e) {
     refError.value = e instanceof Error ? e.message : '生成失败'
   } finally {
@@ -148,8 +151,10 @@ async function generateFromReference() {
 }
 
 /**
- * 默认文字样式照抄 tpl-board-party-building 那次验证过的简单描边+投影处理——
- * 不按参考图类型区分字体/配色，用户自己在已有的文字编辑面板里调整字体/颜色/位置。
+ * 基础文字样式（颜色/描边色/投影）照抄 tpl-board-party-building 那次验证过的默认处理，
+ * 不按参考图类型区分字体/配色；但描边/浮雕/霓虹特效 + 拱形/波浪/旗帜/圆环变形这层"手法"，
+ * 按后端从参考图标题识别出的 titleStyle 类别套用编辑器已有预设（见 EditorView.onApplyDesign）——
+ * 只学手法类别，不抄具体字形，用户还是可以在文字编辑面板里再自己调整。
  */
 function applyReferenceBackground() {
   if (!refBackgroundSrc.value) return
@@ -189,7 +194,11 @@ function applyReferenceBackground() {
       align: 'center',
     })
   }
-  emit('apply-design', { background: '#ffffff', elements })
+  emit('apply-design', {
+    background: '#ffffff',
+    elements,
+    titleStyle: refTitle.value.trim() ? refTitleStyle.value : undefined,
+  })
 }
 </script>
 

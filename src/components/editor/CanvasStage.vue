@@ -780,6 +780,16 @@ function deselectActive() {
   canvas.requestRenderAll()
 }
 
+/** 按画布对象数组下标选中——供"参考图生成"应用完标题文字后，程序化选中它再调用
+ * applyTextEffectPreset/setSelectedTextWarp（这两个函数认的是 canvas.getActiveObject()）*/
+function selectObjectAt(index: number) {
+  if (!canvas) return
+  const obj = canvas.getObjects()[index]
+  if (!obj) return
+  canvas.setActiveObject(obj)
+  canvas.requestRenderAll()
+}
+
 function setSelectedOpacity(value: number) {
   if (!canvas) return
   const active = canvas.getActiveObject()
@@ -2106,6 +2116,7 @@ defineExpose({
   setSelectedTextShadowDetail,
   applyTextEffectPreset,
   setSelectedTextWarp,
+  selectObjectAt,
   setSelectedRectFill,
   deselectActive,
   setSelectedOpacity,

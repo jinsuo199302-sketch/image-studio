@@ -124,7 +124,33 @@ Strict rules:
 - Do NOT describe exact rendering details that would let someone reconstruct the image precisely. Describe visual elements only as CATEGORY/TYPE the way a mood-board brief would, not as a blueprint.
 - Match the length, tone, and format of this reference example exactly:
 "国风，柔和金色光影，飘扬的五星红旗元素、华表、长城剪影、和平鸽、祥云纹样、飘带，简约肌理底纹，画面上方三分之一留白，不能出现文字"
-- Output ONLY the style-description paragraph itself, in Chinese, no markdown, no extra commentary, no quotation marks around it."""
+- Output ONLY the style-description paragraph itself, in Chinese, no markdown, no extra commentary, no quotation marks around it.
+
+After that paragraph, on a NEW final line, classify ONLY the RENDERING TECHNIQUE CATEGORY of the reference poster's main title text (never its exact wording, font, or precise shape) using this exact format:
+TITLE_STYLE: <effect> <shape>
+where <effect> is exactly one of: outline | emboss | neon | plain
+and <shape> is exactly one of: straight | arc | wave | ribbon | circle
+Pick the closest category by technique only, e.g. a poster with a raised/3D-looking title with soft drop shadow -> "emboss straight"; a title curved along a banner -> "outline arc". If unsure, use "plain straight"."""
+
+
+_TITLE_EFFECT_MAP = {"outline": "outline", "emboss": "emboss", "neon": "neon", "plain": "none"}
+_TITLE_SHAPE_MAP = {"straight": "none", "arc": "arc-up", "wave": "wave", "ribbon": "flag", "circle": "ring"}
+_DEFAULT_TITLE_STYLE = {"effect": "none", "warp": "none"}
+
+
+def _parse_title_style(raw_content: str) -> tuple[str, dict]:
+    """从视觉模型输出里拆出末尾的 TITLE_STYLE 分类行，映射成编辑器已有的文字特效/变形预设名。
+    只学"手法类别"（描边/浮雕/霓虹 + 直线/拱形/波浪/旗帜/圆环），不涉及具体字形/字体，
+    是 [[feedback_reference_image_boundary]] 里"工艺手法可学习复用，具体表达要自己重新实现"
+    这条原则在标题文字上的落地。格式解析失败一律回退成"无特效"，不能让格式问题打断生成链路。"""
+    lines = raw_content.strip().splitlines()
+    if not lines or not lines[-1].strip().upper().startswith("TITLE_STYLE:"):
+        return raw_content.strip(), dict(_DEFAULT_TITLE_STYLE)
+    style_description = "\n".join(lines[:-1]).strip()
+    tokens = lines[-1].split(":", 1)[1].strip().lower().split()
+    effect = _TITLE_EFFECT_MAP.get(tokens[0], "none") if tokens else "none"
+    warp = _TITLE_SHAPE_MAP.get(tokens[1], "none") if len(tokens) >= 2 else "none"
+    return style_description or raw_content.strip(), {"effect": effect, "warp": warp}
 
 
 @router.post("/design/reference-to-background")
@@ -160,7 +186,8 @@ async def design_reference_to_background(
     )
     if vision_res.status_code >= 400:
         raise HTTPException(status_code=502, detail=f"参考图风格分析失败：{vision_res.status_code} {vision_res.text}")
-    style_description = vision_res.json()["choices"][0]["message"]["content"].strip()
+    raw_content = vision_res.json()["choices"][0]["message"]["content"].strip()
+    style_description, title_style = _parse_title_style(raw_content)
 
     gen_res = await _post_openlux(
         f"{OPENLUX_BASE_URL}/images/generations",
@@ -177,7 +204,7 @@ async def design_reference_to_background(
     if not src:
         raise HTTPException(status_code=502, detail="背景图生成未返回可用图片数据")
 
-    return {"backgroundSrc": src, "styleDescription": style_description}
+    return {"backgroundSrc": src, "styleDescription": style_description, "titleStyle": title_style}
 
 
 def _run_bg_removal_subprocess(image_bytes: bytes) -> subprocess.CompletedProcess:

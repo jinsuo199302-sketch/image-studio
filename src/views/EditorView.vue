@@ -135,6 +135,15 @@ async function onApplyDesign(design: GeneratedDesign) {
     return
   }
   await stageRef.value?.applyGeneratedDesign(design.elements, design.background)
+  if (design.titleStyle) {
+    // 参考图生成里标题永远是 elements[1]（elements[0] 固定是背景图），见 AIDesignPanel.applyReferenceBackground
+    stageRef.value?.selectObjectAt(1)
+    stageRef.value?.applyTextEffectPreset(design.titleStyle.effect)
+    if (design.titleStyle.warp !== 'none') {
+      stageRef.value?.setSelectedTextWarp(design.titleStyle.warp, 30)
+    }
+    stageRef.value?.deselectActive()
+  }
 }
 
 async function onRemoveBackground() {

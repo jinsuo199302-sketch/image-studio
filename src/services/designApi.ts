@@ -1,10 +1,20 @@
 import type { CanvasElement } from '../data/templates'
+import type { WarpKind } from '../components/editor/CanvasStage.vue'
 import { FONT_OPTIONS } from '../data/fonts'
 import { authPostForm, authPostJson } from './httpClient'
+
+/** 参考图生成里标题文字的"手法类别"提示——只对应编辑器已有的特效/变形预设名，
+ * 不含任何具体字形/字体信息，是版权边界要求的"学手法不抄表达"在标题上的落地。 */
+export interface TitleStyleHint {
+  effect: 'none' | 'outline' | 'emboss' | 'neon'
+  warp: WarpKind
+}
 
 export interface GeneratedDesign {
   background: string
   elements: CanvasElement[]
+  /** 仅"参考图生成"tab 会填，其它生成链路不涉及标题手法分类 */
+  titleStyle?: TitleStyleHint
 }
 
 function delay(ms: number) {
@@ -167,10 +177,10 @@ export async function generateLayoutPreset(
  */
 export async function generateBackgroundFromReference(
   imageFile: File,
-): Promise<{ backgroundSrc: string; styleDescription: string }> {
+): Promise<{ backgroundSrc: string; styleDescription: string; titleStyle: TitleStyleHint }> {
   const form = new FormData()
   form.append('image', imageFile, imageFile.name || 'reference.png')
-  return authPostForm<{ backgroundSrc: string; styleDescription: string }>(
+  return authPostForm<{ backgroundSrc: string; styleDescription: string; titleStyle: TitleStyleHint }>(
     '/design/reference-to-background',
     form,
     '参考图背景生成失败',
