@@ -18,6 +18,7 @@ const VALID_TABS = [
   'ocr',
   'idphoto',
   'stitch',
+  'avatarframe',
 ] as const
 const initialTab = computed(() => {
   const tab = route.query.tab

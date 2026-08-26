@@ -11,6 +11,7 @@ import AITextReplaceTab from './ai/AITextReplaceTab.vue'
 import AIOcrTab from './ai/AIOcrTab.vue'
 import AIIdPhotoTab from './ai/AIIdPhotoTab.vue'
 import AIScreenshotStitchTab from './ai/AIScreenshotStitchTab.vue'
+import AIAvatarFrameTab from './ai/AIAvatarFrameTab.vue'
 
 type TabKey =
   | 'image'
@@ -24,6 +25,7 @@ type TabKey =
   | 'ocr'
   | 'idphoto'
   | 'stitch'
+  | 'avatarframe'
 
 const props = defineProps<{ selectedText: string | null; initialTab?: TabKey }>()
 const emit = defineEmits<{
@@ -54,6 +56,7 @@ function pickTab(key: string) {
           { key: 'ocr', label: '提字' },
           { key: 'idphoto', label: '证件照' },
           { key: 'stitch', label: '长截图' },
+          { key: 'avatarframe', label: '头像框' },
         ]"
         :key="tab.key"
         class="flex-1 shrink-0 rounded-t-md px-1 py-2 text-xs transition"
@@ -84,7 +87,8 @@ function pickTab(key: string) {
       <AITextReplaceTab v-else-if="activeTab === 'textreplace'" />
       <AIOcrTab v-else-if="activeTab === 'ocr'" />
       <AIIdPhotoTab v-else-if="activeTab === 'idphoto'" />
-      <AIScreenshotStitchTab v-else />
+      <AIScreenshotStitchTab v-else-if="activeTab === 'stitch'" />
+      <AIAvatarFrameTab v-else />
     </div>
   </div>
 </template>

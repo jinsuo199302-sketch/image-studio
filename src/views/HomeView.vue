@@ -30,6 +30,7 @@ const TOOL_TABS = [
   { key: 'ai-ocr', label: 'AI 提字', desc: '截图/名片一键提取文字', enabled: true, route: '/ai-tools?tab=ocr' },
   { key: 'ai-idphoto', label: '证件照制作', desc: '自动换底色，多种尺寸', enabled: true, route: '/ai-tools?tab=idphoto' },
   { key: 'ai-stitch', label: '长截图拼接', desc: '多张截图自动拼成一张', enabled: true, route: '/ai-tools?tab=stitch' },
+  { key: 'ai-avatarframe', label: '节日头像框', desc: '套边框，一键出片', enabled: true, route: '/ai-tools?tab=avatarframe' },
   { key: 'collage', label: '图片拼贴', desc: '多图合成一张', enabled: false },
   { key: 'vectorize', label: '位图转矢量', desc: '照片转矢量图', enabled: false },
 ]
