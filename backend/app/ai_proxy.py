@@ -114,12 +114,98 @@ async def _post_openlux(url: str, timeout: float, max_retries: int = 2, **kwargs
     return res  # 理论上循环内已经 return，这行只是让类型检查满意
 
 
+# 生图/写作/AI消除三个"用户自由输入直达生成能力"的入口专用合规检查——design/generate、
+# reference-to-background 这类内部业务逻辑自己拼系统 prompt 调 openlux，不走这层，
+# 不需要也不应该被这个检查拦（用户填不了自由文本，风险面完全不同）。
+# 不是接的专业内容审核 API（没有这类订阅），是借同一个对话模型做 best-effort 分类——
+# 不追求完美，重点是明确挡住"帮忙P证件/仿造官方文件"这类一眼能判断出来的高风险请求。
+_ILLEGAL_TEXT_REQUEST_INSTRUCTION = """You are a content-safety classifier for an ordinary consumer design/writing tool (posters, ads, articles, translations, illustrations, etc.). Given the user's request below, decide whether fulfilling it would likely facilitate illegal activity under Chinese law — for example: forging or altering an official ID card/passport/driver's license/household register/certificate/diploma/official seal/government document; counterfeiting currency, stamps, or financial instruments; producing fraudulent contracts, invoices, or medical/legal documents; or otherwise clearly facilitating fraud, forgery, or another crime.
+
+The overwhelming majority of requests to this tool are completely legitimate. Only answer REJECT when illegal intent is reasonably clear from the request itself — when in doubt, or for an ordinary creative/business request, answer ALLOW.
+
+User request:
+\"\"\"
+{content}
+\"\"\"
+
+Respond with EXACTLY one line, no other text:
+ALLOW
+or
+REJECT: <one short Chinese sentence explaining why>"""
+
+_ID_DOCUMENT_IMAGE_CHECK_INSTRUCTION = """Look at this image carefully. Does it show — fully, partially, or as a photo/scan/screenshot of one — a government-issued ID card, passport, driver's license, household register, certificate, diploma, official seal/stamp, banknote, or any other official identity/legal document?
+
+Respond with EXACTLY one word, no other text: YES or NO."""
+
+
+async def _moderate_text(content: str) -> None:
+    """涉及生图/写作的用户自由文本先过一遍合规判断，命中 REJECT 直接 403。
+    分类调用本身失败（超时/网络异常/解析失败）一律当成检查失败拒绝这次请求，
+    不静默放行——宁可用户重试一次，不能让检查失效变成事实上没有这层拦截。"""
+    if not content or not content.strip():
+        return
+    try:
+        res = await _post_openlux(
+            f"{OPENLUX_BASE_URL}/chat/completions",
+            timeout=30,
+            headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
+            json={
+                "model": "gemini-3-flash-preview",
+                "messages": [{"role": "user", "content": _ILLEGAL_TEXT_REQUEST_INSTRUCTION.format(content=content[:2000])}],
+            },
+        )
+        if res.status_code >= 400:
+            raise ValueError(f"{res.status_code} {res.text}")
+        verdict = res.json()["choices"][0]["message"]["content"].strip()
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="内容安全检查失败，请重试")
+    if verdict.upper().startswith("REJECT"):
+        reason = verdict.split(":", 1)[1].strip() if ":" in verdict else "该请求可能涉及违法内容"
+        raise HTTPException(status_code=403, detail=f"请求已被拒绝：{reason}")
+
+
+async def _check_not_id_document(image_bytes: bytes, media_type: str) -> None:
+    """AI 消除/去水印专用：先判断上传图是不是身份证/证件/公文等官方文件，
+    防止被用来抹掉证件上的"仅供 XX 使用"水印或其他安全标记去伪造材料。"""
+    b64 = base64.b64encode(image_bytes).decode()
+    try:
+        res = await _post_openlux(
+            f"{OPENLUX_BASE_URL}/chat/completions",
+            timeout=30,
+            headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
+            json={
+                "model": "gemini-3-flash-preview",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": _ID_DOCUMENT_IMAGE_CHECK_INSTRUCTION},
+                            {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{b64}"}},
+                        ],
+                    }
+                ],
+            },
+        )
+        if res.status_code >= 400:
+            raise ValueError(f"{res.status_code} {res.text}")
+        verdict = res.json()["choices"][0]["message"]["content"].strip().upper()
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="内容安全检查失败，请重试")
+    if verdict.startswith("YES"):
+        raise HTTPException(status_code=403, detail="为防止被用于伪造证件/公文，AI 消除功能不支持处理身份证、证件、公文等官方文件类图片")
+
+
 @router.post("/images/generations")
 async def images_generations(
     payload: ImageGenerationRequest,
     _user: models.User = Depends(auth.get_current_user),
 ):
     _require_openlux()
+    await _moderate_text(payload.prompt)
     res = await _post_openlux(
         f"{OPENLUX_BASE_URL}/images/generations",
         timeout=170,
@@ -143,6 +229,8 @@ async def images_edits(
     _require_openlux()
     image_bytes = await image.read()
     mask_bytes = await mask.read()
+    await _check_not_id_document(image_bytes, image.content_type or "image/png")
+    await _moderate_text(prompt)
     res = await _post_openlux(
         f"{OPENLUX_BASE_URL}/images/edits",
         timeout=170,
@@ -424,12 +512,28 @@ async def design_reference_to_asset(
     return {"assetId": asset.id, "url": f"/api/ai/generated/{asset.file_name}", "styleDescription": style_description}
 
 
+def _flatten_chat_text(messages: list) -> str:
+    """把 ChatMessage.content（可能是纯字符串，也可能是多模态 content-parts 数组）拍平成
+    一段纯文本给合规分类器看——分类器只关心"这段文字想让 AI 写什么"，不需要图片部分。"""
+    parts: list[str] = []
+    for m in messages:
+        content = m.content
+        if isinstance(content, str):
+            parts.append(content)
+        elif isinstance(content, list):
+            for item in content:
+                if isinstance(item, dict) and item.get("type") == "text":
+                    parts.append(str(item.get("text", "")))
+    return "\n".join(parts)
+
+
 @router.post("/chat/completions")
 async def chat_completions(
     payload: ChatCompletionRequest,
     _user: models.User = Depends(auth.get_current_user),
 ):
     _require_openlux()
+    await _moderate_text(_flatten_chat_text(payload.messages))
     res = await _post_openlux(
         f"{OPENLUX_BASE_URL}/chat/completions",
         timeout=60,
