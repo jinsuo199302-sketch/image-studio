@@ -6,8 +6,26 @@ import { useAuthStore } from '../../../../stores/auth'
 import { removeBackground } from '../../../../services/backgroundRemovalApi'
 import { detectFace, type FaceBox } from '../../../../services/faceDetectApi'
 import { computeDrawRect, packGrid, PRINT_SHEETS } from '../../../../services/idPhotoLayout'
+import { embedPngDpi } from '../../../../services/pngDpi'
+import { fixRedEye } from '../../../../services/redEyeApi'
+import { convertToCmyk } from '../../../../services/cmykApi'
 
 const authStore = useAuthStore()
+const fixingRedEye = ref(false)
+
+async function runFixRedEye() {
+  if (!cutoutImage.value) return
+  fixingRedEye.value = true
+  try {
+    const result = await fixRedEye(cutoutImage.value)
+    cutoutImage.value = result.image
+    ElMessage.success(result.eyesFixed > 0 ? `已修复 ${result.eyesFixed} 只红眼` : '没有检测到需要修复的红眼')
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '去红眼失败，请重试')
+  } finally {
+    fixingRedEye.value = false
+  }
+}
 
 interface SizePreset {
   key: string
@@ -49,6 +67,10 @@ let dragStartX = 0
 let dragStartY = 0
 let dragOrigX = 0
 let dragOrigY = 0
+
+// 美白——纯 canvas 滤镜（提亮+轻微降对比，模拟"磨皮变白"的直观效果），不调用任何 AI，
+// 零额外成本。100 是不调整，往上调才会变亮
+const whiten = ref(100)
 
 const printSheet = ref(PRINT_SHEETS[1])
 const printLayout = ref(packGrid(printSheet.value.mmW, printSheet.value.mmH, sizePreset.value.mmW, sizePreset.value.mmH))
@@ -114,10 +136,12 @@ function drawPreview() {
     offsetX: offsetX.value,
     offsetY: offsetY.value,
   })
+  ctx.filter = `brightness(${whiten.value}%) contrast(${Math.max(80, 200 - whiten.value)}%)`
   ctx.drawImage(cutoutImg, rect.drawX, rect.drawY, rect.drawW, rect.drawH)
+  ctx.filter = 'none'
 }
 
-watch([cutoutImage, faceBox, sizePreset, bgColor, zoom, offsetX, offsetY], async () => {
+watch([cutoutImage, faceBox, sizePreset, bgColor, zoom, offsetX, offsetY, whiten], async () => {
   if (!cutoutImage.value) return
   if (!cutoutImg || cutoutImg.src !== cutoutImage.value) {
     cutoutImg = new Image()
@@ -166,7 +190,9 @@ function renderSinglePhoto(w: number, h: number, offsetScale: number): HTMLCanva
       offsetY: offsetY.value,
       offsetScale,
     })
+    ctx.filter = `brightness(${whiten.value}%) contrast(${Math.max(80, 200 - whiten.value)}%)`
     ctx.drawImage(cutoutImg, rect.drawX, rect.drawY, rect.drawW, rect.drawH)
+    ctx.filter = 'none'
   }
   return c
 }
@@ -181,9 +207,32 @@ function download() {
   const scaleFactor = w / (sizePreset.value.mmW * PREVIEW_SCALE)
   const photoCanvas = renderSinglePhoto(w, h, scaleFactor)
   const a = document.createElement('a')
-  a.href = photoCanvas.toDataURL('image/png')
+  a.href = embedPngDpi(photoCanvas.toDataURL('image/png'), dpi)
   a.download = `证件照-${sizePreset.value.key}.png`
   a.click()
+}
+
+const convertingCmyk = ref(false)
+
+async function downloadCmyk() {
+  if (!previewEl.value) return
+  convertingCmyk.value = true
+  try {
+    const dpi = 300
+    const w = Math.round((sizePreset.value.mmW / 25.4) * dpi)
+    const h = Math.round((sizePreset.value.mmH / 25.4) * dpi)
+    const scaleFactor = w / (sizePreset.value.mmW * PREVIEW_SCALE)
+    const photoCanvas = renderSinglePhoto(w, h, scaleFactor)
+    const cmykDataUrl = await convertToCmyk(photoCanvas.toDataURL('image/png'))
+    const a = document.createElement('a')
+    a.href = cmykDataUrl
+    a.download = `证件照-${sizePreset.value.key}-CMYK.jpg`
+    a.click()
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : 'CMYK 转换失败，请重试')
+  } finally {
+    convertingCmyk.value = false
+  }
 }
 
 /**
@@ -219,7 +268,7 @@ function downloadPrintSheet() {
     }
   }
   const a = document.createElement('a')
-  a.href = sheetCanvas.toDataURL('image/png')
+  a.href = embedPngDpi(sheetCanvas.toDataURL('image/png'), dpi)
   a.download = `证件照排版-${printSheet.value.key}-${sizePreset.value.key}.png`
   a.click()
 }
@@ -299,10 +348,20 @@ function downloadPrintSheet() {
         </div>
         <el-slider v-model="zoom" :min="0.5" :max="2" :step="0.05" />
 
+        <label class="mb-1 block text-xs font-medium text-gray-600">美白</label>
+        <el-slider v-model="whiten" :min="100" :max="140" :step="2" />
+
+        <el-button class="!w-full" :loading="fixingRedEye" @click="runFixRedEye">一键去红眼</el-button>
         <el-button class="!w-full" :loading="processing" @click="runCutout">重新抠图</el-button>
         <el-button type="primary" class="!w-full !bg-gradient-to-r !from-violet-500 !to-fuchsia-500 !border-none" @click="download">
-          下载单张证件照
+          下载单张证件照（RGB，已含300dpi分辨率信息）
         </el-button>
+        <el-button class="!w-full" :loading="convertingCmyk" @click="downloadCmyk">
+          下载 CMYK 格式（仅商业印刷厂需要）
+        </el-button>
+        <p class="text-[11px] text-gray-400">
+          普通冲印店/家用打印机用上面的 RGB 就够；CMYK 只有真的要送胶印/丝网印这类商业印刷厂时才需要，且色彩转换不带专业色彩管理，可能偏灰
+        </p>
 
         <div class="border-t border-gray-100 pt-3">
           <label class="mb-1 block text-xs font-medium text-gray-600">排版打印（一张相纸铺多份，直接拿去冲印）</label>

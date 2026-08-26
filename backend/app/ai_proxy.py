@@ -460,6 +460,87 @@ async def detect_face(
     return {"face": {"x": float(fx) / w, "y": float(fy) / h, "width": float(fw) / w, "height": float(fh) / h}}
 
 
+_EYE_CASCADE = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_eye.xml")
+
+
+@router.post("/fix-red-eye")
+async def fix_red_eye(
+    image: UploadFile = File(...),
+    _user: models.User = Depends(auth.get_current_user),
+):
+    """去红眼——纯本地 OpenCV，跟人脸检测同一套零成本算法，不调用 openlux。先用人脸检测框
+    缩小眼部检测的搜索范围（直接在整张图上跑眼部级联，背景纹理误判率明显更高——这是复用
+    人脸检测代码路径的直接原因，不是巧合）；在人脸区域里跑眼部检测，对每个检测到的眼睛，
+    把"红色通道明显高于绿蓝通道且不算太暗"的像素（闪光灯反射视网膜的典型特征）单独替换成
+    去掉红色分量后的灰阶，只动红色通道，不是整片涂黑——保留瞳孔原有的明暗结构。
+
+    没检测到人脸时退回整张图找眼睛（不直接放弃），检测不到眼睛就原样返回，不报错——
+    没有真实红眼样张走过真实场景测试，效果依赖真实红眼照片实测反馈。"""
+    image_bytes = await image.read()
+    arr = np.frombuffer(image_bytes, dtype=np.uint8)
+    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    if img is None:
+        raise HTTPException(status_code=400, detail="无法解析上传的图片")
+    h, w = img.shape[:2]
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    face_min_size = (max(30, int(w * 0.08)), max(30, int(h * 0.08)))
+    faces = _FACE_CASCADE.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=6, minSize=face_min_size)
+    if len(faces) > 0:
+        fx, fy, fw, fh = max(faces, key=lambda f: int(f[2]) * int(f[3]))
+    else:
+        fx, fy, fw, fh = 0, 0, w, h
+
+    face_gray = gray[fy : fy + fh, fx : fx + fw]
+    eye_min_size = (max(15, int(fw * 0.12)), max(15, int(fh * 0.12)))
+    eyes = _EYE_CASCADE.detectMultiScale(face_gray, scaleFactor=1.1, minNeighbors=8, minSize=eye_min_size)
+
+    fixed_count = 0
+    for ex, ey, ew, eh in eyes:
+        ax, ay = fx + int(ex), fy + int(ey)
+        region = img[ay : ay + eh, ax : ax + ew].astype(np.int16)
+        b, g, r = region[:, :, 0], region[:, :, 1], region[:, :, 2]
+        red_mask = (r > g * 1.4) & (r > b * 1.4) & (r > 60)
+        # 至少 2% 的区域被判定为偏红才当作真的红眼处理——实测过一只完全正常的眼睛也会有
+        # 零星 1~2 个像素误判（反光高光点），只看"有没有"会把正常眼睛也算进"修复了几只"，
+        # 卡个比例门槛能把这类噪声排除掉
+        if red_mask.mean() < 0.02:
+            continue
+        avg_gb = ((g + b) / 2).astype(np.uint8)
+        red_channel = img[ay : ay + eh, ax : ax + ew, 2]
+        red_channel[red_mask] = avg_gb[red_mask]
+        fixed_count += 1
+
+    success, buf = cv2.imencode(".png", img)
+    if not success:
+        raise HTTPException(status_code=500, detail="图片编码失败")
+    b64 = base64.b64encode(buf.tobytes()).decode()
+    return {"data": [{"b64_json": b64}], "eyesFixed": fixed_count}
+
+
+@router.post("/convert-cmyk")
+async def convert_cmyk(
+    image: UploadFile = File(...),
+    _user: models.User = Depends(auth.get_current_user),
+):
+    """把浏览器画出来的 RGB 图转成 CMYK JPEG——只有真的要送商业印刷厂（胶印/丝网印这类需要
+    CMYK 四色分色的场景）才用得上。Canvas API 只能画 RGB，这一步必须经后端：Pillow 的
+    convert('CMYK') 是直接的数学换算，不带 ICC 色彩管理描述文件，转出来的颜色（尤其肤色）
+    会比印刷厂用专业软件转的偏灰/偏暗——只是格式对了，不代表色彩准。普通冲印店/家用打印机
+    认 RGB 就够，不需要这一步；生成的 CMYK JPEG 在浏览器里直接用 <img> 预览可能显示异常
+    （多数浏览器的 JPEG 解码器按 RGB/YCbCr 假设，不认 CMYK JPEG），只适合直接下载后
+    在 Photoshop 或专业排版软件里打开，不能拿来做站内预览。"""
+    image_bytes = await image.read()
+    try:
+        img = PILImage.open(io.BytesIO(image_bytes)).convert("RGB")
+    except Exception:
+        raise HTTPException(status_code=400, detail="无法解析上传的图片")
+    cmyk_img = img.convert("CMYK")
+    buf = io.BytesIO()
+    cmyk_img.save(buf, format="JPEG", quality=95)
+    b64 = base64.b64encode(buf.getvalue()).decode()
+    return {"image": f"data:image/jpeg;base64,{b64}"}
+
+
 # "素材插画/文字生成"专用：只从参考图里框选出的一小块区域提炼风格类别（跟 reference-to-background
 # 同一条纪律——只说类别/手法，不描述精确外形/不抄录原文文字），插画和文字两种分开写 instruction
 # 是因为要防的具体表达完全不同：插画防的是"具体外形/姿势"，文字防的是"照抄原文这几个字"。
