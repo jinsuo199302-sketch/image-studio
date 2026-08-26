@@ -8,8 +8,22 @@ import AIPdfTab from './ai/AIPdfTab.vue'
 import AICutoutTab from './ai/AICutoutTab.vue'
 import AIEraseTab from './ai/AIEraseTab.vue'
 import AITextReplaceTab from './ai/AITextReplaceTab.vue'
+import AIOcrTab from './ai/AIOcrTab.vue'
+import AIIdPhotoTab from './ai/AIIdPhotoTab.vue'
+import AIScreenshotStitchTab from './ai/AIScreenshotStitchTab.vue'
 
-type TabKey = 'image' | 'write' | 'translate' | 'video' | 'pdf' | 'cutout' | 'erase' | 'textreplace'
+type TabKey =
+  | 'image'
+  | 'write'
+  | 'translate'
+  | 'video'
+  | 'pdf'
+  | 'cutout'
+  | 'erase'
+  | 'textreplace'
+  | 'ocr'
+  | 'idphoto'
+  | 'stitch'
 
 const props = defineProps<{ selectedText: string | null; initialTab?: TabKey }>()
 const emit = defineEmits<{
@@ -26,7 +40,7 @@ function pickTab(key: string) {
 
 <template>
   <div class="flex h-full flex-col">
-    <div class="flex border-b border-gray-100 px-2 pt-2">
+    <div class="flex overflow-x-auto border-b border-gray-100 px-2 pt-2">
       <button
         v-for="tab in [
           { key: 'image', label: '生图' },
@@ -37,9 +51,12 @@ function pickTab(key: string) {
           { key: 'cutout', label: '抠图' },
           { key: 'erase', label: '消除' },
           { key: 'textreplace', label: '改字' },
+          { key: 'ocr', label: '提字' },
+          { key: 'idphoto', label: '证件照' },
+          { key: 'stitch', label: '长截图' },
         ]"
         :key="tab.key"
-        class="flex-1 rounded-t-md px-1 py-2 text-xs transition"
+        class="flex-1 shrink-0 rounded-t-md px-1 py-2 text-xs transition"
         :class="
           activeTab === tab.key
             ? 'border-b-2 border-violet-500 font-medium text-violet-600'
@@ -64,7 +81,10 @@ function pickTab(key: string) {
       <AIPdfTab v-else-if="activeTab === 'pdf'" />
       <AICutoutTab v-else-if="activeTab === 'cutout'" />
       <AIEraseTab v-else-if="activeTab === 'erase'" />
-      <AITextReplaceTab v-else />
+      <AITextReplaceTab v-else-if="activeTab === 'textreplace'" />
+      <AIOcrTab v-else-if="activeTab === 'ocr'" />
+      <AIIdPhotoTab v-else-if="activeTab === 'idphoto'" />
+      <AIScreenshotStitchTab v-else />
     </div>
   </div>
 </template>
