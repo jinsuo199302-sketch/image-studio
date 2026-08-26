@@ -133,7 +133,9 @@ ALLOW
 or
 REJECT: <one short Chinese sentence explaining why>"""
 
-_ID_DOCUMENT_IMAGE_CHECK_INSTRUCTION = """Look at this image carefully. Does it show — fully, partially, or as a photo/scan/screenshot of one — a government-issued ID card, passport, driver's license, household register, certificate, diploma, official seal/stamp, banknote, or any other official identity/legal document?
+_SENSITIVE_DOCUMENT_IMAGE_CHECK_INSTRUCTION = """Look at this image carefully. Does it show — fully, partially, or as a photo/scan/screenshot of one — any of the following:
+- a government-issued ID card, passport, driver's license, household register, certificate, diploma, official seal/stamp, or banknote; OR
+- a financial/business document such as an invoice (发票), receipt (收据), expense reimbursement form (报销单), bank statement, payslip, or contract?
 
 Respond with EXACTLY one word, no other text: YES or NO."""
 
@@ -166,9 +168,11 @@ async def _moderate_text(content: str) -> None:
         raise HTTPException(status_code=403, detail=f"请求已被拒绝：{reason}")
 
 
-async def _check_not_id_document(image_bytes: bytes, media_type: str) -> None:
-    """AI 消除/去水印专用：先判断上传图是不是身份证/证件/公文等官方文件，
-    防止被用来抹掉证件上的"仅供 XX 使用"水印或其他安全标记去伪造材料。"""
+async def _check_not_sensitive_document(image_bytes: bytes, media_type: str, feature_label: str) -> None:
+    """凡是接受用户上传图片的功能都要过这一层——先判断上传图是不是身份证/证件/公文，或者
+    发票/报销单/银行流水这类财务票据，防止被用来篡改/伪造这些材料。所有工具统一走这一个
+    分类器，不是只有 AI 消除才防，跟 _moderate_text 一样：分类调用本身失败就拒绝这次请求，
+    不静默放行。feature_label 只用来给拒绝提示换个功能名字，检测逻辑完全一样。"""
     b64 = base64.b64encode(image_bytes).decode()
     try:
         res = await _post_openlux(
@@ -181,7 +185,7 @@ async def _check_not_id_document(image_bytes: bytes, media_type: str) -> None:
                     {
                         "role": "user",
                         "content": [
-                            {"type": "text", "text": _ID_DOCUMENT_IMAGE_CHECK_INSTRUCTION},
+                            {"type": "text", "text": _SENSITIVE_DOCUMENT_IMAGE_CHECK_INSTRUCTION},
                             {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{b64}"}},
                         ],
                     }
@@ -196,7 +200,10 @@ async def _check_not_id_document(image_bytes: bytes, media_type: str) -> None:
     except Exception:
         raise HTTPException(status_code=503, detail="内容安全检查失败，请重试")
     if verdict.startswith("YES"):
-        raise HTTPException(status_code=403, detail="为防止被用于伪造证件/公文，AI 消除功能不支持处理身份证、证件、公文等官方文件类图片")
+        raise HTTPException(
+            status_code=403,
+            detail=f"为防止被用于伪造证件/票据，{feature_label}功能不支持处理身份证、证件、发票、报销单等敏感文件类图片",
+        )
 
 
 @router.post("/images/generations")
@@ -229,7 +236,7 @@ async def images_edits(
     _require_openlux()
     image_bytes = await image.read()
     mask_bytes = await mask.read()
-    await _check_not_id_document(image_bytes, image.content_type or "image/png")
+    await _check_not_sensitive_document(image_bytes, image.content_type or "image/png", "AI 消除/文字替换")
     await _moderate_text(prompt)
     res = await _post_openlux(
         f"{OPENLUX_BASE_URL}/images/edits",
@@ -298,8 +305,9 @@ async def design_reference_to_background(
     标题/副标题文字层不在这里加——那部分复用前端已有的文字编辑能力，用户自己调。"""
     _require_openlux()
     image_bytes = await image.read()
-    b64_in = base64.b64encode(image_bytes).decode()
     media_type = image.content_type or "image/png"
+    await _check_not_sensitive_document(image_bytes, media_type, "参考图生成")
+    b64_in = base64.b64encode(image_bytes).decode()
 
     vision_res = await _post_openlux(
         f"{OPENLUX_BASE_URL}/chat/completions",
@@ -399,11 +407,15 @@ async def background_removal(
     image: UploadFile = File(...),
     _user: models.User = Depends(auth.get_current_user),
 ):
-    """本地跑 rembg（u2net 模型），不依赖任何第三方 key。放到独立子进程里跑（见
+    """本地跑 rembg（u2net 模型）本身不依赖任何第三方 key，但合规检查需要调用 openlux 的
+    视觉模型，所以这个接口现在也要求 OPENLUX_API_KEY 配置好——这是"所有工具统一走一层敏感
+    文件检测"这条要求带来的必然依赖，不是抠图本身需要。放到独立子进程里跑（见
     bg_removal_worker.py）——模型稳定态占约 1GB RSS，不能常驻在主 uvicorn 进程里，
     不然这台 2 核 2GB 的机器迟早被这个功能拖垮。首次调用要下载模型（~176MB），
     会明显慢一次，之后走本地缓存就快了（现测 <1s）。"""
+    _require_openlux()
     image_bytes = await image.read()
+    await _check_not_sensitive_document(image_bytes, image.content_type or "image/png", "AI 抠图")
     try:
         proc = await asyncio.to_thread(_run_bg_removal_subprocess, image_bytes)
     except subprocess.TimeoutExpired:
@@ -443,8 +455,11 @@ async def design_reference_to_asset(
     if asset_type == "text" and not (text and text.strip()):
         raise HTTPException(status_code=400, detail="文字类型需要提供 text 内容")
     _require_openlux()
+    if asset_type == "text":
+        await _moderate_text(text or "")
 
     image_bytes = await image.read()
+    await _check_not_sensitive_document(image_bytes, image.content_type or "image/png", "素材/文字生成")
     try:
         img = PILImage.open(io.BytesIO(image_bytes)).convert("RGB")
     except Exception:
