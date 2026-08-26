@@ -8,7 +8,9 @@ import subprocess
 import sys
 import uuid
 
+import cv2
 import httpx
+import numpy as np
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from PIL import Image as PILImage
 from sqlalchemy.orm import Session
@@ -424,6 +426,38 @@ async def background_removal(
         raise HTTPException(status_code=502, detail=f"抠图处理失败：{proc.stderr.decode(errors='ignore')[:500]}")
     b64 = base64.b64encode(proc.stdout).decode()
     return {"data": [{"b64_json": b64}]}
+
+
+_FACE_CASCADE = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+
+
+@router.post("/detect-face")
+async def detect_face(
+    image: UploadFile = File(...),
+    _user: models.User = Depends(auth.get_current_user),
+):
+    """证件照制作专用：本地跑 OpenCV Haar 级联检测人脸位置，纯本地算法不调用 openlux，
+    零额外 AI 成本。返回人脸框相对图片宽高的 0~1 比例坐标，跟 reference-to-asset 的框选坐标
+    是同一套单位约定，前端好复用。
+
+    minSize 按图片自身尺寸的比例算，不能用固定像素——实测过：固定 100px 在 4032×3024 的真实
+    照片上能准确避开衣服纹理这类误判，但换到 128×121 的小图上 100px 比整张图还大，直接测不出
+    人脸。多张脸（真实照片背景纹理偶尔会被误判成好几个小"脸"）取面积最大的一个，实测这个策略
+    在真实测试照片上（一张 128×121 小头像 + 一张 4032×3024 手机原图，原图上有 7 个误判但都
+    明显小于真脸）都精确只留下真脸。检测不到人脸时返回 null，前端退回原来"整图占比"的粗略估算。"""
+    image_bytes = await image.read()
+    arr = np.frombuffer(image_bytes, dtype=np.uint8)
+    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    if img is None:
+        raise HTTPException(status_code=400, detail="无法解析上传的图片")
+    h, w = img.shape[:2]
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    min_size = (max(30, int(w * 0.08)), max(30, int(h * 0.08)))
+    faces = _FACE_CASCADE.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=6, minSize=min_size)
+    if len(faces) == 0:
+        return {"face": None}
+    fx, fy, fw, fh = max(faces, key=lambda f: int(f[2]) * int(f[3]))
+    return {"face": {"x": float(fx) / w, "y": float(fy) / h, "width": float(fw) / w, "height": float(fh) / h}}
 
 
 # "素材插画/文字生成"专用：只从参考图里框选出的一小块区域提炼风格类别（跟 reference-to-background

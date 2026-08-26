@@ -4,6 +4,7 @@ import { ElMessage } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import { useAuthStore } from '../../../../stores/auth'
 import { removeBackground } from '../../../../services/backgroundRemovalApi'
+import { detectFace, type FaceBox } from '../../../../services/faceDetectApi'
 
 const authStore = useAuthStore()
 
@@ -30,8 +31,10 @@ const BG_COLORS = [
 const bgColor = ref(BG_COLORS[0].value)
 
 const fileInput = ref<HTMLInputElement>()
+const rawFile = ref<File | null>(null)
 const rawImage = ref<string | null>(null)
 const cutoutImage = ref<string | null>(null)
+const faceBox = ref<FaceBox | null>(null)
 const processing = ref(false)
 
 const previewEl = ref<HTMLCanvasElement>()
@@ -49,10 +52,12 @@ let dragOrigY = 0
 function onFileChange(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
   if (!file) return
+  rawFile.value = file
   const reader = new FileReader()
   reader.onload = () => {
     rawImage.value = reader.result as string
     cutoutImage.value = null
+    faceBox.value = null
   }
   reader.readAsDataURL(file)
   ;(e.target as HTMLInputElement).value = ''
@@ -62,16 +67,69 @@ async function runCutout() {
   if (!rawImage.value) return
   processing.value = true
   try {
-    cutoutImage.value = await removeBackground(authStore.isAuthenticated, rawImage.value)
+    // 抠图 + 人脸检测并行发起——两个都要基于原图，互不依赖，没必要串行等
+    const [cutout, face] = await Promise.all([
+      removeBackground(authStore.isAuthenticated, rawImage.value),
+      rawFile.value ? detectFace(rawFile.value).catch(() => null) : Promise.resolve(null),
+    ])
+    cutoutImage.value = cutout
+    faceBox.value = face
     zoom.value = 1
     offsetX.value = 0
     offsetY.value = 0
-    ElMessage.success('抠图完成，可以调整位置/大小了')
+    ElMessage.success(face ? '抠图完成，已自动按人脸定位' : '抠图完成，可以调整位置/大小了')
   } catch {
     ElMessage.error('抠图失败，请重试')
   } finally {
     processing.value = false
   }
+}
+
+/**
+ * 人脸检测框（Haar 级联）框住的大致是眉毛到下巴这一段，要往上/下/两侧扩一圈才是
+ * "发际线到下巴+两耳"这个证件照真正要框的"头部"范围——这几个扩展系数是参考真实证件照
+ * 头部占比标准估的，不是精确算出来的，但比"整张图占92%高度"这种完全不看人脸位置的
+ * 粗暴做法准得多（原来的做法在半身/全身照上会把头部挤得很小，这正是用户反馈的问题）。
+ */
+function computeHeadFrame(imgW: number, imgH: number) {
+  if (faceBox.value) {
+    const fx = faceBox.value.x * imgW
+    const fy = faceBox.value.y * imgH
+    const fw = faceBox.value.width * imgW
+    const fh = faceBox.value.height * imgH
+    const headTop = fy - fh * 0.65
+    const headBottom = fy + fh * 1.15
+    return {
+      headHeight: headBottom - headTop,
+      headCenterX: fx + fw / 2,
+      headCenterY: (headTop + headBottom) / 2,
+      hasFace: true,
+    }
+  }
+  return { headHeight: imgH, headCenterX: imgW / 2, headCenterY: imgH / 2, hasFace: false }
+}
+
+/**
+ * 预览和导出共用同一套定位计算，避免两处各写一遍导致数值不一致。offsetScale 是因为
+ * offsetX/offsetY 这两个拖拽量是在预览画布（低倍缩放）上量出来的像素值，导出画布是
+ * 300dpi 高分辨率、跟预览不是同一把尺子，要按两个画布的倍数换算过去才能对上同一个位置
+ */
+function computeDrawRect(canvasW: number, canvasH: number, offsetScale = 1) {
+  if (!cutoutImg) return null
+  const frame = computeHeadFrame(cutoutImg.naturalWidth, cutoutImg.naturalHeight)
+  // 有人脸检测时，头部占画布高度的 65%、垂直中心落在画布 40% 高度处（上留白略少，
+  // 符合常见证件照"头顶留白小、下巴以下留肩部空间"的构图）；没检测到人脸时退回
+  // 整图居中占 92% 高度的粗略估算
+  const desiredHeadFrac = frame.hasFace ? 0.65 : 0.92
+  const targetCenterYFrac = frame.hasFace ? 0.4 : 0.5
+  const baseScale = (canvasH * desiredHeadFrac) / frame.headHeight
+  const drawW = cutoutImg.naturalWidth * baseScale * zoom.value
+  const drawH = cutoutImg.naturalHeight * baseScale * zoom.value
+  const headCenterXScaled = frame.headCenterX * baseScale * zoom.value
+  const headCenterYScaled = frame.headCenterY * baseScale * zoom.value
+  const drawX = canvasW / 2 - headCenterXScaled + offsetX.value * offsetScale
+  const drawY = canvasH * targetCenterYFrac - headCenterYScaled + offsetY.value * offsetScale
+  return { drawX, drawY, drawW, drawH }
 }
 
 function drawPreview() {
@@ -86,17 +144,12 @@ function drawPreview() {
   ctx.fillStyle = bgColor.value
   ctx.fillRect(0, 0, w, h)
 
-  // 默认把人像的高度铺满画布的 92%，居中——没有人脸检测，先给个通常好用的默认框，
-  // 用户自己再拖/缩放微调
-  const baseScale = (h * 0.92) / cutoutImg.naturalHeight
-  const drawW = cutoutImg.naturalWidth * baseScale * zoom.value
-  const drawH = cutoutImg.naturalHeight * baseScale * zoom.value
-  const drawX = (w - drawW) / 2 + offsetX.value
-  const drawY = (h - drawH) / 2 + offsetY.value
-  ctx.drawImage(cutoutImg, drawX, drawY, drawW, drawH)
+  const rect = computeDrawRect(w, h)
+  if (!rect) return
+  ctx.drawImage(cutoutImg, rect.drawX, rect.drawY, rect.drawW, rect.drawH)
 }
 
-watch([cutoutImage, sizePreset, bgColor, zoom, offsetX, offsetY], async () => {
+watch([cutoutImage, faceBox, sizePreset, bgColor, zoom, offsetX, offsetY], async () => {
   if (!cutoutImage.value) return
   if (!cutoutImg || cutoutImg.src !== cutoutImage.value) {
     cutoutImg = new Image()
@@ -138,15 +191,9 @@ function download() {
   const ctx = exportCanvas.getContext('2d')!
   ctx.fillStyle = bgColor.value
   ctx.fillRect(0, 0, w, h)
-  if (cutoutImg) {
-    const scaleFactor = w / (sizePreset.value.mmW * PREVIEW_SCALE)
-    const baseScale = (h * 0.92) / cutoutImg.naturalHeight
-    const drawW = cutoutImg.naturalWidth * baseScale * zoom.value
-    const drawH = cutoutImg.naturalHeight * baseScale * zoom.value
-    const drawX = (w - drawW) / 2 + offsetX.value * scaleFactor
-    const drawY = (h - drawH) / 2 + offsetY.value * scaleFactor
-    ctx.drawImage(cutoutImg, drawX, drawY, drawW, drawH)
-  }
+  const scaleFactor = w / (sizePreset.value.mmW * PREVIEW_SCALE)
+  const rect = computeDrawRect(w, h, scaleFactor)
+  if (rect) ctx.drawImage(cutoutImg!, rect.drawX, rect.drawY, rect.drawW, rect.drawH)
   const a = document.createElement('a')
   a.href = exportCanvas.toDataURL('image/png')
   a.download = `证件照-${sizePreset.value.key}.png`

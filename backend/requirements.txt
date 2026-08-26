@@ -13,3 +13,4 @@ onnxruntime==1.29.0
 beautifulsoup4==4.12.3
 Pillow==12.3.0
 reportlab==5.0.1
+opencv-python-headless==4.10.0.84
