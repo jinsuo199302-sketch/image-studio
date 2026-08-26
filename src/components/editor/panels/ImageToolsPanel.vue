@@ -6,6 +6,7 @@ import { removeBackground } from '../../../services/backgroundRemovalApi'
 import { upscaleImage } from '../../../services/upscaleApi'
 import { useAuthStore } from '../../../stores/auth'
 import EraseDialog from '../EraseDialog.vue'
+import TextReplaceDialog from '../TextReplaceDialog.vue'
 
 const emit = defineEmits<{ (e: 'insert', url: string): void }>()
 const authStore = useAuthStore()
@@ -14,6 +15,7 @@ const fileInput = ref<HTMLInputElement>()
 const workingImage = ref<string | null>(null)
 const processing = ref<'' | 'bg' | 'upscale'>('')
 const eraseDialogOpen = ref(false)
+const textReplaceDialogOpen = ref(false)
 
 function onFileChange(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
@@ -98,6 +100,9 @@ async function runUpscale() {
         <el-button size="small" class="!w-full" :disabled="!!processing" @click="eraseDialogOpen = true">
           AI 消除 / 去水印
         </el-button>
+        <el-button size="small" class="!w-full" :disabled="!!processing" @click="textReplaceDialogOpen = true">
+          文字替换
+        </el-button>
 
         <el-button
           type="primary"
@@ -110,5 +115,6 @@ async function runUpscale() {
     </div>
 
     <EraseDialog v-model="eraseDialogOpen" :image-src="workingImage ?? ''" @result="(url) => (workingImage = url)" />
+    <TextReplaceDialog v-model="textReplaceDialogOpen" :image-src="workingImage ?? ''" @result="(url) => (workingImage = url)" />
   </div>
 </template>

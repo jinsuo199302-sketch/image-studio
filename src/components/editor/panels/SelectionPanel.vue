@@ -14,6 +14,7 @@ import {
   Bottom,
   Lock,
   Unlock,
+  EditPen,
 } from '@element-plus/icons-vue'
 import type { SelectionInfo, WarpKind } from '../CanvasStage.vue'
 import { FONT_OPTIONS } from '../../../data/fonts'
@@ -71,6 +72,7 @@ const emit = defineEmits<{
   (e: 'replace-image'): void
   (e: 'remove-background'): void
   (e: 'erase-object'): void
+  (e: 'text-replace'): void
   (e: 'adjust-image'): void
   (e: 'delete'): void
 }>()
@@ -555,6 +557,13 @@ function pickWarp(kind: WarpKind) {
           >
             <el-icon :size="14"><MagicStick /></el-icon>
             AI 消除/去水印
+          </button>
+          <button
+            class="flex w-full items-center gap-2 rounded px-2 py-2 text-xs text-gray-600 hover:bg-gray-100"
+            @click="emit('text-replace')"
+          >
+            <el-icon :size="14"><EditPen /></el-icon>
+            文字替换
           </button>
           <button
             class="flex w-full items-center gap-2 rounded px-2 py-2 text-xs text-gray-600 hover:bg-gray-100"

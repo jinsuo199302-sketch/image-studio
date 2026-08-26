@@ -26,6 +26,7 @@ const TOOL_TABS = [
   { key: 'pdf-tools', label: 'PDF 工具', desc: '合并 / 拆分', enabled: true, route: '/ai-tools?tab=pdf' },
   { key: 'ai-cutout', label: 'AI 抠图', desc: '一键去背景', enabled: true, route: '/ai-tools?tab=cutout' },
   { key: 'ai-erase', label: 'AI 消除', desc: '涂抹去水印', enabled: true, route: '/ai-tools?tab=erase' },
+  { key: 'ai-textreplace', label: 'AI 改字', desc: '一键改日期/价格/文案', enabled: true, route: '/ai-tools?tab=textreplace' },
   { key: 'collage', label: '图片拼贴', desc: '多图合成一张', enabled: false },
   { key: 'vectorize', label: '位图转矢量', desc: '照片转矢量图', enabled: false },
 ]

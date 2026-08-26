@@ -12,6 +12,7 @@ import ResizeDialog from '../components/editor/ResizeDialog.vue'
 import HistoryDialog from '../components/editor/HistoryDialog.vue'
 import ImageAdjustDialog from '../components/editor/ImageAdjustDialog.vue'
 import EraseDialog from '../components/editor/EraseDialog.vue'
+import TextReplaceDialog from '../components/editor/TextReplaceDialog.vue'
 import TemplateSwitchPanel from '../components/editor/panels/TemplateSwitchPanel.vue'
 import BackgroundPanel from '../components/editor/panels/BackgroundPanel.vue'
 import ShapePanel from '../components/editor/panels/ShapePanel.vue'
@@ -67,6 +68,7 @@ const historyDialogOpen = ref(false)
 const removingBackground = ref(false)
 const adjustDialogOpen = ref(false)
 const eraseDialogOpen = ref(false)
+const textReplaceDialogOpen = ref(false)
 
 function switchTemplate(id: string) {
   currentId.value = id
@@ -271,6 +273,7 @@ async function onRemoveBackground() {
           @replace-image="replaceViaUpload"
           @remove-background="onRemoveBackground"
           @erase-object="eraseDialogOpen = true"
+          @text-replace="textReplaceDialogOpen = true"
           @adjust-image="adjustDialogOpen = true"
           @delete="stageRef?.deleteSelected()"
         />
@@ -329,6 +332,11 @@ async function onRemoveBackground() {
     />
     <EraseDialog
       v-model="eraseDialogOpen"
+      :image-src="selection?.src ?? ''"
+      @result="(url) => stageRef?.replaceSelectedImage(url)"
+    />
+    <TextReplaceDialog
+      v-model="textReplaceDialogOpen"
       :image-src="selection?.src ?? ''"
       @result="(url) => stageRef?.replaceSelectedImage(url)"
     />
