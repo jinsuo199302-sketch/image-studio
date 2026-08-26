@@ -2,9 +2,9 @@
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { UploadFilled, Close, ArrowUp, ArrowDown } from '@element-plus/icons-vue'
-import { mergePdfs, splitPdf, type SplitMode } from '../../../../services/pdfApi'
+import { mergePdfs, splitPdf, watermarkPdf, signPdf, type SplitMode } from '../../../../services/pdfApi'
 
-type SubTab = 'merge' | 'split'
+type SubTab = 'merge' | 'split' | 'watermark' | 'sign'
 const activeSubTab = ref<SubTab>('merge')
 
 /** 与服务器 Nginx 的 client_max_body_size 保持一致，改了那边记得也改这里 */
@@ -116,24 +116,146 @@ async function doSplit() {
     splitting.value = false
   }
 }
+
+// ---- 加水印 ----
+const watermarkFile = ref<File | null>(null)
+const watermarkInput = ref<HTMLInputElement>()
+const watermarkText = ref('')
+const watermarkOpacity = ref(0.3)
+const watermarkFontSize = ref(36)
+const watermarking = ref(false)
+const watermarkError = ref('')
+
+function onWatermarkPick(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0] ?? null
+  if (file && file.size > MAX_FILE_SIZE) {
+    watermarkError.value = `文件超过 ${MAX_FILE_SIZE_MB}MB，未选择`
+    watermarkFile.value = null
+  } else {
+    watermarkError.value = ''
+    watermarkFile.value = file
+  }
+  ;(e.target as HTMLInputElement).value = ''
+}
+
+async function doWatermark() {
+  if (!watermarkFile.value) {
+    watermarkError.value = '请先选择要加水印的 PDF 文件'
+    return
+  }
+  if (!watermarkText.value.trim()) {
+    watermarkError.value = '请输入水印文字'
+    return
+  }
+  watermarkError.value = ''
+  watermarking.value = true
+  try {
+    const blob = await watermarkPdf(watermarkFile.value, watermarkText.value.trim(), {
+      opacity: watermarkOpacity.value,
+      fontSize: watermarkFontSize.value,
+    })
+    downloadBlob(blob, 'watermarked.pdf')
+    ElMessage.success('加水印完成，已开始下载')
+  } catch (e) {
+    watermarkError.value = e instanceof Error ? e.message : '加水印失败，请重试'
+  } finally {
+    watermarking.value = false
+  }
+}
+
+// ---- 签名 ----
+const signFile = ref<File | null>(null)
+const signInput = ref<HTMLInputElement>()
+const signatureFile = ref<File | null>(null)
+const signatureInput = ref<HTMLInputElement>()
+const signPageNumber = ref(1)
+const signWidth = ref(0.25)
+// 后端要的 x/y 是签名图"左上角"的位置比例，不是中心点——预设位置直接给左上角坐标，
+// 不去精确计算图片高度（签名图宽高比不固定，前端不读图就不知道），留够边距够用即可，
+// 不追求像素级贴边对齐
+type SignPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center'
+const SIGN_POSITIONS: { key: SignPosition; label: string }[] = [
+  { key: 'top-left', label: '左上' },
+  { key: 'top-right', label: '右上' },
+  { key: 'center', label: '居中' },
+  { key: 'bottom-left', label: '左下' },
+  { key: 'bottom-right', label: '右下' },
+]
+const signPosition = ref<SignPosition>('bottom-right')
+
+function positionTopLeft(pos: SignPosition, width: number): { x: number; y: number } {
+  const margin = 0.05
+  const x = pos.includes('left') ? margin : pos.includes('right') ? 1 - width - margin : 0.5 - width / 2
+  const y = pos.startsWith('top') ? margin : pos.startsWith('bottom') ? 0.75 : 0.45
+  return { x, y }
+}
+const signing = ref(false)
+const signError = ref('')
+
+function onSignFilePick(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0] ?? null
+  if (file && file.size > MAX_FILE_SIZE) {
+    signError.value = `文件超过 ${MAX_FILE_SIZE_MB}MB，未选择`
+    signFile.value = null
+  } else {
+    signError.value = ''
+    signFile.value = file
+  }
+  ;(e.target as HTMLInputElement).value = ''
+}
+
+function onSignatureImagePick(e: Event) {
+  signatureFile.value = (e.target as HTMLInputElement).files?.[0] ?? null
+  ;(e.target as HTMLInputElement).value = ''
+}
+
+async function doSign() {
+  if (!signFile.value) {
+    signError.value = '请先选择要签名的 PDF 文件'
+    return
+  }
+  if (!signatureFile.value) {
+    signError.value = '请上传签名图片（可以是手写签名的照片，背景透明效果更好）'
+    return
+  }
+  signError.value = ''
+  signing.value = true
+  try {
+    const { x, y } = positionTopLeft(signPosition.value, signWidth.value)
+    const blob = await signPdf(signFile.value, signatureFile.value, {
+      pageNumber: signPageNumber.value,
+      x,
+      y,
+      width: signWidth.value,
+    })
+    downloadBlob(blob, 'signed.pdf')
+    ElMessage.success('签名完成，已开始下载')
+  } catch (e) {
+    signError.value = e instanceof Error ? e.message : '签名失败，请重试'
+  } finally {
+    signing.value = false
+  }
+}
 </script>
 
 <template>
   <div class="flex h-full flex-col">
     <div class="p-3 pb-0">
       <el-alert
-        :title="`合并多个 PDF，或按页数/范围拆分成多份（单个文件最大 ${MAX_FILE_SIZE_MB}MB，页数不限）`"
+        :title="`合并/拆分/加水印/签名（单个文件最大 ${MAX_FILE_SIZE_MB}MB，页数不限）`"
         type="info"
         :closable="false"
         show-icon
       />
     </div>
 
-    <div class="flex px-3 pt-3">
+    <div class="flex flex-wrap gap-1.5 px-3 pt-3">
       <button
         v-for="tab in [
           { key: 'merge', label: '合并' },
           { key: 'split', label: '拆分' },
+          { key: 'watermark', label: '加水印' },
+          { key: 'sign', label: '签名' },
         ]"
         :key="tab.key"
         class="flex-1 rounded-full border px-2.5 py-1 text-xs transition"
@@ -187,7 +309,7 @@ async function doSplit() {
         <p v-if="mergeError" class="text-xs text-red-500">{{ mergeError }}</p>
       </template>
 
-      <template v-else>
+      <template v-else-if="activeSubTab === 'split'">
         <input ref="splitInput" type="file" accept="application/pdf" class="hidden" @change="onSplitPick" />
         <div
           class="flex h-24 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-gray-300 text-gray-400 transition hover:border-violet-400 hover:text-violet-500"
@@ -228,6 +350,77 @@ async function doSplit() {
 
         <p v-if="splitError" class="text-xs text-red-500">{{ splitError }}</p>
       </template>
+
+      <template v-else-if="activeSubTab === 'watermark'">
+        <input ref="watermarkInput" type="file" accept="application/pdf" class="hidden" @change="onWatermarkPick" />
+        <div
+          class="flex h-24 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-gray-300 text-gray-400 transition hover:border-violet-400 hover:text-violet-500"
+          @click="watermarkInput?.click()"
+        >
+          <el-icon :size="22"><UploadFilled /></el-icon>
+          <span class="text-xs">{{ watermarkFile ? watermarkFile.name : `点击选择要加水印的 PDF 文件（不超过 ${MAX_FILE_SIZE_MB}MB）` }}</span>
+        </div>
+
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-600">水印文字</label>
+          <el-input v-model="watermarkText" placeholder="例如：内部资料 请勿外传" />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-600">透明度</label>
+          <el-slider v-model="watermarkOpacity" :min="0.05" :max="0.8" :step="0.05" />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-600">字号</label>
+          <el-input-number v-model="watermarkFontSize" :min="12" :max="80" size="small" controls-position="right" />
+        </div>
+
+        <p v-if="watermarkError" class="text-xs text-red-500">{{ watermarkError }}</p>
+      </template>
+
+      <template v-else>
+        <input ref="signInput" type="file" accept="application/pdf" class="hidden" @change="onSignFilePick" />
+        <div
+          class="flex h-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-gray-300 text-gray-400 transition hover:border-violet-400 hover:text-violet-500"
+          @click="signInput?.click()"
+        >
+          <el-icon :size="20"><UploadFilled /></el-icon>
+          <span class="text-xs">{{ signFile ? signFile.name : `选择要签名的 PDF（不超过 ${MAX_FILE_SIZE_MB}MB）` }}</span>
+        </div>
+
+        <input ref="signatureInput" type="file" accept="image/*" class="hidden" @change="onSignatureImagePick" />
+        <div
+          class="flex h-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-gray-300 text-gray-400 transition hover:border-violet-400 hover:text-violet-500"
+          @click="signatureInput?.click()"
+        >
+          <el-icon :size="20"><UploadFilled /></el-icon>
+          <span class="text-xs">{{ signatureFile ? signatureFile.name : '上传签名图片（透明背景效果更好）' }}</span>
+        </div>
+
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-600">签在第几页</label>
+          <el-input-number v-model="signPageNumber" :min="1" size="small" controls-position="right" />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-600">位置</label>
+          <div class="flex flex-wrap gap-1.5">
+            <button
+              v-for="p in SIGN_POSITIONS"
+              :key="p.key"
+              class="rounded-full border px-2.5 py-0.5 text-[11px] transition"
+              :class="signPosition === p.key ? 'border-violet-500 bg-violet-50 text-violet-600' : 'border-gray-200 text-gray-500'"
+              @click="signPosition = p.key"
+            >
+              {{ p.label }}
+            </button>
+          </div>
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-600">签名大小</label>
+          <el-slider v-model="signWidth" :min="0.1" :max="0.6" :step="0.05" />
+        </div>
+
+        <p v-if="signError" class="text-xs text-red-500">{{ signError }}</p>
+      </template>
     </div>
 
     <div class="border-t border-gray-100 p-3">
@@ -241,13 +434,31 @@ async function doSplit() {
         {{ merging ? '合并中…' : '合并并下载' }}
       </el-button>
       <el-button
-        v-else
+        v-else-if="activeSubTab === 'split'"
         type="primary"
         class="!w-full !bg-gradient-to-r !from-violet-500 !to-fuchsia-500 !border-none"
         :loading="splitting"
         @click="doSplit"
       >
         {{ splitting ? '拆分中…' : '拆分并下载' }}
+      </el-button>
+      <el-button
+        v-else-if="activeSubTab === 'watermark'"
+        type="primary"
+        class="!w-full !bg-gradient-to-r !from-violet-500 !to-fuchsia-500 !border-none"
+        :loading="watermarking"
+        @click="doWatermark"
+      >
+        {{ watermarking ? '处理中…' : '加水印并下载' }}
+      </el-button>
+      <el-button
+        v-else
+        type="primary"
+        class="!w-full !bg-gradient-to-r !from-violet-500 !to-fuchsia-500 !border-none"
+        :loading="signing"
+        @click="doSign"
+      >
+        {{ signing ? '处理中…' : '签名并下载' }}
       </el-button>
     </div>
   </div>

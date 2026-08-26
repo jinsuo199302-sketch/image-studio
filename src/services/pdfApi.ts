@@ -50,3 +50,43 @@ export async function splitPdf(
     throw new Error(await extractErrorMessage(e, '拆分失败，请重试'))
   }
 }
+
+export async function watermarkPdf(
+  file: File,
+  text: string,
+  params: { opacity?: number; fontSize?: number; rotation?: number } = {},
+): Promise<Blob> {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('text', text)
+  if (params.opacity !== undefined) form.append('opacity', String(params.opacity))
+  if (params.fontSize !== undefined) form.append('font_size', String(params.fontSize))
+  if (params.rotation !== undefined) form.append('rotation', String(params.rotation))
+  try {
+    const res = await http.post('/watermark', form, { responseType: 'blob' })
+    return res.data
+  } catch (e) {
+    throw new Error(await extractErrorMessage(e, '加水印失败，请重试'))
+  }
+}
+
+/** x/y/width 都是相对页面宽高的 0~1 比例（y 从顶部算），不是像素——不用管每页实际尺寸 */
+export async function signPdf(
+  file: File,
+  signature: File,
+  params: { pageNumber: number; x: number; y: number; width: number },
+): Promise<Blob> {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('signature', signature)
+  form.append('page_number', String(params.pageNumber))
+  form.append('x', String(params.x))
+  form.append('y', String(params.y))
+  form.append('width', String(params.width))
+  try {
+    const res = await http.post('/signature', form, { responseType: 'blob' })
+    return res.data
+  } catch (e) {
+    throw new Error(await extractErrorMessage(e, '签名失败，请重试'))
+  }
+}
