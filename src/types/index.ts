@@ -36,6 +36,9 @@ export interface WritingSession {
   message: string
   createdAt: number
   results: string[]
+  /** 用户这轮附带上传的图片——只在当前页面会话里展示，不会持久化进 localStorage（图片体积大，
+   * 存多了容易把 50 条会话的存储配额挤爆），刷新页面后历史消息就只剩文字，是有意的取舍 */
+  imageUrl?: string
 }
 
 export interface VideoSession {

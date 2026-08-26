@@ -18,7 +18,10 @@ function loadSessions(): WritingSession[] {
 
 function saveSessions(sessions: WritingSession[]) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions.slice(-MAX_SESSIONS)))
+    // imageUrl 是 base64 data URL，体积大——存 50 条历史很容易把 localStorage 配额挤爆，
+    // 所以落盘前去掉，图片只在当前页面这次会话里能看到，刷新后历史消息保留文字部分
+    const persistable = sessions.slice(-MAX_SESSIONS).map(({ imageUrl: _imageUrl, ...rest }) => rest)
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(persistable))
   } catch {
     // 存储配额超限时放弃持久化，不影响当前会话使用
   }
@@ -31,7 +34,7 @@ export const useWritingStore = defineStore('writing', {
     error: '' as string,
   }),
   actions: {
-    async generate(message: string, count = 3) {
+    async generate(message: string, count = 3, imageUrl?: string) {
       const text = message.trim()
       if (!text) {
         this.error = '请先输入想写的内容'
@@ -41,12 +44,13 @@ export const useWritingStore = defineStore('writing', {
       this.isGenerating = true
       try {
         const authStore = useAuthStore()
-        const results = await generateCopy(authStore.isAuthenticated, text, count)
+        const results = await generateCopy(authStore.isAuthenticated, text, count, imageUrl)
         this.sessions.push({
           id: `writing-${Date.now()}`,
           message: text,
           createdAt: Date.now(),
           results,
+          imageUrl,
         })
         this.sessions = this.sessions.slice(-MAX_SESSIONS)
         saveSessions(this.sessions)

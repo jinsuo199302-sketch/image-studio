@@ -3,8 +3,10 @@ import { computed, nextTick, ref, watch } from 'vue'
 import {
   ArrowLeft,
   ChatDotRound,
+  Close,
   EditPen,
   MagicStick,
+  Picture,
   Promotion,
   Reading,
   ShoppingBag,
@@ -159,14 +161,35 @@ function scrollToBottom() {
 
 watch(() => store.sessions.length, scrollToBottom)
 
+/** 参考的是"上传图片直接问"这种聊天式体验——跟参考图生成用的是同一条已验证过的多模态
+ * 输入链路（ChatMessage.content 支持 content-parts 数组），这里只是把它接进聊天输入框。 */
+const attachedImage = ref<string | null>(null)
+
+function onImageAttach(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = () => {
+    attachedImage.value = reader.result as string
+  }
+  reader.readAsDataURL(file)
+  ;(e.target as HTMLInputElement).value = ''
+}
+
+function removeAttachedImage() {
+  attachedImage.value = null
+}
+
 async function send() {
   if (!message.value.trim()) {
     store.error = '请先输入想写的内容'
     return
   }
   const text = message.value.trim()
+  const image = attachedImage.value ?? undefined
   message.value = ''
-  await store.generate(text, resultCount.value)
+  attachedImage.value = null
+  await store.generate(text, resultCount.value, image)
 }
 </script>
 
@@ -267,11 +290,12 @@ async function send() {
 
       <div ref="threadRef" class="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
         <div v-if="!store.sessions.length && !store.isGenerating" class="flex h-full items-center justify-center text-center text-xs text-gray-400">
-          像聊天一样描述你想要的文案，例如"写一条促销标题，语气专业一点"
+          像聊天一样描述你想要的文案，也可以传张图问，例如"参考这张图的风格写段文案"
         </div>
 
         <template v-for="session in store.sessions" :key="session.id">
-          <div class="flex justify-end">
+          <div class="flex flex-col items-end gap-1">
+            <img v-if="session.imageUrl" :src="session.imageUrl" class="max-h-24 max-w-[60%] rounded-lg border border-gray-200 object-contain" />
             <div class="max-w-[85%] rounded-lg rounded-tr-sm bg-violet-500 px-2.5 py-1.5 text-xs text-white">
               {{ session.message }}
             </div>
@@ -311,10 +335,26 @@ async function send() {
           {{ n }}
         </button>
       </div>
+      <div v-if="attachedImage" class="relative mx-3 mt-2 w-fit">
+        <img :src="attachedImage" class="h-14 w-14 rounded-lg border border-gray-200 object-cover" />
+        <button
+          class="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-gray-700 text-white"
+          @click="removeAttachedImage"
+        >
+          <el-icon :size="10"><Close /></el-icon>
+        </button>
+      </div>
       <div class="flex gap-2 p-3 pt-2">
+        <input type="file" accept="image/*" class="hidden" id="write-image-attach" @change="onImageAttach" />
+        <label
+          for="write-image-attach"
+          class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:border-violet-300 hover:text-violet-500"
+        >
+          <el-icon :size="16"><Picture /></el-icon>
+        </label>
         <el-input
           v-model="message"
-          placeholder="发消息，例如：写一条秋季新品连衣裙的标题"
+          placeholder="发消息，也可以传张图问，例如：这张图适合配什么文案"
           @keyup.enter="send"
         />
         <el-button

@@ -24,36 +24,44 @@ async function mockGenerate(message: string, count: number): Promise<string[]> {
 
 /**
  * 走后端代理 /api/ai/chat/completions，真实 key 只在服务器上。
- * 未经真实联调验证——如果调用报错或解析失败，把报错信息发给我，按实际返回结构调整。
+ * imageDataUrl 给了才切换成 content-parts 数组——跟参考图生成用的是同一条已验证过的
+ * 多模态输入链路（ChatMessage.content: str | content-parts[]），不是新接口。
  */
-async function realGenerate(message: string, count: number): Promise<string[]> {
+async function realGenerate(message: string, count: number, imageDataUrl?: string): Promise<string[]> {
+  const instruction = `${message}\n\n请给出 ${count} 个不同的文案方案。只返回一个 JSON 字符串数组，不要任何多余说明文字，例如 ["方案1", "方案2"]`
+  const requestContent = imageDataUrl
+    ? [
+        { type: 'text', text: instruction },
+        { type: 'image_url', image_url: { url: imageDataUrl } },
+      ]
+    : instruction
   const data = await authPostJson<{ choices?: Array<{ message?: { content?: string } }> }>(
     '/chat/completions',
     {
       model: 'gemini-3-flash-preview',
-      messages: [
-        {
-          role: 'user',
-          content: `${message}\n\n请给出 ${count} 个不同的文案方案。只返回一个 JSON 字符串数组，不要任何多余说明文字，例如 ["方案1", "方案2"]`,
-        },
-      ],
+      messages: [{ role: 'user', content: requestContent }],
     },
     '文案接口请求失败',
   )
-  const content: string = data.choices?.[0]?.message?.content ?? ''
+  const replyText: string = data.choices?.[0]?.message?.content ?? ''
   try {
-    const match = content.match(/\[[\s\S]*\]/)
-    const parsed = JSON.parse(match ? match[0] : content)
+    const match = replyText.match(/\[[\s\S]*\]/)
+    const parsed = JSON.parse(match ? match[0] : replyText)
     if (Array.isArray(parsed)) return parsed.map(String)
   } catch {
     // 模型没有严格按 JSON 格式返回时，退化为按行拆分
   }
-  return content.split('\n').map((s) => s.trim()).filter(Boolean)
+  return replyText.split('\n').map((s) => s.trim()).filter(Boolean)
 }
 
-export async function generateCopy(authenticated: boolean, message: string, count = 3): Promise<string[]> {
+export async function generateCopy(
+  authenticated: boolean,
+  message: string,
+  count = 3,
+  imageDataUrl?: string,
+): Promise<string[]> {
   if (authenticated) {
-    return realGenerate(message, count)
+    return realGenerate(message, count, imageDataUrl)
   }
   return mockGenerate(message, count)
 }
