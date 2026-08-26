@@ -17,6 +17,7 @@ const VALID_TABS = [
   'textreplace',
   'ocr',
   'idphoto',
+  'memorial',
   'stitch',
   'avatarframe',
 ] as const

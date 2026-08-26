@@ -10,6 +10,7 @@ import AIEraseTab from './ai/AIEraseTab.vue'
 import AITextReplaceTab from './ai/AITextReplaceTab.vue'
 import AIOcrTab from './ai/AIOcrTab.vue'
 import AIIdPhotoTab from './ai/AIIdPhotoTab.vue'
+import AIMemorialPhotoTab from './ai/AIMemorialPhotoTab.vue'
 import AIScreenshotStitchTab from './ai/AIScreenshotStitchTab.vue'
 import AIAvatarFrameTab from './ai/AIAvatarFrameTab.vue'
 
@@ -24,6 +25,7 @@ type TabKey =
   | 'textreplace'
   | 'ocr'
   | 'idphoto'
+  | 'memorial'
   | 'stitch'
   | 'avatarframe'
 
@@ -55,6 +57,7 @@ function pickTab(key: string) {
           { key: 'textreplace', label: '改字' },
           { key: 'ocr', label: '提字' },
           { key: 'idphoto', label: '证件照' },
+          { key: 'memorial', label: '黑白遗像' },
           { key: 'stitch', label: '长截图' },
           { key: 'avatarframe', label: '头像框' },
         ]"
@@ -87,6 +90,7 @@ function pickTab(key: string) {
       <AITextReplaceTab v-else-if="activeTab === 'textreplace'" />
       <AIOcrTab v-else-if="activeTab === 'ocr'" />
       <AIIdPhotoTab v-else-if="activeTab === 'idphoto'" />
+      <AIMemorialPhotoTab v-else-if="activeTab === 'memorial'" />
       <AIScreenshotStitchTab v-else-if="activeTab === 'stitch'" />
       <AIAvatarFrameTab v-else />
     </div>
