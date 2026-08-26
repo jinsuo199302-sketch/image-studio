@@ -44,7 +44,7 @@ function pickText(text: string) {
       <button
         v-for="tab in [
           { key: 'image', label: `生图 (${generationStore.history.length})` },
-          { key: 'text', label: `写作 (${writingStore.sessions.length})` },
+          { key: 'text', label: `文案 (${writingStore.sessions.length})` },
           { key: 'video', label: `视频 (${videoStore.history.length})` },
         ]"
         :key="tab.key"
@@ -92,7 +92,7 @@ function pickText(text: string) {
 
       <div v-else-if="activeTab === 'text'">
         <div v-if="!writingStore.sessions.length" class="py-10 text-center text-sm text-gray-400">
-          还没有写作记录，去"写作"里发第一条消息吧
+          还没有文案记录，去"文案"里发第一条消息吧
         </div>
         <div v-else class="space-y-4">
           <div v-for="session in [...writingStore.sessions].reverse()" :key="session.id">

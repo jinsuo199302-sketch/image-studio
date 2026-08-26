@@ -29,7 +29,7 @@ function pickTab(key: string) {
       <button
         v-for="tab in [
           { key: 'image', label: '生图' },
-          { key: 'write', label: '写作' },
+          { key: 'write', label: '文案' },
           { key: 'translate', label: '翻译' },
           { key: 'video', label: '视频' },
           { key: 'pdf', label: 'PDF' },

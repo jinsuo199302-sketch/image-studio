@@ -20,7 +20,7 @@ onMounted(() => templateStore.ensureLoaded())
 const TOOL_TABS = [
   { key: 'template', label: '模板库', desc: '海量模板', enabled: true },
   { key: 'ai-image', label: 'AI 生图', desc: '文字生成图片', enabled: true, route: '/ai-tools?tab=image' },
-  { key: 'ai-write', label: 'AI 写作', desc: '一键出文案', enabled: true, route: '/ai-tools?tab=write' },
+  { key: 'ai-write', label: 'AI 文案', desc: '场景化模板一键出文案', enabled: true, route: '/ai-tools?tab=write' },
   { key: 'ai-translate', label: 'AI 翻译', desc: '多语言互译', enabled: true, route: '/ai-tools?tab=translate' },
   { key: 'ai-video', label: 'AI 视频', desc: '文字生成视频', enabled: true, route: '/ai-tools?tab=video' },
   { key: 'pdf-tools', label: 'PDF 工具', desc: '合并 / 拆分', enabled: true, route: '/ai-tools?tab=pdf' },

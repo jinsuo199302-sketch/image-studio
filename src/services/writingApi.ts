@@ -34,7 +34,7 @@ async function realGenerate(message: string): Promise<string[]> {
         },
       ],
     },
-    '写作接口请求失败',
+    '文案接口请求失败',
   )
   const content: string = data.choices?.[0]?.message?.content ?? ''
   try {
