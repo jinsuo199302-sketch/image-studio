@@ -96,3 +96,31 @@ def create_user(db: Session, email: str, password_hash: str):
     db.commit()
     db.refresh(user)
     return user
+
+
+def create_generated_asset(db: Session, user_id: str, category: str, file_name: str):
+    asset = models.GeneratedAsset(id=uuid.uuid4().hex, user_id=user_id, category=category, file_name=file_name)
+    db.add(asset)
+    db.commit()
+    db.refresh(asset)
+    return asset
+
+
+def list_generated_assets(db: Session, user_id: str, category: str | None = None):
+    query = db.query(models.GeneratedAsset).filter(models.GeneratedAsset.user_id == user_id)
+    if category:
+        query = query.filter(models.GeneratedAsset.category == category)
+    return query.order_by(models.GeneratedAsset.created_at.desc()).all()
+
+
+def get_generated_asset(db: Session, asset_id: str):
+    return db.query(models.GeneratedAsset).filter(models.GeneratedAsset.id == asset_id).first()
+
+
+def delete_generated_asset(db: Session, asset_id: str):
+    asset = get_generated_asset(db, asset_id)
+    if not asset:
+        return False
+    db.delete(asset)
+    db.commit()
+    return True

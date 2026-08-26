@@ -5,3 +5,4 @@ data.db
 *.log
 .env
 .jwt_secret
+generated_assets/

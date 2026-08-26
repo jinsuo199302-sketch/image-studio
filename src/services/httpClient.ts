@@ -33,6 +33,15 @@ export async function authGetJson<T>(path: string, label: string): Promise<T> {
   return res.json()
 }
 
+export async function authDeleteJson<T>(path: string, label: string): Promise<T> {
+  const res = await fetch(`/api/ai${path}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${authToken()}` },
+  })
+  if (!res.ok) return parseErrorOrThrow(res, label)
+  return res.json()
+}
+
 export async function authPostForm<T>(path: string, form: FormData, label: string): Promise<T> {
   const res = await fetch(`/api/ai${path}`, {
     method: 'POST',

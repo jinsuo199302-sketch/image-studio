@@ -181,10 +181,10 @@ export async function generateLayoutPreset(
  */
 export async function generateBackgroundFromReference(
   imageFile: File,
-): Promise<{ backgroundSrc: string; styleDescription: string; titleStyle: TitleStyleHint }> {
+): Promise<{ backgroundSrc: string; styleDescription: string; titleStyle: TitleStyleHint; assetId: string | null }> {
   const form = new FormData()
   form.append('image', imageFile, imageFile.name || 'reference.png')
-  return authPostForm<{ backgroundSrc: string; styleDescription: string; titleStyle: TitleStyleHint }>(
+  return authPostForm<{ backgroundSrc: string; styleDescription: string; titleStyle: TitleStyleHint; assetId: string | null }>(
     '/design/reference-to-background',
     form,
     '参考图背景生成失败',

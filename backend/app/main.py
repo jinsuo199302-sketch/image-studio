@@ -2,9 +2,11 @@ from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
 from app import crud, models
+from app.ai_proxy import GENERATED_ASSETS_DIR
 from app.ai_proxy import router as ai_proxy_router
 from app.auth import get_current_user, get_current_user_optional
 from app.auth_routes import router as auth_router
@@ -39,6 +41,8 @@ app.add_middleware(
 app.include_router(pdf_router)
 app.include_router(auth_router)
 app.include_router(ai_proxy_router)
+# 落在 /api/ 前缀下才会被 nginx 的 /api/ location 代理到这个后端进程，不用额外改 nginx 配置
+app.mount("/api/ai/generated", StaticFiles(directory=GENERATED_ASSETS_DIR), name="generated-assets")
 
 
 @app.get("/api/templates", response_model=TemplateListResponse)

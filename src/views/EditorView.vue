@@ -17,6 +17,7 @@ import BackgroundPanel from '../components/editor/panels/BackgroundPanel.vue'
 import ShapePanel from '../components/editor/panels/ShapePanel.vue'
 import UploadPanel from '../components/editor/panels/UploadPanel.vue'
 import ImageToolsPanel from '../components/editor/panels/ImageToolsPanel.vue'
+import MaterialsPanel from '../components/editor/panels/MaterialsPanel.vue'
 import AIDesignPanel from '../components/editor/panels/AIDesignPanel.vue'
 import PlaceholderPanel from '../components/editor/panels/PlaceholderPanel.vue'
 import type { Template } from '../data/templates'
@@ -292,6 +293,7 @@ async function onRemoveBackground() {
           @add-table="(kind) => stageRef?.addDataTable(kind)"
         />
         <UploadPanel v-else-if="activePanel === 'upload'" @add="(url) => stageRef?.addImage(url)" />
+        <MaterialsPanel v-else-if="activePanel === 'material'" @insert="(url) => stageRef?.addImage(url)" />
         <PlaceholderPanel v-else label="素材图片库" />
       </div>
 

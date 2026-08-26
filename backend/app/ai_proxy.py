@@ -5,13 +5,16 @@ import math
 import re
 import subprocess
 import sys
+import uuid
 
 import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from sqlalchemy.orm import Session
 
-from app import auth, models
+from app import auth, crud, models
 from app import content_research
-from app.config import OPENLUX_API_KEY, OPENLUX_BASE_URL, VIDU_API_KEY, VIDU_BASE_URL
+from app.config import BASE_DIR, OPENLUX_API_KEY, OPENLUX_BASE_URL, VIDU_API_KEY, VIDU_BASE_URL
+from app.database import get_db
 from app.design_tokens import COMPONENT_SIZE
 from app.text_metrics import chars_per_line, estimate_text_height, estimate_text_lines
 from app import layout_presets
@@ -26,6 +29,27 @@ from app.schemas import (
 )
 
 router = APIRouter(prefix="/api/ai", tags=["ai-proxy"])
+
+# "参考图生成"产出的背景图自动存一份到这里，供"素材"面板浏览/删除——只存文件名不存完整 URL，
+# 换域名/端口不用改数据；实际对外访问路径由 main.py 把这个目录挂到 /api/ai/generated 静态托管。
+GENERATED_ASSETS_DIR = BASE_DIR / "generated_assets"
+GENERATED_ASSETS_DIR.mkdir(exist_ok=True)
+
+
+async def _save_generated_asset(db: Session, user_id: str, category: str, src: str) -> models.GeneratedAsset:
+    """src 可能是 data URI（gpt-image-2 直接返回 b64_json 时）或外部 URL（返回 url 时）——
+    两种都落盘成本地文件，不满足于存一个可能过期/限流的外链，"自动保存"才是真的能一直看到。"""
+    if src.startswith("data:"):
+        _, b64data = src.split(",", 1)
+        image_bytes = base64.b64decode(b64data)
+    else:
+        async with httpx.AsyncClient(timeout=30) as client:
+            res = await client.get(src)
+            res.raise_for_status()
+            image_bytes = res.content
+    file_name = f"{uuid.uuid4().hex}.png"
+    (GENERATED_ASSETS_DIR / file_name).write_bytes(image_bytes)
+    return crud.create_generated_asset(db, user_id, category, file_name)
 
 # 跟 imageApi.ts 里的 ASPECT_SIZE 保持一致的 5 档比例，图片槽按宽高比就近取一档
 _ASPECT_SIZES: list[tuple[str, int, int]] = [
@@ -156,7 +180,8 @@ def _parse_title_style(raw_content: str) -> tuple[str, dict]:
 @router.post("/design/reference-to-background")
 async def design_reference_to_background(
     image: UploadFile = File(...),
-    _user: models.User = Depends(auth.get_current_user),
+    user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
 ):
     """参考图 → 风格描述（视觉模型，只提取氛围/元素类别/构图留白，不提取可判定为复刻的精确细节）
     → 整图背景生成（gpt-image-2）。三次跨风格实测（国风红金/卡通插画/极简科技）验证过，
@@ -204,7 +229,46 @@ async def design_reference_to_background(
     if not src:
         raise HTTPException(status_code=502, detail="背景图生成未返回可用图片数据")
 
-    return {"backgroundSrc": src, "styleDescription": style_description, "titleStyle": title_style}
+    asset_id = None
+    try:
+        asset = await _save_generated_asset(db, user.id, "reference-background", src)
+        asset_id = asset.id
+    except Exception:
+        pass  # 自动保存失败不能拖累主流程——用户还是要拿到刚生成的背景图，大不了这次没存进素材库
+
+    return {"backgroundSrc": src, "styleDescription": style_description, "titleStyle": title_style, "assetId": asset_id}
+
+
+@router.get("/assets")
+def list_generated_assets(
+    category: str | None = None,
+    user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """"素材"面板用——只列当前登录用户自己生成/保存的图，私有，不是公共素材库。"""
+    rows = crud.list_generated_assets(db, user.id, category)
+    return {
+        "list": [
+            {"id": r.id, "category": r.category, "url": f"/api/ai/generated/{r.file_name}", "createdAt": r.created_at.isoformat()}
+            for r in rows
+        ]
+    }
+
+
+@router.delete("/assets/{asset_id}")
+def delete_generated_asset(
+    asset_id: str,
+    user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    asset = crud.get_generated_asset(db, asset_id)
+    if not asset or asset.user_id != user.id:
+        raise HTTPException(status_code=404, detail="素材不存在")
+    file_path = GENERATED_ASSETS_DIR / asset.file_name
+    if file_path.exists():
+        file_path.unlink()
+    crud.delete_generated_asset(db, asset_id)
+    return {"deleted": True}
 
 
 def _run_bg_removal_subprocess(image_bytes: bytes) -> subprocess.CompletedProcess:

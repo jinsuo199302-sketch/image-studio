@@ -18,7 +18,7 @@ const ITEMS: { key: RailKey; label: string; icon: any; ready: boolean }[] = [
   { key: 'template', label: '模板', icon: Files, ready: true },
   { key: 'ai-design', label: 'AI设计', icon: Sunny, ready: true },
   { key: 'image', label: '图片', icon: Picture, ready: true },
-  { key: 'material', label: '素材', icon: Collection, ready: false },
+  { key: 'material', label: '素材', icon: Collection, ready: true },
   { key: 'background', label: '背景', icon: Brush, ready: true },
   { key: 'shape', label: '组件', icon: Grid, ready: true },
   { key: 'upload', label: '上传', icon: Upload, ready: true },
