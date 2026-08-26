@@ -77,11 +77,22 @@ def build_bullet_list(canvas_width: int, canvas_height: int, title: str, intro: 
     return {"background": "#fdfbf7", "elements": elements}
 
 
-def build_dense_board(canvas_width: int, canvas_height: int, title: str, sections: list[dict]) -> dict:
+def build_dense_board(
+    canvas_width: int,
+    canvas_height: int,
+    title: str,
+    sections: list[dict],
+    *,
+    include_title: bool = True,
+    top_offset: int | None = None,
+) -> dict:
     """sections: [{"heading": str, "items": list[str]}, ...]。
     栏数按"平均每栏放 2 个分区"倒推，夹在 [3,7] 之间——太窄放不下 icon-list 固定的 212px 宽度，
     太宽单栏又显得空。分配用贪心装箱：每个分区放进当前最矮的一栏，而不是简单按顺序平均分——
-    分区条目数差异大的时候，顺序平均分会让某几栏明显比别的高一截，贪心装箱能自然把总高度拉平。"""
+    分区条目数差异大的时候，顺序平均分会让某几栏明显比别的高一截，贪心装箱能自然把总高度拉平。
+
+    include_title=False + top_offset：给"参考图生成"复用——那边标题已经是套了 titleStyle 手法
+    分类的独立元素，不需要这里再画一个标题占位，栏格直接从调用方算好的 top_offset 开始铺。"""
     theme = CIVIC_THEME
     colors = [theme["red"], theme["blue"]]
     n = len(sections)
@@ -90,10 +101,12 @@ def build_dense_board(canvas_width: int, canvas_height: int, title: str, section
     col_x = [MARGIN + i * (col_width + GAP) for i in range(columns)]
 
     header_h = 140
-    grid_top = header_h + 40
+    grid_top = top_offset if top_offset is not None else header_h + 40
     col_heights = [grid_top] * columns
 
-    elements: list[dict] = [_text(0, 40, canvas_width, title, 40, theme["red"], weight="bold", align="center")]
+    elements: list[dict] = []
+    if include_title:
+        elements.append(_text(0, 40, canvas_width, title, 40, theme["red"], weight="bold", align="center"))
 
     for i, sec in enumerate(sections):
         target_col = col_heights.index(min(col_heights))

@@ -122,6 +122,23 @@ const refError = ref('')
 const refBackgroundSrc = ref('')
 const refStyleDescription = ref('')
 const refTitleStyle = ref<TitleStyleHint>({ effect: 'none', warp: 'none' })
+const refApplying = ref(false)
+
+/** 可选的信息卡片区块——复用"参数化排版"dense-board 那套分区栏格算法（ribbon-title + icon-list），
+ * 铺在标题下方，让参考图生成也能做出"标题+多信息卡片"这种排版，不是只有背景+一行标题。 */
+const refSections = ref<{ heading: string; items: string[] }[]>([])
+function addRefSection() {
+  refSections.value.push({ heading: '', items: [''] })
+}
+function removeRefSection(i: number) {
+  refSections.value.splice(i, 1)
+}
+function addRefSectionItem(si: number) {
+  refSections.value[si].items.push('')
+}
+function removeRefSectionItem(si: number, ii: number) {
+  refSections.value[si].items.splice(ii, 1)
+}
 
 function onRefFileChange(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
@@ -131,6 +148,7 @@ function onRefFileChange(e: Event) {
   refBackgroundSrc.value = ''
   refStyleDescription.value = ''
   refError.value = ''
+  refSections.value = []
 }
 
 async function generateFromReference() {
@@ -155,14 +173,19 @@ async function generateFromReference() {
  * 不按参考图类型区分字体/配色；但描边/浮雕/霓虹特效 + 拱形/波浪/旗帜/圆环变形这层"手法"，
  * 按后端从参考图标题识别出的 titleStyle 类别套用编辑器已有预设（见 EditorView.onApplyDesign）——
  * 只学手法类别，不抄具体字形，用户还是可以在文字编辑面板里再自己调整。
+ *
+ * 信息卡片区块（可选）复用"参数化排版"dense-board 的分区栏格算法，从标题/副标题下方的
+ * topOffset 开始铺 ribbon-title+icon-list——同一套构图逻辑可以既服务"用户自己写内容"
+ * 也服务"参考图生成"，不用另写一套栏格计算。
  */
-function applyReferenceBackground() {
+async function applyReferenceBackground() {
   if (!refBackgroundSrc.value) return
   const w = props.canvasWidth
   const h = props.canvasHeight
   const elements: GeneratedDesign['elements'] = [
     { type: 'image', x: 0, y: 0, width: w, height: h, src: refBackgroundSrc.value },
   ]
+  let contentBottom = Math.round(h * 0.1)
   if (refTitle.value.trim()) {
     elements.push({
       type: 'text',
@@ -181,19 +204,44 @@ function applyReferenceBackground() {
       shadowOffsetX: 2,
       shadowOffsetY: 3,
     })
+    contentBottom = Math.round(h * 0.42) + Math.round(w * 0.07) + 20
   }
   if (refSubtitle.value.trim()) {
     elements.push({
       type: 'text',
       x: Math.round(w * 0.1),
-      y: Math.round(h * 0.42) + Math.round(w * 0.07) + 20,
+      y: contentBottom,
       width: Math.round(w * 0.8),
       text: refSubtitle.value.trim(),
       fontSize: Math.round(w * 0.026),
       color: '#fef3c7',
       align: 'center',
     })
+    contentBottom += Math.round(w * 0.026 * 1.3) + 20
   }
+
+  const validSections = refSections.value
+    .map((s) => ({ heading: s.heading.trim(), items: s.items.map((i) => i.trim()).filter(Boolean) }))
+    .filter((s) => s.heading && s.items.length > 0)
+  if (validSections.length > 0) {
+    try {
+      refApplying.value = true
+      const boardResult = await generateLayoutPreset(
+        'dense-board',
+        w,
+        h,
+        { title: '', sections: validSections },
+        { includeTitle: false, topOffset: contentBottom + 40 },
+      )
+      elements.push(...boardResult.elements)
+    } catch (e) {
+      refError.value = e instanceof Error ? e.message : '信息卡片排版失败'
+      refApplying.value = false
+      return
+    }
+    refApplying.value = false
+  }
+
   emit('apply-design', {
     background: '#ffffff',
     elements,
@@ -456,9 +504,51 @@ function applyReferenceBackground() {
             <p class="text-xs font-medium text-gray-600">副标题（可选）</p>
             <el-input v-model="refSubtitle" placeholder="一句简短的副标题" />
 
+            <p class="text-xs font-medium text-gray-600">信息卡片区块（可选）</p>
+            <div v-for="(section, si) in refSections" :key="si" class="space-y-1.5 rounded-lg border border-gray-100 bg-gray-50/60 p-2">
+              <div class="flex gap-1.5">
+                <el-input v-model="section.heading" :placeholder="`分区 ${si + 1} 标题`" />
+                <button
+                  class="flex h-8 w-8 shrink-0 items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-red-500"
+                  @click="removeRefSection(si)"
+                >
+                  <el-icon :size="14"><Minus /></el-icon>
+                </button>
+              </div>
+              <div v-for="(_, ii) in section.items" :key="ii" class="flex gap-1.5 pl-3">
+                <el-input v-model="section.items[ii]" size="small" :placeholder="`条目 ${ii + 1}`" />
+                <button
+                  v-if="section.items.length > 1"
+                  class="flex h-7 w-7 shrink-0 items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-red-500"
+                  @click="removeRefSectionItem(si, ii)"
+                >
+                  <el-icon :size="12"><Minus /></el-icon>
+                </button>
+              </div>
+              <button
+                class="ml-3 flex items-center gap-1 text-[11px] text-gray-500 hover:text-violet-600"
+                @click="addRefSectionItem(si)"
+              >
+                <el-icon :size="11"><Plus /></el-icon>
+                加一条
+              </button>
+            </div>
+            <button
+              class="flex w-full items-center justify-center gap-1 rounded border border-dashed border-gray-300 py-1.5 text-xs text-gray-500 hover:border-violet-300 hover:text-violet-600"
+              @click="addRefSection"
+            >
+              <el-icon :size="12"><Plus /></el-icon>
+              加一个信息卡片分区
+            </button>
+
             <div class="flex gap-2">
               <el-button class="!flex-1" :loading="refGenerating" @click="generateFromReference">重新生成</el-button>
-              <el-button type="primary" class="!flex-1 !bg-violet-500 !border-none" @click="applyReferenceBackground">
+              <el-button
+                type="primary"
+                class="!flex-1 !bg-violet-500 !border-none"
+                :loading="refApplying"
+                @click="applyReferenceBackground"
+              >
                 应用到画布
               </el-button>
             </div>

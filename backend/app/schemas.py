@@ -158,3 +158,6 @@ class LayoutPresetRequest(BaseModel):
     intro: Optional[str] = None
     items: Optional[List[str]] = None  # structure == 'bullet-list' 时用
     sections: Optional[List[LayoutPresetSection]] = None  # structure == 'dense-board' 时用
+    # 供"参考图生成"复用 dense-board 的分区栏格算法时用：跳过内置标题、自定标题下方留白起点
+    include_title: bool = True
+    top_offset: Optional[int] = None

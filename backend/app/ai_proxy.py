@@ -733,7 +733,14 @@ async def design_layout_preset(
         if not payload.sections:
             raise HTTPException(status_code=400, detail="dense-board 结构需要提供 sections")
         sections = [{"heading": s.heading, "items": s.items} for s in payload.sections]
-        result = layout_presets.build_dense_board(payload.canvas_width, payload.canvas_height, payload.title, sections)
+        result = layout_presets.build_dense_board(
+            payload.canvas_width,
+            payload.canvas_height,
+            payload.title,
+            sections,
+            include_title=payload.include_title,
+            top_offset=payload.top_offset,
+        )
     else:
         raise HTTPException(status_code=400, detail=f"未知的 structure：{payload.structure}")
     return result

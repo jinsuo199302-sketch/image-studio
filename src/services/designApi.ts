@@ -153,6 +153,8 @@ export async function generateLayoutPreset(
   canvasWidth: number,
   canvasHeight: number,
   params: { title: string; intro?: string; items?: string[]; sections?: LayoutPresetSection[] },
+  /** 供"参考图生成"复用 dense-board 分区栏格算法时用：跳过内置标题，栏格从 topOffset 开始铺 */
+  denseBoardOptions?: { includeTitle?: boolean; topOffset?: number },
 ): Promise<GeneratedDesign> {
   return authPostJson<GeneratedDesign>(
     '/design/layout-preset',
@@ -164,6 +166,8 @@ export async function generateLayoutPreset(
       intro: params.intro || undefined,
       items: params.items,
       sections: params.sections,
+      include_title: denseBoardOptions?.includeTitle ?? true,
+      top_offset: denseBoardOptions?.topOffset,
     },
     '排版生成失败',
   )
