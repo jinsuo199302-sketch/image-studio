@@ -31,7 +31,7 @@ export const useWritingStore = defineStore('writing', {
     error: '' as string,
   }),
   actions: {
-    async generate(message: string) {
+    async generate(message: string, count = 3) {
       const text = message.trim()
       if (!text) {
         this.error = '请先输入想写的内容'
@@ -41,7 +41,7 @@ export const useWritingStore = defineStore('writing', {
       this.isGenerating = true
       try {
         const authStore = useAuthStore()
-        const results = await generateCopy(authStore.isAuthenticated, text)
+        const results = await generateCopy(authStore.isAuthenticated, text, count)
         this.sessions.push({
           id: `writing-${Date.now()}`,
           message: text,

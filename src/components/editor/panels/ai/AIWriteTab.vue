@@ -124,6 +124,8 @@ const filteredTemplates = computed(() =>
 const stage = ref<'templates' | 'form' | 'chat'>('templates')
 const activeTemplate = ref<CopyTemplate | null>(null)
 const formInput = ref('')
+const RESULT_COUNT_OPTIONS = [1, 3, 5]
+const resultCount = ref(3)
 
 function pickTemplate(t: CopyTemplate) {
   activeTemplate.value = t
@@ -143,7 +145,7 @@ function backToTemplates() {
 async function submitForm() {
   if (!activeTemplate.value?.buildPrompt || !formInput.value.trim()) return
   stage.value = 'chat'
-  await store.generate(activeTemplate.value.buildPrompt(formInput.value.trim()))
+  await store.generate(activeTemplate.value.buildPrompt(formInput.value.trim()), resultCount.value)
 }
 
 const message = ref('')
@@ -164,7 +166,7 @@ async function send() {
   }
   const text = message.value.trim()
   message.value = ''
-  await store.generate(text)
+  await store.generate(text, resultCount.value)
 }
 </script>
 
@@ -224,6 +226,18 @@ async function send() {
         :placeholder="activeTemplate?.inputPlaceholder"
         @keyup.enter.exact="submitForm"
       />
+      <div class="mt-2 flex items-center gap-2 text-xs text-gray-500">
+        生成方案数
+        <button
+          v-for="n in RESULT_COUNT_OPTIONS"
+          :key="n"
+          class="h-6 w-6 rounded-full border transition"
+          :class="resultCount === n ? 'border-violet-500 bg-violet-500 text-white' : 'border-gray-200 text-gray-500 hover:border-violet-300'"
+          @click="resultCount = n"
+        >
+          {{ n }}
+        </button>
+      </div>
       <el-button
         type="primary"
         class="!mt-3 !w-full !bg-violet-500 !border-none"
@@ -285,7 +299,19 @@ async function send() {
 
       <p v-if="store.error" class="px-3 text-xs text-red-500">{{ store.error }}</p>
 
-      <div class="flex gap-2 border-t border-gray-100 p-3">
+      <div class="flex items-center gap-2 border-t border-gray-100 px-3 pt-2 text-xs text-gray-500">
+        生成方案数
+        <button
+          v-for="n in RESULT_COUNT_OPTIONS"
+          :key="n"
+          class="h-6 w-6 rounded-full border transition"
+          :class="resultCount === n ? 'border-violet-500 bg-violet-500 text-white' : 'border-gray-200 text-gray-500 hover:border-violet-300'"
+          @click="resultCount = n"
+        >
+          {{ n }}
+        </button>
+      </div>
+      <div class="flex gap-2 p-3 pt-2">
         <el-input
           v-model="message"
           placeholder="发消息，例如：写一条秋季新品连衣裙的标题"
