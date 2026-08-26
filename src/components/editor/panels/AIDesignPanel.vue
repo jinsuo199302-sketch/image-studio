@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { Plus, Minus } from '@element-plus/icons-vue'
 import { useAuthStore } from '../../../stores/auth'
 import { useDesignStore } from '../../../stores/design'
+import AssetGeneratorPanel from './AssetGeneratorPanel.vue'
 import {
   generateBackgroundFromReference,
   generateLayoutPreset,
@@ -12,12 +13,12 @@ import {
 } from '../../../services/designApi'
 
 const props = defineProps<{ canvasWidth: number; canvasHeight: number }>()
-const emit = defineEmits<{ (e: 'apply-design', design: GeneratedDesign): void }>()
+const emit = defineEmits<{ (e: 'apply-design', design: GeneratedDesign): void; (e: 'insert-image', url: string): void }>()
 
 const authStore = useAuthStore()
 const store = useDesignStore()
 
-const activeTab = ref<'brief' | 'preset' | 'reference'>('brief')
+const activeTab = ref<'brief' | 'preset' | 'reference' | 'asset'>('brief')
 
 // ---------------- 创意简报模式（原有功能，AI 自己编内容+排版） ----------------
 const prompt = ref('')
@@ -274,6 +275,13 @@ async function applyReferenceBackground() {
       >
         参考图生成
       </button>
+      <button
+        class="border-b-2 px-3 py-2 text-xs font-medium transition"
+        :class="activeTab === 'asset' ? 'border-violet-500 text-violet-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+        @click="activeTab = 'asset'"
+      >
+        素材/文字生成
+      </button>
     </div>
 
     <!-- ============ 创意简报：一句话描述，AI 自己编内容+挑组件+排版 ============ -->
@@ -463,7 +471,7 @@ async function applyReferenceBackground() {
     </template>
 
     <!-- ============ 参考图生成：上传参考图，AI 提炼风格生成新背景，文字自己调 ============ -->
-    <template v-else>
+    <template v-else-if="activeTab === 'reference'">
       <div class="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
         <el-alert
           title="只提炼氛围/元素类别/构图，不复刻参考图具体内容——生成结果是全新的独立画面"
@@ -556,6 +564,11 @@ async function applyReferenceBackground() {
           </div>
         </template>
       </div>
+    </template>
+
+    <!-- ============ 素材/文字生成：框选参考图一小块区域，独立生成透明PNG插画或造型文字 ============ -->
+    <template v-else>
+      <AssetGeneratorPanel @insert="(url) => emit('insert-image', url)" />
     </template>
   </div>
 </template>

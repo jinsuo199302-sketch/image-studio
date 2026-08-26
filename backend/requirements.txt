@@ -11,3 +11,4 @@ python-dotenv==1.0.1
 rembg==2.0.81
 onnxruntime==1.29.0
 beautifulsoup4==4.12.3
+Pillow==12.3.0

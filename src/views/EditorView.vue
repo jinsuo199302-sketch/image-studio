@@ -280,6 +280,7 @@ async function onRemoveBackground() {
           :canvas-width="template.canvasWidth"
           :canvas-height="template.canvasHeight"
           @apply-design="onApplyDesign"
+          @insert-image="(url) => stageRef?.addImage(url)"
         />
         <ImageToolsPanel v-else-if="activePanel === 'image'" @insert="(url) => stageRef?.addImage(url)" />
         <BackgroundPanel v-else-if="activePanel === 'background'" @pick="(c) => stageRef?.setBackground(c)" />

@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import io
 import json
 import math
 import re
@@ -9,6 +10,7 @@ import uuid
 
 import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from PIL import Image as PILImage
 from sqlalchemy.orm import Session
 
 from app import auth, crud, models
@@ -36,6 +38,12 @@ GENERATED_ASSETS_DIR = BASE_DIR / "generated_assets"
 GENERATED_ASSETS_DIR.mkdir(exist_ok=True)
 
 
+def _persist_asset_bytes(db: Session, user_id: str, category: str, image_bytes: bytes) -> models.GeneratedAsset:
+    file_name = f"{uuid.uuid4().hex}.png"
+    (GENERATED_ASSETS_DIR / file_name).write_bytes(image_bytes)
+    return crud.create_generated_asset(db, user_id, category, file_name)
+
+
 async def _save_generated_asset(db: Session, user_id: str, category: str, src: str) -> models.GeneratedAsset:
     """src 可能是 data URI（gpt-image-2 直接返回 b64_json 时）或外部 URL（返回 url 时）——
     两种都落盘成本地文件，不满足于存一个可能过期/限流的外链，"自动保存"才是真的能一直看到。"""
@@ -47,9 +55,22 @@ async def _save_generated_asset(db: Session, user_id: str, category: str, src: s
             res = await client.get(src)
             res.raise_for_status()
             image_bytes = res.content
-    file_name = f"{uuid.uuid4().hex}.png"
-    (GENERATED_ASSETS_DIR / file_name).write_bytes(image_bytes)
-    return crud.create_generated_asset(db, user_id, category, file_name)
+    return _persist_asset_bytes(db, user_id, category, image_bytes)
+
+
+async def _extract_openai_image_bytes(gen_json: dict, error_prefix: str) -> bytes:
+    data = (gen_json.get("data") or [None])[0]
+    if not data:
+        raise HTTPException(status_code=502, detail=f"{error_prefix}未返回图片数据")
+    if data.get("b64_json"):
+        return base64.b64decode(data["b64_json"])
+    url = data.get("url")
+    if not url:
+        raise HTTPException(status_code=502, detail=f"{error_prefix}未返回可用图片数据")
+    async with httpx.AsyncClient(timeout=30) as client:
+        res = await client.get(url)
+        res.raise_for_status()
+        return res.content
 
 # 跟 imageApi.ts 里的 ASPECT_SIZE 保持一致的 5 档比例，图片槽按宽高比就近取一档
 _ASPECT_SIZES: list[tuple[str, int, int]] = [
@@ -303,6 +324,104 @@ async def background_removal(
         raise HTTPException(status_code=502, detail=f"抠图处理失败：{proc.stderr.decode(errors='ignore')[:500]}")
     b64 = base64.b64encode(proc.stdout).decode()
     return {"data": [{"b64_json": b64}]}
+
+
+# "素材插画/文字生成"专用：只从参考图里框选出的一小块区域提炼风格类别（跟 reference-to-background
+# 同一条纪律——只说类别/手法，不描述精确外形/不抄录原文文字），插画和文字两种分开写 instruction
+# 是因为要防的具体表达完全不同：插画防的是"具体外形/姿势"，文字防的是"照抄原文这几个字"。
+_ASSET_ILLUSTRATION_STYLE_INSTRUCTION = """You are extracting a STYLE-DESCRIPTION prompt for ONE isolated illustration/icon element cropped from a reference image, to be used as input for a text-to-image sticker generator. Describe ONLY the element's CATEGORY/TYPE and art style (e.g. "a paint palette with colorful paint blobs, flat cartoon illustration style, thick outline") as a mood-board brief would — not exact pose, not exact proportions, not exact color values. Output ONE short phrase in Chinese, no markdown, no quotation marks, no extra commentary."""
+
+_ASSET_TEXT_STYLE_INSTRUCTION = """You are extracting the ARTISTIC RENDERING STYLE of a piece of text cropped from a reference image — its color scheme, outline/shadow/glow treatment, and letter-shape character (e.g. "彩虹渐变泡泡字，白色粗描边，卡通圆润造型") — for use as a style instruction for a text-to-image generator that will render COMPLETELY DIFFERENT words in this style. Do NOT mention, transcribe, or hint at the actual words/characters shown in the image. Output ONE short phrase in Chinese, no markdown, no quotation marks, no extra commentary."""
+
+
+@router.post("/design/reference-to-asset")
+async def design_reference_to_asset(
+    image: UploadFile = File(...),
+    region_x: float = Form(...),
+    region_y: float = Form(...),
+    region_width: float = Form(...),
+    region_height: float = Form(...),
+    asset_type: str = Form(...),
+    text: str | None = Form(None),
+    user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """参考图里框选一小块区域（插画元素或一段造型文字）→ 提炼风格类别 → 生成一张全新的独立
+    素材 → 本地 rembg 抠成透明背景 → 自动存进素材库，返回可直接拖进画布的 PNG。
+    跟 reference-to-background 是同一套边界纪律的另一个应用场景：插画防"抄具体外形"，
+    文字防"抄原文文字"——用户自己填 text 参数，生成的是新内容，只是照抄了"手法"。"""
+    if asset_type not in ("illustration", "text"):
+        raise HTTPException(status_code=400, detail="asset_type 必须是 illustration 或 text")
+    if asset_type == "text" and not (text and text.strip()):
+        raise HTTPException(status_code=400, detail="文字类型需要提供 text 内容")
+    _require_openlux()
+
+    image_bytes = await image.read()
+    try:
+        img = PILImage.open(io.BytesIO(image_bytes)).convert("RGB")
+    except Exception:
+        raise HTTPException(status_code=400, detail="无法解析上传的图片")
+    w, h = img.size
+    box = (
+        max(0, min(w, round(region_x * w))),
+        max(0, min(h, round(region_y * h))),
+        max(0, min(w, round((region_x + region_width) * w))),
+        max(0, min(h, round((region_y + region_height) * h))),
+    )
+    if box[2] <= box[0] or box[3] <= box[1]:
+        raise HTTPException(status_code=400, detail="选区无效")
+    crop_buf = io.BytesIO()
+    img.crop(box).save(crop_buf, format="PNG")
+    crop_b64 = base64.b64encode(crop_buf.getvalue()).decode()
+
+    instruction = _ASSET_ILLUSTRATION_STYLE_INSTRUCTION if asset_type == "illustration" else _ASSET_TEXT_STYLE_INSTRUCTION
+    vision_res = await _post_openlux(
+        f"{OPENLUX_BASE_URL}/chat/completions",
+        timeout=60,
+        headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
+        json={
+            "model": "gemini-3-flash-preview",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": instruction},
+                        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{crop_b64}"}},
+                    ],
+                }
+            ],
+        },
+    )
+    if vision_res.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"素材风格分析失败：{vision_res.status_code} {vision_res.text}")
+    style_description = vision_res.json()["choices"][0]["message"]["content"].strip()
+
+    if asset_type == "illustration":
+        gen_prompt = f"{style_description}，纯白色背景，不要文字，不要水印，贴纸风格，孤立单个物体，居中构图"
+    else:
+        gen_prompt = f'文字内容"{text.strip()}"，渲染风格：{style_description}，纯白色背景，不要多余装饰，孤立文字图形，居中构图'
+
+    gen_res = await _post_openlux(
+        f"{OPENLUX_BASE_URL}/images/generations",
+        timeout=170,
+        headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
+        json={"model": "gpt-image-2", "prompt": gen_prompt, "n": 1, "size": "1024x1024"},
+    )
+    if gen_res.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"素材生成失败：{gen_res.status_code} {gen_res.text}")
+    gen_bytes = await _extract_openai_image_bytes(gen_res.json(), "素材生成")
+
+    try:
+        proc = await asyncio.to_thread(_run_bg_removal_subprocess, gen_bytes)
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="抠图处理超时，请重试")
+    if proc.returncode != 0:
+        raise HTTPException(status_code=502, detail=f"抠图处理失败：{proc.stderr.decode(errors='ignore')[:500]}")
+
+    category = "sticker-illustration" if asset_type == "illustration" else "sticker-text"
+    asset = _persist_asset_bytes(db, user.id, category, proc.stdout)
+
+    return {"assetId": asset.id, "url": f"/api/ai/generated/{asset.file_name}", "styleDescription": style_description}
 
 
 @router.post("/chat/completions")
