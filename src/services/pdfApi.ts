@@ -70,6 +70,22 @@ export async function watermarkPdf(
   }
 }
 
+export type ScanMode = 'bw' | 'gray' | 'color'
+
+/** 多张照片 → 一个"扫描件"PDF。后端纯本地 OpenCV 处理（透视校正 + 背景拉白 + 按模式增强）。 */
+export async function scanToPdf(files: File[], mode: ScanMode, autoCrop: boolean): Promise<Blob> {
+  const form = new FormData()
+  files.forEach((f) => form.append('files', f))
+  form.append('mode', mode)
+  form.append('auto_crop', String(autoCrop))
+  try {
+    const res = await http.post('/scan', form, { responseType: 'blob' })
+    return res.data
+  } catch (e) {
+    throw new Error(await extractErrorMessage(e, '扫描失败，请重试'))
+  }
+}
+
 /** x/y/width 都是相对页面宽高的 0~1 比例（y 从顶部算），不是像素——不用管每页实际尺寸 */
 export async function signPdf(
   file: File,

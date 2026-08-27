@@ -1,3 +1,4 @@
+import asyncio
 import io
 import zipfile
 from typing import List, Optional
@@ -10,6 +11,8 @@ from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.pdfgen import canvas as pdfcanvas
+
+from app import doc_scan
 
 router = APIRouter(prefix="/api/pdf", tags=["pdf"])
 
@@ -163,6 +166,37 @@ async def watermark_pdf(
         buf,
         media_type="application/pdf",
         headers={"Content-Disposition": "attachment; filename=watermarked.pdf"},
+    )
+
+
+@router.post("/scan")
+async def scan_to_pdf(
+    files: List[UploadFile] = File(...),
+    mode: str = Form("bw"),
+    auto_crop: str = Form("true"),
+):
+    """照片转扫描件 PDF。纯本地 OpenCV，不调 openlux——扫描是"复制/重现"不是"篡改/伪造"，
+    跟 OCR 一样不接敏感文件检测。见 doc_scan.py。"""
+    if not files:
+        raise HTTPException(status_code=400, detail="请至少上传一张图片")
+    if mode not in ("bw", "gray", "color"):
+        mode = "bw"
+    crop = auto_crop != "false"
+
+    pages = []
+    for f in files:
+        data = await f.read()
+        try:
+            page = await asyncio.to_thread(doc_scan.scan_page, data, mode, crop)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"{f.filename or '图片'}：{e}")
+        pages.append(page)
+
+    pdf_bytes = await asyncio.to_thread(doc_scan.pages_to_pdf, pages)
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=scan.pdf"},
     )
 
 

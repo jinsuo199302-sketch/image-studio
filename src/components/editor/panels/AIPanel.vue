@@ -14,6 +14,7 @@ import AIMemorialPhotoTab from './ai/AIMemorialPhotoTab.vue'
 import AIScreenshotStitchTab from './ai/AIScreenshotStitchTab.vue'
 import AIAvatarFrameTab from './ai/AIAvatarFrameTab.vue'
 import AISignatureTab from './ai/AISignatureTab.vue'
+import AIScanTab from './ai/AIScanTab.vue'
 
 type TabKey =
   | 'image'
@@ -30,6 +31,7 @@ type TabKey =
   | 'stitch'
   | 'avatarframe'
   | 'signature'
+  | 'scan'
 
 const props = defineProps<{ selectedText: string | null; initialTab?: TabKey }>()
 const emit = defineEmits<{
@@ -71,6 +73,7 @@ function useSignatureInPdf(dataUrl: string) {
           { key: 'stitch', label: '长截图' },
           { key: 'avatarframe', label: '头像框' },
           { key: 'signature', label: '签名' },
+          { key: 'scan', label: '扫描件' },
         ]"
         :key="tab.key"
         class="flex-1 shrink-0 rounded-t-md px-1 py-2 text-xs transition"
@@ -105,10 +108,11 @@ function useSignatureInPdf(dataUrl: string) {
       <AIScreenshotStitchTab v-else-if="activeTab === 'stitch'" />
       <AIAvatarFrameTab v-else-if="activeTab === 'avatarframe'" />
       <AISignatureTab
-        v-else
+        v-else-if="activeTab === 'signature'"
         @insert-image="(url) => emit('insert-image', url)"
         @use-in-pdf="useSignatureInPdf"
       />
+      <AIScanTab v-else />
     </div>
   </div>
 </template>
