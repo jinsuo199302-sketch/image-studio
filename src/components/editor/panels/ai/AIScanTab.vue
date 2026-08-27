@@ -14,7 +14,8 @@ interface Page {
 const pages = ref<Page[]>([])
 const fileInput = ref<HTMLInputElement>()
 const mode = ref<ScanMode>('bw')
-const autoCrop = ref(true)
+// 默认关：只有照片里文档四周有明显桌面/背景需要裁掉时才开，避免误裁掉内容
+const autoCrop = ref(false)
 const processing = ref(false)
 
 const MODES: { key: ScanMode; label: string; desc: string }[] = [
@@ -132,8 +133,11 @@ async function generate() {
       </div>
 
       <label class="flex items-center gap-2 text-xs text-gray-600">
-        <el-checkbox v-model="autoCrop" /> 自动裁边校正（检测不到纸张边界时用整张图）
+        <el-checkbox v-model="autoCrop" /> 自动裁边校正
       </label>
+      <p class="text-[11px] text-gray-400">
+        照片里文档四周有桌面/背景要裁掉时才勾。文档已占满画面就别勾，以免误裁到内容。
+      </p>
     </div>
 
     <div class="border-t border-gray-100 p-3">

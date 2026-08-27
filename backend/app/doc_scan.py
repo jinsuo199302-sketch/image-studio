@@ -40,26 +40,46 @@ def _order_points(pts: np.ndarray) -> np.ndarray:
 
 
 def _detect_and_warp(img: np.ndarray) -> np.ndarray | None:
-    """找最大的四边形轮廓（且要占画面 1/4 以上）当作纸张边界，做透视校正拉正。"""
+    """找纸张边界做透视校正。只在文档明显没占满画面时才裁——占比 [0.35, 0.9] 之间的
+    四边形才当纸张边界（太大 = 已经占满画面不用裁；太小 = 误判到某个内框/图案），
+    并把四角朝外扩一点，避免正好贴着内容裁掉一圈。"""
     h, w = img.shape[:2]
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    gray = cv2.GaussianBlur(gray, (5, 5), 0)
+    frame_area = h * w
+    gray_full = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    # 最外一圈 vs 中心区：外圈没比中心明显暗（纸张已铺到画面边缘、没有桌面背景），直接放弃裁剪
+    b = max(4, int(min(h, w) * 0.03))
+    ring = np.concatenate([
+        gray_full[:b].ravel(), gray_full[-b:].ravel(),
+        gray_full[:, :b].ravel(), gray_full[:, -b:].ravel(),
+    ])
+    cs = min(h, w) // 6
+    center = gray_full[h // 2 - cs:h // 2 + cs, w // 2 - cs:w // 2 + cs]
+    if np.median(ring) >= np.median(center) - 30:
+        return None
+    gray = cv2.GaussianBlur(gray_full, (5, 5), 0)
     edges = cv2.Canny(gray, 60, 180)
     edges = cv2.dilate(edges, np.ones((3, 3), np.uint8), iterations=2)
     cnts, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
     for c in sorted(cnts, key=cv2.contourArea, reverse=True)[:6]:
         peri = cv2.arcLength(c, True)
         approx = cv2.approxPolyDP(c, 0.02 * peri, True)
-        if len(approx) == 4 and cv2.contourArea(approx) > 0.22 * h * w:
-            quad = _order_points(approx.reshape(4, 2).astype(np.float32))
-            (tl, tr, br, bl) = quad
-            out_w = int(max(np.linalg.norm(br - bl), np.linalg.norm(tr - tl)))
-            out_h = int(max(np.linalg.norm(tr - br), np.linalg.norm(tl - bl)))
-            if out_w < 100 or out_h < 100:
-                return None
-            dst = np.array([[0, 0], [out_w - 1, 0], [out_w - 1, out_h - 1], [0, out_h - 1]], dtype=np.float32)
-            m = cv2.getPerspectiveTransform(quad, dst)
-            return cv2.warpPerspective(img, m, (out_w, out_h))
+        if len(approx) != 4:
+            continue
+        area = cv2.contourArea(approx)
+        if not (0.35 * frame_area < area < 0.9 * frame_area):
+            continue
+        quad = _order_points(approx.reshape(4, 2).astype(np.float32))
+        # 四角朝质心外扩 2.5%，多留一圈边距
+        ctr = quad.mean(axis=0)
+        quad = np.clip(ctr + (quad - ctr) * 1.025, [0, 0], [w - 1, h - 1]).astype(np.float32)
+        (tl, tr, br, bl) = quad
+        out_w = int(max(np.linalg.norm(br - bl), np.linalg.norm(tr - tl)))
+        out_h = int(max(np.linalg.norm(tr - br), np.linalg.norm(tl - bl)))
+        if out_w < 100 or out_h < 100:
+            return None
+        dst = np.array([[0, 0], [out_w - 1, 0], [out_w - 1, out_h - 1], [0, out_h - 1]], dtype=np.float32)
+        m = cv2.getPerspectiveTransform(quad, dst)
+        return cv2.warpPerspective(img, m, (out_w, out_h))
     return None
 
 
