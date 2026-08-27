@@ -15,7 +15,8 @@ TABLE_INSTRUCTION = (
     '{"r": 行号, "c": 列号, "rs": 跨行数, "cs": 跨列数, "t": "单元格文字"}, ...]}\n'
     "- r/c 从 0 开始。合并的单元格只输出左上角那一个，rs/cs 填跨度；不合并的 rs=1、cs=1。\n"
     "- 每个非空单元格都要输出；空单元格可以不输出。\n"
-    "- 标题行、大标题如果跨多列，也按合并单元格处理。\n"
+    "- 表格上方/外面的大标题（例如某某验收单、某某明细表）也要，作为第 0 行、跨满所有列的合并单元格。\n"
+    "- 表格下方的落款/签字行（负责人、日期之类）也一并纳入对应的行。\n"
     "- 只输出能被 JSON.parse 的对象本身，不要 markdown、不要 ```、不要任何解释。\n"
     "图里没有表格就输出 {\"rows\":0,\"cols\":0,\"cells\":[]}。"
 )
@@ -78,7 +79,9 @@ def build_xlsx(spec: dict, paper: str = "A4", orientation: str = "auto") -> byte
         text = str(cd.get("t", ""))
         ws.cell(row=r, column=c, value=text)
         if r == 1:
-            ws.cell(row=r, column=c).font = Font(bold=True)
+            # 第一行如果是跨满整表的一个格，多半是大标题——加大字号
+            big = cs >= max(2, cols - 1)
+            ws.cell(row=r, column=c).font = Font(bold=True, size=15 if big else 11)
         if rs > 1 or cs > 1:
             try:
                 ws.merge_cells(start_row=r, start_column=c,
