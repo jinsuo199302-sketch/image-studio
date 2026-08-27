@@ -13,6 +13,7 @@ import AIIdPhotoTab from './ai/AIIdPhotoTab.vue'
 import AIMemorialPhotoTab from './ai/AIMemorialPhotoTab.vue'
 import AIScreenshotStitchTab from './ai/AIScreenshotStitchTab.vue'
 import AIAvatarFrameTab from './ai/AIAvatarFrameTab.vue'
+import AISignatureTab from './ai/AISignatureTab.vue'
 
 type TabKey =
   | 'image'
@@ -28,6 +29,7 @@ type TabKey =
   | 'memorial'
   | 'stitch'
   | 'avatarframe'
+  | 'signature'
 
 const props = defineProps<{ selectedText: string | null; initialTab?: TabKey }>()
 const emit = defineEmits<{
@@ -39,6 +41,14 @@ const emit = defineEmits<{
 const activeTab = ref<TabKey>(props.initialTab ?? 'image')
 function pickTab(key: string) {
   activeTab.value = key as TabKey
+}
+
+// 「签名」→「PDF 签名」的跨 tab 交接：签名 tab 生成的 PNG 直接塞进 PDF tab 的签名流程，
+// 不用先下载再上传
+const pdfPresetSignature = ref<string | null>(null)
+function useSignatureInPdf(dataUrl: string) {
+  pdfPresetSignature.value = dataUrl
+  activeTab.value = 'pdf'
 }
 </script>
 
@@ -60,6 +70,7 @@ function pickTab(key: string) {
           { key: 'memorial', label: '黑白遗像' },
           { key: 'stitch', label: '长截图' },
           { key: 'avatarframe', label: '头像框' },
+          { key: 'signature', label: '签名' },
         ]"
         :key="tab.key"
         class="flex-1 shrink-0 rounded-t-md px-1 py-2 text-xs transition"
@@ -84,7 +95,7 @@ function pickTab(key: string) {
         @replace-selected="(text) => emit('replace-selected-text', text)"
       />
       <AIVideoTab v-else-if="activeTab === 'video'" />
-      <AIPdfTab v-else-if="activeTab === 'pdf'" />
+      <AIPdfTab v-else-if="activeTab === 'pdf'" :preset-signature="pdfPresetSignature" />
       <AICutoutTab v-else-if="activeTab === 'cutout'" />
       <AIEraseTab v-else-if="activeTab === 'erase'" />
       <AITextReplaceTab v-else-if="activeTab === 'textreplace'" />
@@ -92,7 +103,12 @@ function pickTab(key: string) {
       <AIIdPhotoTab v-else-if="activeTab === 'idphoto'" />
       <AIMemorialPhotoTab v-else-if="activeTab === 'memorial'" />
       <AIScreenshotStitchTab v-else-if="activeTab === 'stitch'" />
-      <AIAvatarFrameTab v-else />
+      <AIAvatarFrameTab v-else-if="activeTab === 'avatarframe'" />
+      <AISignatureTab
+        v-else
+        @insert-image="(url) => emit('insert-image', url)"
+        @use-in-pdf="useSignatureInPdf"
+      />
     </div>
   </div>
 </template>

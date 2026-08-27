@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { UploadFilled, Close, ArrowUp, ArrowDown } from '@element-plus/icons-vue'
 import { mergePdfs, splitPdf, watermarkPdf, signPdf, type SplitMode } from '../../../../services/pdfApi'
+
+const props = defineProps<{ presetSignature?: string | null }>()
 
 type SubTab = 'merge' | 'split' | 'watermark' | 'sign'
 const activeSubTab = ref<SubTab>('merge')
@@ -208,6 +210,19 @@ function onSignatureImagePick(e: Event) {
   signatureFile.value = (e.target as HTMLInputElement).files?.[0] ?? null
   ;(e.target as HTMLInputElement).value = ''
 }
+
+// 「签名」tab 生成签名后跳过来，dataURL 直接转成 File 填进签名槽
+watch(
+  () => props.presetSignature,
+  async (url) => {
+    if (!url) return
+    const blob = await (await fetch(url)).blob()
+    signatureFile.value = new File([blob], '签名.png', { type: 'image/png' })
+    activeSubTab.value = 'sign'
+    ElMessage.success('已带入生成的签名，选好 PDF 和位置即可')
+  },
+  { immediate: true },
+)
 
 async function doSign() {
   if (!signFile.value) {
