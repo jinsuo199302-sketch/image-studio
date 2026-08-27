@@ -193,13 +193,15 @@ function drawStar(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: numb
   ctx.fill()
 }
 
-function applyDistress(ctx: CanvasRenderingContext2D, size: number) {
+function applyDistress(ctx: CanvasRenderingContext2D, size: number, strength = 1) {
+  // 轻微墨色不匀，不啃出明显白刻痕：点小、透明度低、数量少
   ctx.save()
   ctx.globalCompositeOperation = 'destination-out'
-  for (let i = 0; i < size * 1.6; i++) {
-    ctx.globalAlpha = Math.random() * 0.5
+  const n = size * 0.35 * strength
+  for (let i = 0; i < n; i++) {
+    ctx.globalAlpha = Math.random() * 0.22
     ctx.beginPath()
-    ctx.arc(Math.random() * size, Math.random() * size, Math.random() * 2.2, 0, Math.PI * 2)
+    ctx.arc(Math.random() * size, Math.random() * size, Math.random() * 1.1, 0, Math.PI * 2)
     ctx.fill()
   }
   ctx.restore()
@@ -284,23 +286,26 @@ function buildRoundSeal(): HTMLCanvasElement | null {
   const cx = S / 2
   const cy = S / 2
   const R = S / 2 - S * 0.02
-  ctx.strokeStyle = INK.red
   ctx.fillStyle = INK.red
+  ctx.strokeStyle = INK.red
 
-  // 外环（真实公章环线较细，约 1mm）
-  ctx.lineWidth = Math.max(2, S * 0.016)
-  ctx.beginPath()
-  ctx.arc(cx, cy, R, 0, Math.PI * 2)
-  ctx.stroke()
+  const strokeRing = () => {
+    ctx.lineWidth = Math.max(2, S * 0.017)
+    ctx.beginPath()
+    ctx.arc(cx, cy, R, 0, Math.PI * 2)
+    ctx.stroke()
+  }
+  strokeRing()
 
-  // 顶部弧线：公司名，字头朝外，从左下绕过顶部到右下（标准公章约 230°）
+  // 顶部弧线：公司名。真实公章字形瘦长——横向压到 0.7 倍，从左下绕过顶部到右下（约 245°）
   const nameChars = [...name]
   const nn = nameChars.length
-  const nameSpread = Math.min(nn * 0.32, Math.PI * 1.33)
-  const nameR = R * 0.8
-  let nameFont = S * 0.12
+  const CONDENSE = 0.7
+  const nameSpread = Math.min(nn * 0.345, Math.PI * 1.42)
+  const nameR = R * 0.78
+  let nameFont = S * 0.135
   const arcLen = nameR * nameSpread
-  if (nn * nameFont * 1.04 > arcLen) nameFont = arcLen / (nn * 1.04)
+  if (nn * nameFont * CONDENSE * 1.06 > arcLen) nameFont = arcLen / (nn * CONDENSE * 1.06)
   ctx.font = `${nameFont}px ${SEAL_FONT}`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
@@ -309,31 +314,36 @@ function buildRoundSeal(): HTMLCanvasElement | null {
     ctx.save()
     ctx.translate(cx + Math.cos(a) * nameR, cy + Math.sin(a) * nameR)
     ctx.rotate(a + Math.PI / 2)
+    ctx.scale(CONDENSE, 1)
     ctx.fillText(ch, 0, 0)
     ctx.restore()
   })
 
-  if (sealStar.value) drawStar(ctx, cx, cy, S * 0.12)
+  if (sealStar.value) drawStar(ctx, cx, cy, S * 0.165)
 
-  // 底部弧线：编号，字头朝内（正着读），横跨底部
+  // 底部弧线：编号，字头朝内（正着读），小号瘦长数字，贴近环线
   const num = sealCenter.value.trim()
   if (num) {
     const numChars = [...num]
     const m = numChars.length
-    const numSpread = Math.min(m * 0.1, Math.PI * 0.8)
-    const numR = R * 0.83
-    ctx.font = `${S * 0.062}px Arial, "Noto Sans SC", sans-serif`
+    const numSpread = Math.min(m * 0.11, Math.PI * 0.95)
+    const numR = R * 0.86
+    ctx.font = `${S * 0.052}px Arial, "Noto Sans SC", sans-serif`
     numChars.forEach((ch, i) => {
       const a = Math.PI / 2 + numSpread / 2 - (m > 1 ? numSpread * (i / (m - 1)) : 0)
       ctx.save()
       ctx.translate(cx + Math.cos(a) * numR, cy + Math.sin(a) * numR)
       ctx.rotate(a - Math.PI / 2)
+      ctx.scale(0.78, 1)
       ctx.fillText(ch, 0, 0)
       ctx.restore()
     })
   }
 
-  if (sealDistress.value) applyDistress(ctx, S)
+  if (sealDistress.value) {
+    applyDistress(ctx, S, 0.7)
+    strokeRing() // 做旧后把外环补描一遍，避免环线出现明显白刻痕
+  }
   return c
 }
 
