@@ -27,3 +27,8 @@ dist-ssr
 backend/tests/*.jpg
 backend/tests/*.jpeg
 backend/tests/*.png
+
+# 环境变量（含真实 key / 本地 DEV_UNRESTRICTED 开关），只留 .env.example
+.env
+.env.*
+!.env.example

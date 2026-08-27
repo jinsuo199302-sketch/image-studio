@@ -19,7 +19,7 @@ from app import auth, crud, models
 from app import content_research
 from app.config import (
     BASE_DIR,
-    DISABLE_SENSITIVE_DOC_CHECK,
+    DEV_UNRESTRICTED,
     OPENLUX_API_KEY,
     OPENLUX_BASE_URL,
     VIDU_API_KEY,
@@ -152,8 +152,13 @@ Respond with EXACTLY one word, no other text: YES or NO."""
 async def _moderate_text(content: str) -> None:
     """涉及生图/写作的用户自由文本先过一遍合规判断，命中 REJECT 直接 403。
     分类调用本身失败（超时/网络异常/解析失败）一律当成检查失败拒绝这次请求，
-    不静默放行——宁可用户重试一次，不能让检查失效变成事实上没有这层拦截。"""
+    不静默放行——宁可用户重试一次，不能让检查失效变成事实上没有这层拦截。
+
+    DEV_UNRESTRICTED=1 时整个跳过（仅限本地自测，见 config.py 注释）。"""
     if not content or not content.strip():
+        return
+    if DEV_UNRESTRICTED:
+        print("[DEV_UNRESTRICTED] 跳过文字意图审核", file=sys.stderr, flush=True)
         return
     try:
         res = await _post_openlux(
@@ -183,9 +188,9 @@ async def _check_not_sensitive_document(image_bytes: bytes, media_type: str, fea
     分类器，不是只有 AI 消除才防，跟 _moderate_text 一样：分类调用本身失败就拒绝这次请求，
     不静默放行。feature_label 只用来给拒绝提示换个功能名字，检测逻辑完全一样。
 
-    DISABLE_SENSITIVE_DOC_CHECK=1 时整个跳过（本地/自测用，见 config.py 注释）。"""
-    if DISABLE_SENSITIVE_DOC_CHECK:
-        print(f"[WARN] 敏感文件检查已被 DISABLE_SENSITIVE_DOC_CHECK 关闭，放行 {feature_label} 请求", file=sys.stderr, flush=True)
+    DEV_UNRESTRICTED=1 时整个跳过（仅限本地自测，见 config.py 注释）。"""
+    if DEV_UNRESTRICTED:
+        print(f"[DEV_UNRESTRICTED] 跳过敏感文件检查：{feature_label}", file=sys.stderr, flush=True)
         return
     b64 = base64.b64encode(image_bytes).decode()
     try:

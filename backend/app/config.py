@@ -1,5 +1,6 @@
 import os
 import secrets
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -45,7 +46,18 @@ VIDU_API_KEY = os.environ.get("VIDU_API_KEY") or OPENLUX_API_KEY
 BOCHA_BASE_URL = os.environ.get("BOCHA_BASE_URL", "https://api.bochaai.com/v1")
 BOCHA_API_KEY = os.environ.get("BOCHA_API_KEY", "")
 
-# 临时开发/自测开关：置 1 时跳过"上传图是不是身份证/发票等敏感文件"的合规检查
-# （_check_not_sensitive_document 直接放行）。默认关闭，只在本地或自己训练数据调试时用，
-# 生产环境不要设。开启时每次请求会往 stderr 打一行警告，方便事后发现忘了关。
-DISABLE_SENSITIVE_DOC_CHECK = os.environ.get("DISABLE_SENSITIVE_DOC_CHECK", "").strip().lower() in ("1", "true", "yes", "on")
+# ── 开发/自测总开关 ────────────────────────────────────────────────
+# DEV_UNRESTRICTED=1 时，关掉所有"防止用户拿软件做违法事"的内容检查：
+#   1. 敏感文件图片识别（_check_not_sensitive_document）——身份证/发票/合同等
+#   2. 文字意图审核（_moderate_text）——"帮我伪造证件"这类 prompt
+# 用途：只给项目所有者在【本地】跑、调训练数据用。
+# 生产服务器的 .env 里【绝对不要】设这个——那两层检查是保护终端用户、也是合规底线。
+# 开启时：启动打一次横幅，之后每个被跳过的请求都往 stderr 记一行，方便事后发现忘了关。
+DEV_UNRESTRICTED = os.environ.get("DEV_UNRESTRICTED", "").strip().lower() in ("1", "true", "yes", "on")
+
+if DEV_UNRESTRICTED:
+    _banner = "!" * 64
+    print(_banner, file=sys.stderr)
+    print("[DEV_UNRESTRICTED] 内容安全检查已全部关闭 —— 仅限本地自测！", file=sys.stderr)
+    print("[DEV_UNRESTRICTED] 生产环境看到这行 = .env 配错了，立即移除并重启", file=sys.stderr)
+    print(_banner, file=sys.stderr, flush=True)
