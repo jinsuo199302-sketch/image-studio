@@ -272,6 +272,53 @@ async def images_edits(
     return res.json()
 
 
+@router.post("/table-to-xlsx")
+async def table_to_xlsx(
+    image: UploadFile = File(...),
+    _user: models.User = Depends(auth.get_current_user),
+):
+    """表格照片 → Excel。让视觉模型把表格读成 JSON 二维数组，openpyxl 生成 xlsx。
+    跟 OCR 一样是纯读取/转录，不接敏感文件检测。"""
+    from fastapi.responses import StreamingResponse
+
+    from app import table_extract
+
+    _require_openlux()
+    image_bytes = await image.read()
+    b64 = base64.b64encode(image_bytes).decode()
+    media = image.content_type or "image/png"
+    res = await _post_openlux(
+        f"{OPENLUX_BASE_URL}/chat/completions",
+        timeout=120,
+        headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
+        json={
+            "model": "gemini-3-flash-preview",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": table_extract.TABLE_INSTRUCTION},
+                        {"type": "image_url", "image_url": {"url": f"data:{media};base64,{b64}"}},
+                    ],
+                }
+            ],
+        },
+    )
+    if res.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"表格识别失败：{res.status_code} {res.text[:300]}")
+    content = res.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+    try:
+        grid = table_extract.parse_grid(content)
+        xlsx_bytes = table_extract.build_xlsx(grid)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return StreamingResponse(
+        io.BytesIO(xlsx_bytes),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=table.xlsx"},
+    )
+
+
 @router.post("/remove-repeated-watermark")
 async def remove_repeated_watermark(
     image: UploadFile = File(...),

@@ -22,6 +22,7 @@ const VALID_TABS = [
   'avatarframe',
   'signature',
   'scan',
+  'table',
 ] as const
 const initialTab = computed(() => {
   const tab = route.query.tab
