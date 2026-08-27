@@ -17,7 +17,7 @@ const emit = defineEmits<{
   (e: 'use-in-pdf', url: string): void
 }>()
 
-type Mode = 'draw' | 'type' | 'sealRound' | 'sealSquare' | 'perforated'
+type Mode = 'draw' | 'type' | 'sealRound' | 'sealSquare' | 'sealPersonal' | 'perforated'
 const mode = ref<Mode>('draw')
 const MODES = computed(() => {
   const base: { key: Mode; label: string }[] = [
@@ -28,6 +28,7 @@ const MODES = computed(() => {
     base.push(
       { key: 'sealRound', label: '圆章' },
       { key: 'sealSquare', label: '方章' },
+      { key: 'sealPersonal', label: '私章' },
       { key: 'perforated', label: '骑缝章' },
     )
   }
@@ -105,12 +106,48 @@ const SIGN_FONTS = [
 ]
 const typeFont = ref(SIGN_FONTS[0].value)
 
-// ─────────────────────────── 圆章 / 方章 ───────────────────────────
+// ─────────────────────────── 圆章 / 方章 / 私章 ───────────────────────────
+// 尺寸参照国内实际规格：公章标准 40mm 圆形；私章/名章常见 15/18/20/25mm 方形。
+// 渲染像素 = 毫米 / 25.4 * 300dpi，导出即印刷精度。印章文字标准用宋体。
 const sealOuter = ref('')
 const sealCenter = ref('')
 const sealStar = ref(true)
 const sealSquareLines = ref('')
 const sealDistress = ref(true)
+const SEAL_FONT = '"Noto Serif SC", serif' // 印章标准宋体（思源宋体）
+
+const ROUND_SIZES = [
+  { label: '公章 40mm', mm: 40 },
+  { label: '38mm', mm: 38 },
+  { label: '42mm', mm: 42 },
+]
+const roundSizeMm = ref(40)
+
+const SQUARE_SIZES = [
+  { label: '25mm', mm: 25 },
+  { label: '20mm', mm: 20 },
+  { label: '30mm', mm: 30 },
+]
+const squareSizeMm = ref(25)
+
+// 私章
+const personalName = ref('')
+const PERSONAL_SIZES = [
+  { label: '15mm', mm: 15 },
+  { label: '18mm', mm: 18 },
+  { label: '20mm', mm: 20 },
+  { label: '25mm', mm: 25 },
+]
+const personalSizeMm = ref(18)
+const PERSONAL_FONTS = [
+  { label: '宋体', value: '"Noto Serif SC", serif' },
+  { label: '楷体', value: '"LXGW WenKai", serif' },
+  { label: '毛笔', value: '"Ma Shan Zheng", cursive' },
+]
+const personalFont = ref(PERSONAL_FONTS[0].value)
+const personalRound = ref(false)
+
+const mmToPx = (mm: number) => Math.round((mm / 25.4) * 300)
 
 // ─────────────────────────── 骑缝章 ───────────────────────────
 const perfFile = ref<File | null>(null)
@@ -174,6 +211,7 @@ function buildOutput(): HTMLCanvasElement | null {
   if (mode.value === 'type') return buildFromText()
   if (mode.value === 'sealRound') return buildRoundSeal()
   if (mode.value === 'sealSquare') return buildSquareSeal()
+  if (mode.value === 'sealPersonal') return buildPersonalSeal()
   return null
 }
 
@@ -239,31 +277,31 @@ function buildFromText(): HTMLCanvasElement | null {
 function buildRoundSeal(): HTMLCanvasElement | null {
   const name = sealOuter.value.trim()
   if (!name) return null
-  const S = 680
+  const S = mmToPx(roundSizeMm.value)
   const c = document.createElement('canvas')
   c.width = c.height = S
   const ctx = c.getContext('2d')!
   const cx = S / 2
   const cy = S / 2
-  const R = S / 2 - 16
+  const R = S / 2 - S * 0.02
   ctx.strokeStyle = INK.red
   ctx.fillStyle = INK.red
 
-  // 外环
-  ctx.lineWidth = S * 0.022
+  // 外环（真实公章环线较细，约 1mm）
+  ctx.lineWidth = Math.max(2, S * 0.016)
   ctx.beginPath()
   ctx.arc(cx, cy, R, 0, Math.PI * 2)
   ctx.stroke()
 
-  // 顶部弧线：公司名，字头朝外，从左下绕过顶部到右下（标准公章约 240°）
+  // 顶部弧线：公司名，字头朝外，从左下绕过顶部到右下（标准公章约 230°）
   const nameChars = [...name]
   const nn = nameChars.length
-  const nameSpread = Math.min(nn * 0.335, Math.PI * 1.38)
+  const nameSpread = Math.min(nn * 0.32, Math.PI * 1.33)
   const nameR = R * 0.8
-  let nameFont = S * 0.115
+  let nameFont = S * 0.12
   const arcLen = nameR * nameSpread
-  if (nn * nameFont * 1.02 > arcLen) nameFont = arcLen / (nn * 1.02)
-  ctx.font = `bold ${nameFont}px "Noto Serif SC", serif`
+  if (nn * nameFont * 1.04 > arcLen) nameFont = arcLen / (nn * 1.04)
+  ctx.font = `${nameFont}px ${SEAL_FONT}`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   nameChars.forEach((ch, i) => {
@@ -275,19 +313,18 @@ function buildRoundSeal(): HTMLCanvasElement | null {
     ctx.restore()
   })
 
-  if (sealStar.value) drawStar(ctx, cx, cy, S * 0.125)
+  if (sealStar.value) drawStar(ctx, cx, cy, S * 0.12)
 
   // 底部弧线：编号，字头朝内（正着读），横跨底部
   const num = sealCenter.value.trim()
   if (num) {
     const numChars = [...num]
-    const mm = numChars.length
-    const numSpread = Math.min(mm * 0.12, Math.PI * 0.85)
-    const numR = R * 0.82
-    ctx.font = `${S * 0.07}px Arial, "Noto Sans SC", sans-serif`
-    // 底部弧线：i 增大时角度从 π/2+spread/2（左）递减到 π/2-spread/2（右），字沿弧线正着读
+    const m = numChars.length
+    const numSpread = Math.min(m * 0.1, Math.PI * 0.8)
+    const numR = R * 0.83
+    ctx.font = `${S * 0.062}px Arial, "Noto Sans SC", sans-serif`
     numChars.forEach((ch, i) => {
-      const a = Math.PI / 2 + numSpread / 2 - (mm > 1 ? numSpread * (i / (mm - 1)) : 0)
+      const a = Math.PI / 2 + numSpread / 2 - (m > 1 ? numSpread * (i / (m - 1)) : 0)
       ctx.save()
       ctx.translate(cx + Math.cos(a) * numR, cy + Math.sin(a) * numR)
       ctx.rotate(a - Math.PI / 2)
@@ -303,20 +340,70 @@ function buildRoundSeal(): HTMLCanvasElement | null {
 function buildSquareSeal(): HTMLCanvasElement | null {
   const lines = sealSquareLines.value.split('\n').map((l) => l.trim()).filter(Boolean)
   if (!lines.length) return null
-  const S = 640
+  const S = mmToPx(squareSizeMm.value)
   const c = document.createElement('canvas')
   c.width = c.height = S
   const ctx = c.getContext('2d')!
   ctx.strokeStyle = INK.red
   ctx.fillStyle = INK.red
-  ctx.lineWidth = S * 0.03
+  ctx.lineWidth = Math.max(3, S * 0.028)
   ctx.strokeRect(S * 0.1, S * 0.1, S * 0.8, S * 0.8)
   const maxLen = Math.max(...lines.map((l) => l.length), 1)
-  ctx.font = `bold ${Math.min(S * 0.16, (S * 0.72) / maxLen, (S * 0.62) / lines.length)}px "Noto Serif SC", serif`
+  ctx.font = `${Math.min(S * 0.16, (S * 0.72) / maxLen, (S * 0.62) / lines.length)}px ${SEAL_FONT}`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   const gap = (S * 0.72) / (lines.length + 1)
   lines.forEach((l, i) => ctx.fillText(l, S / 2, S * 0.14 + gap * (i + 1)))
+  if (sealDistress.value) applyDistress(ctx, S)
+  return c
+}
+
+/** 私章 / 姓名章：方形（可选圆形）红框 + 姓名。多字按传统竖排、从右到左分列。 */
+function buildPersonalSeal(): HTMLCanvasElement | null {
+  const name = personalName.value.trim()
+  if (!name) return null
+  const chars = [...name].slice(0, 4)
+  const S = mmToPx(personalSizeMm.value)
+  const c = document.createElement('canvas')
+  c.width = c.height = S
+  const ctx = c.getContext('2d')!
+  ctx.strokeStyle = INK.red
+  ctx.fillStyle = INK.red
+  ctx.lineWidth = Math.max(3, S * 0.05)
+  const m = S * 0.08
+  if (personalRound.value) {
+    ctx.beginPath()
+    ctx.arc(S / 2, S / 2, S / 2 - m, 0, Math.PI * 2)
+    ctx.stroke()
+  } else {
+    ctx.strokeRect(m, m, S - m * 2, S - m * 2)
+  }
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  // 分列：1字居中；2字竖排；3字右列1+左列2；4字2×2（右上→右下→左上→左下）
+  const inner = S - m * 2 - S * 0.12
+  const place = (ch: string, col: number, cols: number, row: number, rows: number) => {
+    const cw = inner / cols
+    const rh = inner / rows
+    const x = S / 2 + (cols === 1 ? 0 : (cols - 1) / 2 - col) * cw // col 0 = 右列
+    const y = S / 2 - ((rows - 1) / 2 - row) * rh
+    ctx.font = `${Math.min(cw, rh) * 0.92}px ${personalFont.value}`
+    ctx.fillText(ch, x, y)
+  }
+  if (chars.length === 1) place(chars[0], 0, 1, 0, 1)
+  else if (chars.length === 2) {
+    place(chars[0], 0, 1, 0, 2)
+    place(chars[1], 0, 1, 1, 2)
+  } else if (chars.length === 3) {
+    place(chars[0], 0, 2, 0, 1) // 右列单字，竖直居中
+    place(chars[1], 1, 2, 0, 2)
+    place(chars[2], 1, 2, 1, 2)
+  } else {
+    place(chars[0], 0, 2, 0, 2)
+    place(chars[1], 0, 2, 1, 2)
+    place(chars[2], 1, 2, 0, 2)
+    place(chars[3], 1, 2, 1, 2)
+  }
   if (sealDistress.value) applyDistress(ctx, S)
   return c
 }
@@ -328,7 +415,11 @@ function refreshPreview() {
   previewUrl.value = out && out.width > 1 ? out.toDataURL('image/png') : ''
 }
 watch(
-  [mode, inkColor, slantDeg, faded, typeName, typeFont, sealOuter, sealCenter, sealStar, sealSquareLines, sealDistress],
+  [
+    mode, inkColor, slantDeg, faded, typeName, typeFont,
+    sealOuter, sealCenter, sealStar, sealSquareLines, sealDistress,
+    roundSizeMm, squareSizeMm, personalName, personalSizeMm, personalFont, personalRound,
+  ],
   () => nextTick(refreshPreview),
 )
 
@@ -453,7 +544,7 @@ watch(mode, () => nextTick(() => mode.value === 'draw' && redrawPad()))
 
       <!-- 圆章 -->
       <template v-else-if="mode === 'sealRound'">
-        <p class="rounded bg-amber-50 px-2 py-1 text-[11px] text-amber-700">仅本机开发可见。公章/企业印章不对外开放。</p>
+        <p class="rounded bg-amber-50 px-2 py-1 text-[11px] text-amber-700">仅本机开发可见。文字标准用宋体，标准公章直径 40mm。</p>
         <div>
           <label class="mb-1 block text-xs font-medium text-gray-600">公司名称（顶部弧形）</label>
           <el-input v-model="sealOuter" placeholder="XX文化传媒有限公司" maxlength="30" />
@@ -461,6 +552,20 @@ watch(mode, () => nextTick(() => mode.value === 'draw' && redrawPad()))
         <div>
           <label class="mb-1 block text-xs font-medium text-gray-600">底部编号（可选，弧形）</label>
           <el-input v-model="sealCenter" placeholder="如 6201230022810" maxlength="20" />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-600">尺寸</label>
+          <div class="flex flex-wrap gap-1.5">
+            <button
+              v-for="s in ROUND_SIZES"
+              :key="s.mm"
+              class="rounded-full border px-2.5 py-0.5 text-[11px] transition"
+              :class="roundSizeMm === s.mm ? 'border-violet-500 bg-violet-50 text-violet-600' : 'border-gray-200 text-gray-500'"
+              @click="roundSizeMm = s.mm"
+            >
+              {{ s.label }}
+            </button>
+          </div>
         </div>
         <label class="flex items-center gap-2 text-xs text-gray-600">
           <el-checkbox v-model="sealStar" /> 中心五角星
@@ -477,6 +582,64 @@ watch(mode, () => nextTick(() => mode.value === 'draw' && redrawPad()))
           <label class="mb-1 block text-xs font-medium text-gray-600">文字（每行一条）</label>
           <el-input v-model="sealSquareLines" type="textarea" :rows="3" placeholder="第一行&#10;第二行" />
         </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-600">尺寸</label>
+          <div class="flex flex-wrap gap-1.5">
+            <button
+              v-for="s in SQUARE_SIZES"
+              :key="s.mm"
+              class="rounded-full border px-2.5 py-0.5 text-[11px] transition"
+              :class="squareSizeMm === s.mm ? 'border-violet-500 bg-violet-50 text-violet-600' : 'border-gray-200 text-gray-500'"
+              @click="squareSizeMm = s.mm"
+            >
+              {{ s.label }}
+            </button>
+          </div>
+        </div>
+        <label class="flex items-center gap-2 text-xs text-gray-600">
+          <el-checkbox v-model="sealDistress" /> 做旧
+        </label>
+      </template>
+
+      <!-- 私章 / 姓名章 -->
+      <template v-else-if="mode === 'sealPersonal'">
+        <p class="rounded bg-amber-50 px-2 py-1 text-[11px] text-amber-700">仅本机开发可见。姓名章常见 15–25mm 方形。</p>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-600">姓名（2–4 字）</label>
+          <el-input v-model="personalName" placeholder="如 张伟" maxlength="4" />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-600">字体</label>
+          <div class="flex flex-wrap gap-1.5">
+            <button
+              v-for="f in PERSONAL_FONTS"
+              :key="f.value"
+              class="rounded-full border px-2.5 py-0.5 text-[11px] transition"
+              :class="personalFont === f.value ? 'border-violet-500 bg-violet-50 text-violet-600' : 'border-gray-200 text-gray-500'"
+              :style="{ fontFamily: f.value }"
+              @click="personalFont = f.value"
+            >
+              {{ f.label }}
+            </button>
+          </div>
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-600">尺寸</label>
+          <div class="flex flex-wrap gap-1.5">
+            <button
+              v-for="s in PERSONAL_SIZES"
+              :key="s.mm"
+              class="rounded-full border px-2.5 py-0.5 text-[11px] transition"
+              :class="personalSizeMm === s.mm ? 'border-violet-500 bg-violet-50 text-violet-600' : 'border-gray-200 text-gray-500'"
+              @click="personalSizeMm = s.mm"
+            >
+              {{ s.label }}
+            </button>
+          </div>
+        </div>
+        <label class="flex items-center gap-2 text-xs text-gray-600">
+          <el-checkbox v-model="personalRound" /> 圆形（默认方形）
+        </label>
         <label class="flex items-center gap-2 text-xs text-gray-600">
           <el-checkbox v-model="sealDistress" /> 做旧
         </label>
