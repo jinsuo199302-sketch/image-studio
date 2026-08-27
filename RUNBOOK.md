@@ -49,8 +49,8 @@ sudo systemctl restart image-studio-backend
 # 前端后端都改了（很常见）—— 两条都要
 npm run build && sudo systemctl restart image-studio-backend
 
-# 如果这次动了 backend/requirements.txt（加了 Python 依赖）
-venv/bin/pip install -r backend/requirements.txt && sudo systemctl restart image-studio-backend
+# 如果这次动了 backend/requirements.txt（加了 Python 依赖）—— venv 在 backend/venv/，不是仓库根
+cd ~/image-studio/backend && venv/bin/python -m pip install -r requirements.txt && sudo systemctl restart image-studio-backend
 ```
 
 ### 验证（🖥️ 服务器）
