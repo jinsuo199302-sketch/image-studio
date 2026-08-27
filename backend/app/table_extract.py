@@ -7,6 +7,7 @@ import re
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, Side
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.properties import PageSetupProperties
 
 TABLE_INSTRUCTION = (
     "识别图片里的表格，尽量还原它的结构（含合并单元格），输出为 JSON 对象：\n"
@@ -95,8 +96,7 @@ def build_xlsx(spec: dict, paper: str = "A4", orientation: str = "auto") -> byte
     ws.page_setup.orientation = "landscape" if landscape else "portrait"
     ws.page_setup.fitToWidth = 1
     ws.page_setup.fitToHeight = 0
-    ws.sheet_properties.pageSetUpPr.fitToPage = True
-    ws.print_options.gridLines = False
+    ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
 
     buf = io.BytesIO()
     wb.save(buf)

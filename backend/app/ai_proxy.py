@@ -308,7 +308,10 @@ async def table_to_xlsx(
     )
     if res.status_code >= 400:
         raise HTTPException(status_code=502, detail=f"表格识别失败：{res.status_code} {res.text[:300]}")
-    content = res.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+    try:
+        content = res.json()["choices"][0]["message"]["content"]
+    except Exception:
+        raise HTTPException(status_code=502, detail=f"识别服务返回异常：{res.text[:300]}")
     try:
         spec = table_extract.parse_spec(content)
         xlsx_bytes = table_extract.build_xlsx(
@@ -318,6 +321,8 @@ async def table_to_xlsx(
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"生成 Excel 失败：{type(e).__name__}: {e}")
     return StreamingResponse(
         io.BytesIO(xlsx_bytes),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
