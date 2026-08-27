@@ -98,7 +98,8 @@ async function runCutout() {
   try {
     // 抠图 + 人脸检测并行发起——两个都要基于原图，互不依赖，没必要串行等
     const [cutout, face] = await Promise.all([
-      removeBackground(authStore.isAuthenticated, rawImage.value),
+      // 证件照要贴纯色底，用 hard 档：硬边 + 收边 + 边缘去色，避免"发虚 / 脏描边"
+      removeBackground(authStore.isAuthenticated, rawImage.value, 'hard'),
       rawFile.value ? detectFace(rawFile.value).catch(() => null) : Promise.resolve(null),
     ])
     cutoutImage.value = cutout

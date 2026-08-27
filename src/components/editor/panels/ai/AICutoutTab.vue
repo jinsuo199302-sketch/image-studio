@@ -2,14 +2,16 @@
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { UploadFilled, Delete } from '@element-plus/icons-vue'
-import { removeBackground } from '../../../../services/backgroundRemovalApi'
+import { removeBackground, type CutoutEdge } from '../../../../services/backgroundRemovalApi'
 import { useAuthStore } from '../../../../stores/auth'
 
 const authStore = useAuthStore()
 
 const fileInput = ref<HTMLInputElement>()
 const workingImage = ref<string | null>(null)
+const originalImage = ref<string | null>(null)
 const processing = ref(false)
+const edge = ref<CutoutEdge>('soft')
 
 function onFileChange(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
@@ -17,6 +19,7 @@ function onFileChange(e: Event) {
   const reader = new FileReader()
   reader.onload = () => {
     workingImage.value = reader.result as string
+    originalImage.value = reader.result as string
   }
   reader.readAsDataURL(file)
   ;(e.target as HTMLInputElement).value = ''
@@ -24,13 +27,15 @@ function onFileChange(e: Event) {
 
 function reset() {
   workingImage.value = null
+  originalImage.value = null
 }
 
 async function runRemoveBg() {
-  if (!workingImage.value) return
+  // 始终基于原图抠，这样切换"边缘"档位重新抠不会在已抠结果上叠加处理
+  if (!originalImage.value) return
   processing.value = true
   try {
-    workingImage.value = await removeBackground(authStore.isAuthenticated, workingImage.value)
+    workingImage.value = await removeBackground(authStore.isAuthenticated, originalImage.value, edge.value)
     ElMessage.success('抠图完成')
   } catch {
     ElMessage.error('抠图失败，请重试')
@@ -86,6 +91,27 @@ function download() {
           >
             <el-icon :size="13"><Delete /></el-icon>
           </button>
+        </div>
+
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-600">边缘</label>
+          <div class="flex gap-1.5">
+            <button
+              class="rounded-full border px-2.5 py-0.5 text-[11px] transition"
+              :class="edge === 'soft' ? 'border-violet-500 bg-violet-50 text-violet-600' : 'border-gray-200 text-gray-500'"
+              @click="edge = 'soft'"
+            >
+              自然（留发丝）
+            </button>
+            <button
+              class="rounded-full border px-2.5 py-0.5 text-[11px] transition"
+              :class="edge === 'hard' ? 'border-violet-500 bg-violet-50 text-violet-600' : 'border-gray-200 text-gray-500'"
+              @click="edge = 'hard'"
+            >
+              锐利（照相馆硬边）
+            </button>
+          </div>
+          <p class="mt-1 text-[11px] text-gray-400">边缘发虚、像贴上去的，就切"锐利"重抠一次</p>
         </div>
 
         <el-button class="!w-full" :loading="processing" :disabled="processing" @click="runRemoveBg"> AI 抠图 </el-button>

@@ -390,14 +390,14 @@ def delete_generated_asset(
     return {"deleted": True}
 
 
-def _run_bg_removal_subprocess(image_bytes: bytes) -> subprocess.CompletedProcess:
+def _run_bg_removal_subprocess(image_bytes: bytes, edge: str = "soft") -> subprocess.CompletedProcess:
     """用同步 subprocess.run（不是 asyncio.create_subprocess_exec）——后者在 Windows 上
     uvicorn --reload 强制用的 SelectorEventLoop 下会直接抛 NotImplementedError（Windows
     独有的坑，asyncio 文档里写明 selector loop 不支持子进程；Linux 生产环境不受影响，
     但这样写本地 Windows 开发环境也能跑通同一条代码路径，不用靠"生产是 Linux 应该没事"硬赌）。
-    外层用 asyncio.to_thread 扔到线程池，不阻塞事件循环。"""
+    外层用 asyncio.to_thread 扔到线程池，不阻塞事件循环。edge 透传给 worker 决定边缘处理档位。"""
     return subprocess.run(
-        [sys.executable, "-m", "app.bg_removal_worker"],
+        [sys.executable, "-m", "app.bg_removal_worker", edge],
         input=image_bytes,
         capture_output=True,
         timeout=170,
@@ -407,19 +407,21 @@ def _run_bg_removal_subprocess(image_bytes: bytes) -> subprocess.CompletedProces
 @router.post("/background-removal")
 async def background_removal(
     image: UploadFile = File(...),
+    edge: str = Form("soft"),
     _user: models.User = Depends(auth.get_current_user),
 ):
-    """本地跑 rembg（u2net 模型）本身不依赖任何第三方 key，但合规检查需要调用 openlux 的
-    视觉模型，所以这个接口现在也要求 OPENLUX_API_KEY 配置好——这是"所有工具统一走一层敏感
-    文件检测"这条要求带来的必然依赖，不是抠图本身需要。放到独立子进程里跑（见
+    """本地跑 rembg（isnet-general-use 模型）本身不依赖任何第三方 key，但合规检查需要调用
+    openlux 的视觉模型，所以这个接口现在也要求 OPENLUX_API_KEY 配置好——这是"所有工具统一走
+    一层敏感文件检测"这条要求带来的必然依赖，不是抠图本身需要。放到独立子进程里跑（见
     bg_removal_worker.py）——模型稳定态占约 1GB RSS，不能常驻在主 uvicorn 进程里，
-    不然这台 2 核 2GB 的机器迟早被这个功能拖垮。首次调用要下载模型（~176MB），
-    会明显慢一次，之后走本地缓存就快了（现测 <1s）。"""
+    不然这台 2 核 2GB 的机器迟早被这个功能拖垮。首次调用要下载模型（~178MB），
+    会明显慢一次，之后走本地缓存就快了。edge=soft 保细节，edge=hard 出照相馆硬边。"""
     _require_openlux()
     image_bytes = await image.read()
     await _check_not_sensitive_document(image_bytes, image.content_type or "image/png", "AI 抠图")
+    edge_mode = edge if edge in ("soft", "hard") else "soft"
     try:
-        proc = await asyncio.to_thread(_run_bg_removal_subprocess, image_bytes)
+        proc = await asyncio.to_thread(_run_bg_removal_subprocess, image_bytes, edge_mode)
     except subprocess.TimeoutExpired:
         raise HTTPException(status_code=504, detail="抠图处理超时，请重试")
     if proc.returncode != 0:
@@ -630,7 +632,8 @@ async def design_reference_to_asset(
     gen_bytes = await _extract_openai_image_bytes(gen_res.json(), "素材生成")
 
     try:
-        proc = await asyncio.to_thread(_run_bg_removal_subprocess, gen_bytes)
+        # 贴纸/文字图形是白底孤立单体，要干净的硬边，走 hard 档
+        proc = await asyncio.to_thread(_run_bg_removal_subprocess, gen_bytes, "hard")
     except subprocess.TimeoutExpired:
         raise HTTPException(status_code=504, detail="抠图处理超时，请重试")
     if proc.returncode != 0:

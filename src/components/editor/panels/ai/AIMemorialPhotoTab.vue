@@ -71,7 +71,8 @@ async function runProcess() {
   processing.value = true
   try {
     const [cutout, face] = await Promise.all([
-      removeBackground(authStore.isAuthenticated, rawImage.value),
+      // 遗像要贴纯色底，用 hard 档：硬边 + 收边 + 边缘去色，避免"发虚 / 脏描边"
+      removeBackground(authStore.isAuthenticated, rawImage.value, 'hard'),
       rawFile.value ? detectFace(rawFile.value).catch(() => null) : Promise.resolve(null),
     ])
     cutoutImage.value = cutout
