@@ -272,6 +272,37 @@ async def images_edits(
     return res.json()
 
 
+@router.post("/remove-repeated-watermark")
+async def remove_repeated_watermark(
+    image: UploadFile = File(...),
+    box: str = Form(...),  # "x,y,w,h" 相对整图 0~1
+    threshold: float = Form(0.5),
+    feather: int = Form(3),
+    _user: models.User = Depends(auth.get_current_user),
+):
+    """框选一个水印实例 → 模板匹配找出所有相同的 → 合成蒙版 → inpaint 补掉。
+    去水印属于"修改"（不是 OCR 那种纯读取），保留敏感文件检测——不让拿来抹掉证件/执照上的
+    防伪水印；检测要调 openlux，所以这个接口也要求 key 配好。实际去水印是纯本地 OpenCV。"""
+    from app import watermark_batch
+
+    _require_openlux()
+    image_bytes = await image.read()
+    await _check_not_sensitive_document(image_bytes, image.content_type or "image/png", "批量去水印")
+    try:
+        parts = [float(v) for v in box.split(",")]
+        assert len(parts) == 4
+    except Exception:
+        raise HTTPException(status_code=400, detail="框选参数格式不对")
+    try:
+        out_bytes, count = await asyncio.to_thread(
+            watermark_batch.remove_repeated, image_bytes, tuple(parts), threshold, feather
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    b64 = base64.b64encode(out_bytes).decode()
+    return {"data": [{"b64_json": b64}], "count": count}
+
+
 # 参考图→整图背景生成这条链路专用：只要求视觉模型输出"氛围/色调 + 元素类别 + 构图留白说明"
 # 这个粒度的风格描述，不要具体坐标/精确外形/可读文字——这是守住"参考图边界判断指南"里
 # 版权红线的关键机制，格式严格照抄党建展板那次人工写的 prompt 验证过管用的结构。

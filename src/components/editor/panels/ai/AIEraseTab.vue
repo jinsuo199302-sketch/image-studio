@@ -3,12 +3,14 @@ import { ref } from 'vue'
 import { UploadFilled, Delete } from '@element-plus/icons-vue'
 import { useAuthStore } from '../../../../stores/auth'
 import EraseDialog from '../../EraseDialog.vue'
+import BatchWatermarkDialog from '../../BatchWatermarkDialog.vue'
 
 const authStore = useAuthStore()
 
 const fileInput = ref<HTMLInputElement>()
 const workingImage = ref<string | null>(null)
 const eraseDialogOpen = ref(false)
+const batchDialogOpen = ref(false)
 
 function onFileChange(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
@@ -70,7 +72,8 @@ function download() {
           </button>
         </div>
 
-        <el-button class="!w-full" @click="eraseDialogOpen = true"> AI 消除 / 去水印 </el-button>
+        <el-button class="!w-full" @click="eraseDialogOpen = true"> 涂抹消除（AI，去物体/水印） </el-button>
+        <el-button class="!w-full" @click="batchDialogOpen = true"> 批量去水印（框一处去全部相同的） </el-button>
       </template>
     </div>
 
@@ -85,5 +88,6 @@ function download() {
     </div>
 
     <EraseDialog v-model="eraseDialogOpen" :image-src="workingImage ?? ''" @result="(url) => (workingImage = url)" />
+    <BatchWatermarkDialog v-model="batchDialogOpen" :image-src="workingImage ?? ''" @result="(url) => (workingImage = url)" />
   </div>
 </template>

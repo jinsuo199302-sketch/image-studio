@@ -48,3 +48,31 @@ export async function eraseObject(
   }
   return mockEraseObject(imageDataUrl)
 }
+
+/**
+ * 批量去重复水印：框选一个水印实例（box 是相对整图的 0~1 的 [x,y,w,h]），后端模板匹配
+ * 找出所有相同的一次性 inpaint 掉。纯本地 OpenCV，不花 AI 额度。
+ */
+export async function removeRepeatedWatermark(
+  authenticated: boolean,
+  imageDataUrl: string,
+  box: [number, number, number, number],
+  threshold: number,
+): Promise<{ url: string; count: number }> {
+  if (!authenticated) {
+    await delay(1000)
+    return { url: imageDataUrl, count: 0 }
+  }
+  const form = new FormData()
+  form.append('image', await dataUrlToBlob(imageDataUrl), 'image.png')
+  form.append('box', box.join(','))
+  form.append('threshold', String(threshold))
+  const data = await authPostForm<{ data: Array<{ b64_json?: string; url?: string }>; count: number }>(
+    '/remove-repeated-watermark',
+    form,
+    '去水印接口请求失败',
+  )
+  const item = data.data?.[0]
+  if (!item) throw new Error('去水印接口返回结果为空')
+  return { url: item.url ?? `data:image/png;base64,${item.b64_json}`, count: data.count ?? 0 }
+}
