@@ -1,9 +1,12 @@
-"""批量去重复水印：框选一个水印实例 → 模板匹配找出画面里所有相同的 → 合成蒙版 → inpaint 补掉。
+"""批量去重复水印：框选一个水印实例 → 模板匹配找出画面里所有相同的 → 按水印笔画形状
+合成蒙版 → cv2.inpaint 补掉。
 
-纯本地 OpenCV，不额外调 AI（合规检测那次视觉调用另算）。适合平铺/重复的文字水印
-（如 "SCJDGL" 斜向铺满整页）；对只出现一次的水印、或压在复杂图案上的效果有限。
+纯本地 OpenCV，不额外调 AI（合规检测那次视觉调用另算）。best-effort：
+- 适合颜色/形态一致的平铺文字水印
+- 水印很淡、跟背景几乎同色、或每处被不同图案盖住时，可能只去掉一部分
+  —— 剩下的用「涂抹消除」补
 
-内存：单张峰值和扫描件那条差不多（~150MB 级），无常驻模型。
+内存：单张峰值 ~150MB 级，无常驻模型。
 """
 import io
 
@@ -27,32 +30,26 @@ def _load(data: bytes) -> np.ndarray:
     return img
 
 
-def _nms(boxes: list[tuple[int, int, int, int]], iou_thr: float = 0.3) -> list[tuple[int, int, int, int]]:
-    if not boxes:
+def _merge_hits(pts: list[tuple[int, int]], tw: int, th: int) -> list[tuple[int, int]]:
+    """一个水印周围会有一小片高分像素，按距离归并成一个点。"""
+    if not pts:
         return []
-    b = np.array(boxes, dtype=np.float32)
-    x1, y1 = b[:, 0], b[:, 1]
-    x2, y2 = b[:, 0] + b[:, 2], b[:, 1] + b[:, 3]
-    area = b[:, 2] * b[:, 3]
-    order = np.argsort(-area)
+    p = np.array(pts, dtype=np.float32)
+    used = np.zeros(len(p), bool)
     keep = []
-    while order.size:
-        i = order[0]
-        keep.append(i)
-        xx1 = np.maximum(x1[i], x1[order[1:]])
-        yy1 = np.maximum(y1[i], y1[order[1:]])
-        xx2 = np.minimum(x2[i], x2[order[1:]])
-        yy2 = np.minimum(y2[i], y2[order[1:]])
-        inter = np.maximum(0, xx2 - xx1) * np.maximum(0, yy2 - yy1)
-        iou = inter / (area[i] + area[order[1:]] - inter + 1e-6)
-        order = order[1:][iou < iou_thr]
-    return [tuple(map(int, b[i])) for i in keep]
+    for i in range(len(p)):
+        if used[i]:
+            continue
+        near = (np.abs(p[:, 0] - p[i, 0]) < tw * 0.6) & (np.abs(p[:, 1] - p[i, 1]) < th * 0.6)
+        used |= near
+        keep.append(tuple(p[near].mean(axis=0).astype(int)))
+    return keep
 
 
 def remove_repeated(data: bytes, box: tuple[float, float, float, float],
                     threshold: float, feather: int) -> tuple[bytes, int]:
-    """box 是 (x, y, w, h)，均为相对整图宽高的 0~1 比例。threshold 0.3~0.95，越低匹配越宽松。
-    返回 (清理后的 PNG 字节, 匹配到的实例数)。"""
+    """box = (x, y, w, h)，均为相对整图宽高的 0~1。threshold 越低匹配越宽松。
+    返回 (清理后的 PNG 字节, 去除的实例数)。"""
     img = _load(data)
     H, W = img.shape[:2]
     bx, by, bw, bh = box
@@ -60,33 +57,40 @@ def remove_repeated(data: bytes, box: tuple[float, float, float, float],
     tw, th = max(8, int(bw * W)), max(8, int(bh * H))
     x0 = min(max(0, x0), W - tw)
     y0 = min(max(0, y0), H - th)
-    tmpl = img[y0:y0 + th, x0:x0 + tw]
-    if tmpl.size == 0:
-        raise ValueError("框选区域无效")
+    if tw < 8 or th < 8:
+        raise ValueError("框选区域太小")
 
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    gt = cv2.cvtColor(tmpl, cv2.COLOR_BGR2GRAY)
-    res = cv2.matchTemplate(gray, gt, cv2.TM_CCOEFF_NORMED)
-    thr = float(np.clip(threshold, 0.3, 0.97))
+    grayf = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    gt = grayf[y0:y0 + th, x0:x0 + tw]
+
+    # 水印笔画掩码：模板里偏离局部背景一点点的像素（水印一般半透明、低对比）
+    paper = float(np.median(grayf))
+    stroke = ((gt < paper - 4) & (gt > paper - 120)).astype(np.float32)
+    if stroke.mean() < 0.03:  # 找不到浅色笔画 => 深色/彩色 logo 水印，退回整框
+        stroke = np.ones_like(stroke)
+
+    # 高通图（去掉背景低频）+ 笔画掩码做匹配，对压在杂乱背景上的实例更稳
+    hp = grayf - cv2.GaussianBlur(grayf, (0, 0), 5)
+    hpt = hp[y0:y0 + th, x0:x0 + tw]
+    res = cv2.matchTemplate(hp, hpt, cv2.TM_CCORR_NORMED, mask=stroke)
+    res = np.nan_to_num(res, nan=0.0, posinf=0.0, neginf=0.0)
+
+    thr = float(np.clip(threshold, 0.2, 0.97))
     ys, xs = np.where(res >= thr)
-    if len(xs) == 0:
-        thr = max(0.3, float(res.max()) - 0.03)
+    if len(xs) < 2:
+        thr = max(0.2, float(res.max()) - 0.05)
         ys, xs = np.where(res >= thr)
-    boxes = _nms([(int(x), int(y), tw, th) for x, y in zip(xs, ys)])
+    hits = _merge_hits(list(zip(xs.tolist(), ys.tolist())), tw, th)
 
-    # 只抠"水印笔画"本身，不是整个矩形框——模板里比纸面暗一点、但没正文那么黑的像素，
-    # 就是水印。这样蒙版贴合水印形状，inpaint 干净，也不会误伤框内的正文/图案。
-    paper = float(np.median(gray))
-    wm = ((gt < paper - 6) & (gt > paper - 95)).astype(np.uint8) * 255
-    if wm.mean() < 10:
-        # 模板里找不到"浅灰水印笔画"（可能是深色/彩色 logo 水印），退回整框抠
-        wm = np.full_like(wm, 255)
-    wm = cv2.dilate(wm, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)))
-
+    sm = cv2.dilate((stroke * 255).astype(np.uint8),
+                    cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)))
     mask = np.zeros((H, W), np.uint8)
-    for (mx, my, mw, mh) in boxes:
-        y2, x2 = min(my + mh, H), min(mx + mw, W)
-        mask[my:y2, mx:x2] = np.maximum(mask[my:y2, mx:x2], wm[: y2 - my, : x2 - mx])
+    for (mx, my) in hits:
+        sx, sy = max(0, mx), max(0, my)
+        ex, ey = min(mx + tw, W), min(my + th, H)
+        if ex <= sx or ey <= sy:
+            continue
+        mask[sy:ey, sx:ex] = np.maximum(mask[sy:ey, sx:ex], sm[sy - my:ey - my, sx - mx:ex - mx])
 
     f = max(1, min(feather, 20))
     mask = cv2.dilate(mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (f * 2 + 1, f * 2 + 1)))
@@ -95,4 +99,4 @@ def remove_repeated(data: bytes, box: tuple[float, float, float, float],
     ok, buf = cv2.imencode(".png", out)
     if not ok:
         raise ValueError("编码失败")
-    return buf.tobytes(), len(boxes)
+    return buf.tobytes(), len(hits)

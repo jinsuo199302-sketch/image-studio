@@ -18,7 +18,7 @@ let img: HTMLImageElement | null = null
 let dw = 0
 let dh = 0
 
-const threshold = ref(0.5)
+const threshold = ref(0.45)
 const note = ref('')
 const processing = ref(false)
 const loadError = ref('')
@@ -147,7 +147,8 @@ async function submit() {
       class="mb-3"
     />
     <p class="mb-2 text-xs text-gray-500">
-      在图片上拉一个矩形，框住<b>一处</b>水印。系统会找出画面里所有相同的水印一次性去掉（适合平铺重复的文字水印）。
+      拉一个矩形框住<b>一处完整的</b>水印，找出所有相同的一次性去掉。best-effort：边缘残缺的、
+      特别淡的可能去不干净，剩下的少量再用「涂抹消除」补。灵敏度调低能多匹配、但可能误伤。
     </p>
 
     <el-alert v-if="loadError" :title="loadError" type="error" :closable="false" show-icon class="mb-3" />

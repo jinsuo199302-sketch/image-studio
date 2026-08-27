@@ -276,7 +276,7 @@ async def images_edits(
 async def remove_repeated_watermark(
     image: UploadFile = File(...),
     box: str = Form(...),  # "x,y,w,h" 相对整图 0~1
-    threshold: float = Form(0.5),
+    threshold: float = Form(0.45),
     feather: int = Form(3),
     _user: models.User = Depends(auth.get_current_user),
 ):
