@@ -237,41 +237,65 @@ function buildFromText(): HTMLCanvasElement | null {
 }
 
 function buildRoundSeal(): HTMLCanvasElement | null {
-  const outer = sealOuter.value.trim()
-  if (!outer) return null
-  const S = 640
+  const name = sealOuter.value.trim()
+  if (!name) return null
+  const S = 680
   const c = document.createElement('canvas')
   c.width = c.height = S
   const ctx = c.getContext('2d')!
   const cx = S / 2
   const cy = S / 2
-  const R = S / 2 - 14
+  const R = S / 2 - 16
   ctx.strokeStyle = INK.red
   ctx.fillStyle = INK.red
+
+  // 外环
   ctx.lineWidth = S * 0.022
   ctx.beginPath()
   ctx.arc(cx, cy, R, 0, Math.PI * 2)
   ctx.stroke()
-  // 外圈文字：沿顶部弧线从左到右排列，字头朝外
-  const chars = [...outer]
-  const n = chars.length
-  const spread = Math.min(Math.PI * 1.5, Math.max(n * 0.34, 0.6))
-  ctx.font = `bold ${S * 0.12}px "Noto Serif SC", serif`
+
+  // 顶部弧线：公司名，字头朝外，从左下绕过顶部到右下（标准公章约 240°）
+  const nameChars = [...name]
+  const nn = nameChars.length
+  const nameSpread = Math.min(nn * 0.335, Math.PI * 1.38)
+  const nameR = R * 0.8
+  let nameFont = S * 0.115
+  const arcLen = nameR * nameSpread
+  if (nn * nameFont * 1.02 > arcLen) nameFont = arcLen / (nn * 1.02)
+  ctx.font = `bold ${nameFont}px "Noto Serif SC", serif`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  chars.forEach((ch, i) => {
-    const a = -Math.PI / 2 - spread / 2 + (n > 1 ? spread * (i / (n - 1)) : 0)
+  nameChars.forEach((ch, i) => {
+    const a = -Math.PI / 2 - nameSpread / 2 + (nn > 1 ? nameSpread * (i / (nn - 1)) : 0)
     ctx.save()
-    ctx.translate(cx + Math.cos(a) * R * 0.82, cy + Math.sin(a) * R * 0.82)
+    ctx.translate(cx + Math.cos(a) * nameR, cy + Math.sin(a) * nameR)
     ctx.rotate(a + Math.PI / 2)
     ctx.fillText(ch, 0, 0)
     ctx.restore()
   })
-  if (sealStar.value) drawStar(ctx, cx, cy, S * 0.13)
-  if (sealCenter.value.trim()) {
-    ctx.font = `bold ${S * 0.095}px "Noto Serif SC", serif`
-    ctx.fillText(sealCenter.value.trim(), cx, cy + R * 0.52)
+
+  if (sealStar.value) drawStar(ctx, cx, cy, S * 0.125)
+
+  // 底部弧线：编号，字头朝内（正着读），横跨底部
+  const num = sealCenter.value.trim()
+  if (num) {
+    const numChars = [...num]
+    const mm = numChars.length
+    const numSpread = Math.min(mm * 0.12, Math.PI * 0.85)
+    const numR = R * 0.82
+    ctx.font = `${S * 0.07}px Arial, "Noto Sans SC", sans-serif`
+    // 底部弧线：i 增大时角度从 π/2+spread/2（左）递减到 π/2-spread/2（右），字沿弧线正着读
+    numChars.forEach((ch, i) => {
+      const a = Math.PI / 2 + numSpread / 2 - (mm > 1 ? numSpread * (i / (mm - 1)) : 0)
+      ctx.save()
+      ctx.translate(cx + Math.cos(a) * numR, cy + Math.sin(a) * numR)
+      ctx.rotate(a - Math.PI / 2)
+      ctx.fillText(ch, 0, 0)
+      ctx.restore()
+    })
   }
+
   if (sealDistress.value) applyDistress(ctx, S)
   return c
 }
@@ -431,12 +455,12 @@ watch(mode, () => nextTick(() => mode.value === 'draw' && redrawPad()))
       <template v-else-if="mode === 'sealRound'">
         <p class="rounded bg-amber-50 px-2 py-1 text-[11px] text-amber-700">仅本机开发可见。公章/企业印章不对外开放。</p>
         <div>
-          <label class="mb-1 block text-xs font-medium text-gray-600">外圈文字</label>
-          <el-input v-model="sealOuter" placeholder="例如：某某工作室" maxlength="20" />
+          <label class="mb-1 block text-xs font-medium text-gray-600">公司名称（顶部弧形）</label>
+          <el-input v-model="sealOuter" placeholder="XX文化传媒有限公司" maxlength="30" />
         </div>
         <div>
-          <label class="mb-1 block text-xs font-medium text-gray-600">中心横排文字（可选）</label>
-          <el-input v-model="sealCenter" placeholder="编号 / 名称" maxlength="12" />
+          <label class="mb-1 block text-xs font-medium text-gray-600">底部编号（可选，弧形）</label>
+          <el-input v-model="sealCenter" placeholder="如 6201230022810" maxlength="20" />
         </div>
         <label class="flex items-center gap-2 text-xs text-gray-600">
           <el-checkbox v-model="sealStar" /> 中心五角星
