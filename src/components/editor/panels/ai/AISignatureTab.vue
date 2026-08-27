@@ -342,7 +342,19 @@ function buildRoundSeal(): HTMLCanvasElement | null {
 
   if (sealDistress.value) {
     applyDistress(ctx, S, 0.7)
-    strokeRing() // 做旧后把外环补描一遍，避免环线出现明显白刻痕
+    strokeRing() // 做旧后把外环补描一遍，避免出现明显白刻痕
+    // 再沿环线补一点点细小缺口——真实盖章会有，但不啃出大白块
+    ctx.save()
+    ctx.globalCompositeOperation = 'destination-out'
+    const nicks = Math.round(R * 0.13)
+    for (let i = 0; i < nicks; i++) {
+      const a = Math.random() * Math.PI * 2
+      ctx.globalAlpha = 0.3 + Math.random() * 0.4
+      ctx.beginPath()
+      ctx.arc(cx + Math.cos(a) * R, cy + Math.sin(a) * R, 0.6 + Math.random() * 1.5, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.restore()
   }
   return c
 }
