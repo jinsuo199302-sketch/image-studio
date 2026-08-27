@@ -44,3 +44,8 @@ VIDU_API_KEY = os.environ.get("VIDU_API_KEY") or OPENLUX_API_KEY
 # 跟生图/文字生成是完全独立的账号体系，不共用 openlux 的 key
 BOCHA_BASE_URL = os.environ.get("BOCHA_BASE_URL", "https://api.bochaai.com/v1")
 BOCHA_API_KEY = os.environ.get("BOCHA_API_KEY", "")
+
+# 临时开发/自测开关：置 1 时跳过"上传图是不是身份证/发票等敏感文件"的合规检查
+# （_check_not_sensitive_document 直接放行）。默认关闭，只在本地或自己训练数据调试时用，
+# 生产环境不要设。开启时每次请求会往 stderr 打一行警告，方便事后发现忘了关。
+DISABLE_SENSITIVE_DOC_CHECK = os.environ.get("DISABLE_SENSITIVE_DOC_CHECK", "").strip().lower() in ("1", "true", "yes", "on")

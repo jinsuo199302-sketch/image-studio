@@ -17,7 +17,14 @@ from sqlalchemy.orm import Session
 
 from app import auth, crud, models
 from app import content_research
-from app.config import BASE_DIR, OPENLUX_API_KEY, OPENLUX_BASE_URL, VIDU_API_KEY, VIDU_BASE_URL
+from app.config import (
+    BASE_DIR,
+    DISABLE_SENSITIVE_DOC_CHECK,
+    OPENLUX_API_KEY,
+    OPENLUX_BASE_URL,
+    VIDU_API_KEY,
+    VIDU_BASE_URL,
+)
 from app.database import get_db
 from app.design_tokens import COMPONENT_SIZE
 from app.text_metrics import chars_per_line, estimate_text_height, estimate_text_lines
@@ -174,7 +181,12 @@ async def _check_not_sensitive_document(image_bytes: bytes, media_type: str, fea
     """凡是接受用户上传图片的功能都要过这一层——先判断上传图是不是身份证/证件/公文，或者
     发票/报销单/银行流水这类财务票据，防止被用来篡改/伪造这些材料。所有工具统一走这一个
     分类器，不是只有 AI 消除才防，跟 _moderate_text 一样：分类调用本身失败就拒绝这次请求，
-    不静默放行。feature_label 只用来给拒绝提示换个功能名字，检测逻辑完全一样。"""
+    不静默放行。feature_label 只用来给拒绝提示换个功能名字，检测逻辑完全一样。
+
+    DISABLE_SENSITIVE_DOC_CHECK=1 时整个跳过（本地/自测用，见 config.py 注释）。"""
+    if DISABLE_SENSITIVE_DOC_CHECK:
+        print(f"[WARN] 敏感文件检查已被 DISABLE_SENSITIVE_DOC_CHECK 关闭，放行 {feature_label} 请求", file=sys.stderr, flush=True)
+        return
     b64 = base64.b64encode(image_bytes).decode()
     try:
         res = await _post_openlux(
