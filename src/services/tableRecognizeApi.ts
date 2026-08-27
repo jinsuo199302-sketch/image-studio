@@ -9,10 +9,20 @@ async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
  * 表格照片 → xlsx。走 /api/ai/table-to-xlsx：后端让视觉模型把表格读成 JSON 二维数组，
  * openpyxl 生成 Excel 返回。跟「提字」同一条链路，一次 API 调用。
  */
-export async function imageToXlsx(authenticated: boolean, imageDataUrl: string): Promise<Blob> {
+export type Paper = 'A4' | 'A3'
+export type Orient = 'auto' | 'portrait' | 'landscape'
+
+export async function imageToXlsx(
+  authenticated: boolean,
+  imageDataUrl: string,
+  paper: Paper = 'A4',
+  orientation: Orient = 'auto',
+): Promise<Blob> {
   if (!authenticated) throw new Error('请先登录后再使用')
   const form = new FormData()
   form.append('image', await dataUrlToBlob(imageDataUrl), 'table.png')
+  form.append('paper', paper)
+  form.append('orientation', orientation)
   const res = await fetch('/api/ai/table-to-xlsx', {
     method: 'POST',
     headers: { Authorization: `Bearer ${authToken()}` },

@@ -3,12 +3,14 @@ import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { UploadFilled, Delete } from '@element-plus/icons-vue'
 import { useAuthStore } from '../../../../stores/auth'
-import { imageToXlsx } from '../../../../services/tableRecognizeApi'
+import { imageToXlsx, type Orient, type Paper } from '../../../../services/tableRecognizeApi'
 
 const authStore = useAuthStore()
 const fileInput = ref<HTMLInputElement>()
 const workingImage = ref<string | null>(null)
 const processing = ref(false)
+const paper = ref<Paper>('A4')
+const orientation = ref<Orient>('auto')
 
 function onFileChange(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
@@ -23,7 +25,7 @@ async function convert() {
   if (!workingImage.value) return
   processing.value = true
   try {
-    const blob = await imageToXlsx(authStore.isAuthenticated, workingImage.value)
+    const blob = await imageToXlsx(authStore.isAuthenticated, workingImage.value, paper.value, orientation.value)
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -49,7 +51,7 @@ async function convert() {
         show-icon
       />
       <p class="mt-2 text-[11px] text-gray-400">
-        拍/传表格照片转成 Excel。适合报销单、记账本、清单等；拍歪、无框线也能识别，复杂合并单元格可能需要手动微调。
+        拍/传表格照片转成 Excel，带线框、还原合并单元格。适合报销单、验收单、记账本等；复杂表格可能需手动微调。
       </p>
     </div>
 
@@ -67,13 +69,43 @@ async function convert() {
 
       <template v-else>
         <div class="relative overflow-hidden rounded-lg border border-gray-200">
-          <img :src="workingImage" class="max-h-64 w-full object-contain" />
+          <img :src="workingImage" class="max-h-56 w-full object-contain" />
           <button
             class="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-white/90 text-gray-600 hover:bg-white"
             @click="workingImage = null"
           >
             <el-icon :size="13"><Delete /></el-icon>
           </button>
+        </div>
+
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-600">纸张</label>
+          <div class="flex gap-1.5">
+            <button
+              v-for="p in ['A4', 'A3'] as const"
+              :key="p"
+              class="rounded-full border px-2.5 py-0.5 text-[11px] transition"
+              :class="paper === p ? 'border-violet-500 bg-violet-50 text-violet-600' : 'border-gray-200 text-gray-500'"
+              @click="paper = p"
+            >
+              {{ p }}
+            </button>
+          </div>
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-600">方向</label>
+          <div class="flex gap-1.5">
+            <button
+              v-for="o in [['auto', '自动'], ['portrait', '纵向'], ['landscape', '横向']] as const"
+              :key="o[0]"
+              class="rounded-full border px-2.5 py-0.5 text-[11px] transition"
+              :class="orientation === o[0] ? 'border-violet-500 bg-violet-50 text-violet-600' : 'border-gray-200 text-gray-500'"
+              @click="orientation = o[0]"
+            >
+              {{ o[1] }}
+            </button>
+          </div>
+          <p class="mt-1 text-[11px] text-gray-400">Excel 里已设"打印时缩放到 1 页宽"，打印/预览即按所选纸张比例</p>
         </div>
       </template>
     </div>

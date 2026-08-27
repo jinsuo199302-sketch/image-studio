@@ -275,6 +275,8 @@ async def images_edits(
 @router.post("/table-to-xlsx")
 async def table_to_xlsx(
     image: UploadFile = File(...),
+    paper: str = Form("A4"),
+    orientation: str = Form("auto"),
     _user: models.User = Depends(auth.get_current_user),
 ):
     """表格照片 → Excel。让视觉模型把表格读成 JSON 二维数组，openpyxl 生成 xlsx。
@@ -308,8 +310,12 @@ async def table_to_xlsx(
         raise HTTPException(status_code=502, detail=f"表格识别失败：{res.status_code} {res.text[:300]}")
     content = res.json().get("choices", [{}])[0].get("message", {}).get("content", "")
     try:
-        grid = table_extract.parse_grid(content)
-        xlsx_bytes = table_extract.build_xlsx(grid)
+        spec = table_extract.parse_spec(content)
+        xlsx_bytes = table_extract.build_xlsx(
+            spec,
+            paper=paper if paper in ("A4", "A3") else "A4",
+            orientation=orientation if orientation in ("auto", "portrait", "landscape") else "auto",
+        )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     return StreamingResponse(
