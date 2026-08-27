@@ -16,13 +16,15 @@ interface SizePreset {
   mmW: number
   mmH: number
 }
-/** 常见的遗像/框装照片尺寸，5/6/7 寸偏家用摆放，8/10 寸多用于灵堂或公墓展示 */
+/** 常见的遗像/框装照片尺寸，5/6/7 寸偏家用摆放，8/10 寸多用于灵堂或公墓展示，
+ * A4 是打印机直接出图的常用规格 */
 const SIZE_PRESETS: SizePreset[] = [
   { key: '5inch', label: '5寸 (89×127mm)', mmW: 89, mmH: 127 },
   { key: '6inch', label: '6寸 (102×152mm)', mmW: 102, mmH: 152 },
   { key: '7inch', label: '7寸 (127×178mm)', mmW: 127, mmH: 178 },
   { key: '8inch', label: '8寸 (152×203mm)', mmW: 152, mmH: 203 },
   { key: '10inch', label: '10寸 (203×254mm)', mmW: 203, mmH: 254 },
+  { key: 'a4', label: 'A4 (210×297mm)', mmW: 210, mmH: 297 },
 ]
 const sizePreset = ref(SIZE_PRESETS[1])
 
