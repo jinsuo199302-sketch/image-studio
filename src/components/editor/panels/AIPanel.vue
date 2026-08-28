@@ -11,6 +11,7 @@ import AITextReplaceTab from './ai/AITextReplaceTab.vue'
 import AIOcrTab from './ai/AIOcrTab.vue'
 import AIIdPhotoTab from './ai/AIIdPhotoTab.vue'
 import AIMemorialPhotoTab from './ai/AIMemorialPhotoTab.vue'
+import AIColorizeTab from './ai/AIColorizeTab.vue'
 import AIScreenshotStitchTab from './ai/AIScreenshotStitchTab.vue'
 import AIAvatarFrameTab from './ai/AIAvatarFrameTab.vue'
 import AISignatureTab from './ai/AISignatureTab.vue'
@@ -30,6 +31,7 @@ type TabKey =
   | 'ocr'
   | 'idphoto'
   | 'memorial'
+  | 'colorize'
   | 'stitch'
   | 'avatarframe'
   | 'signature'
@@ -74,6 +76,7 @@ function useSignatureInPdf(dataUrl: string) {
           { key: 'ocr', label: '提字' },
           { key: 'idphoto', label: '证件照' },
           { key: 'memorial', label: '黑白遗像' },
+          { key: 'colorize', label: '老照片上色' },
           { key: 'stitch', label: '长截图' },
           { key: 'avatarframe', label: '头像框' },
           { key: 'signature', label: '签名' },
@@ -111,6 +114,7 @@ function useSignatureInPdf(dataUrl: string) {
       <AIOcrTab v-else-if="activeTab === 'ocr'" />
       <AIIdPhotoTab v-else-if="activeTab === 'idphoto'" />
       <AIMemorialPhotoTab v-else-if="activeTab === 'memorial'" />
+      <AIColorizeTab v-else-if="activeTab === 'colorize'" @insert-image="(url) => emit('insert-image', url)" />
       <AIScreenshotStitchTab v-else-if="activeTab === 'stitch'" />
       <AIAvatarFrameTab v-else-if="activeTab === 'avatarframe'" />
       <AISignatureTab

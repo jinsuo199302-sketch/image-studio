@@ -536,6 +536,41 @@ async def background_removal(
     return {"data": [{"b64_json": b64}]}
 
 
+def _run_colorize_subprocess(image_bytes: bytes, saturation: float) -> subprocess.CompletedProcess:
+    """同 _run_bg_removal_subprocess：同步 subprocess.run + asyncio.to_thread 包一层，
+    绕开 asyncio 子进程在 Windows selector loop 上的坑，本地/生产同一条代码路径。"""
+    return subprocess.run(
+        [sys.executable, "-m", "app.colorize_worker", str(saturation)],
+        input=image_bytes,
+        capture_output=True,
+        timeout=170,
+    )
+
+
+@router.post("/colorize")
+async def colorize_photo(
+    image: UploadFile = File(...),
+    saturation: float = Form(1.0),
+    _user: models.User = Depends(auth.get_current_user),
+):
+    """老照片上色（黑白 -> 彩色）。跟"黑白遗像"是相反方向的两件事——遗像是彩色转黑白 + 适配
+    相框尺寸，这个是黑白转彩色。纯本地推理（Zhang ECCV16 的 Caffe 上色模型，走 cv2.dnn），
+    不调用 openlux，也不接敏感文件检测——上色是"修复/还原"不是"篡改"，跟扫描件/提字一个
+    定性（你没法靠给黑白照片上色去伪造证件，证件本来就是彩色的）。放独立子进程跑，模型加载
+    占约 500MB~1GB，处理完立刻释放。首次调用现场下载模型（~129MB），会明显慢一次。
+    saturation：>1 提饱和（模型输出偏保守时用），范围 0.5~2.0。"""
+    image_bytes = await image.read()
+    sat = min(2.0, max(0.5, saturation))
+    try:
+        proc = await asyncio.to_thread(_run_colorize_subprocess, image_bytes, sat)
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="上色处理超时，请重试")
+    if proc.returncode != 0:
+        raise HTTPException(status_code=502, detail=f"上色处理失败：{proc.stderr.decode(errors='ignore')[:500]}")
+    b64 = base64.b64encode(proc.stdout).decode()
+    return {"data": [{"b64_json": b64, "mime": "image/jpeg"}]}
+
+
 _FACE_CASCADE = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 
 

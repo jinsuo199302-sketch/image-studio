@@ -18,6 +18,7 @@ const VALID_TABS = [
   'ocr',
   'idphoto',
   'memorial',
+  'colorize',
   'stitch',
   'avatarframe',
   'signature',

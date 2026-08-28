@@ -30,6 +30,7 @@ const TOOL_TABS = [
   { key: 'ai-ocr', label: 'AI 提字', desc: '截图/名片一键提取文字', enabled: true, route: '/ai-tools?tab=ocr' },
   { key: 'ai-idphoto', label: '证件照制作', desc: '自动换底色，多种尺寸', enabled: true, route: '/ai-tools?tab=idphoto' },
   { key: 'ai-memorial', label: '黑白遗像', desc: '常见相纸/相框尺寸', enabled: true, route: '/ai-tools?tab=memorial' },
+  { key: 'ai-colorize', label: '老照片上色', desc: '黑白照片一键转彩色', enabled: true, route: '/ai-tools?tab=colorize' },
   { key: 'ai-stitch', label: '长截图拼接', desc: '多张截图自动拼成一张', enabled: true, route: '/ai-tools?tab=stitch' },
   { key: 'ai-avatarframe', label: '节日头像框', desc: '套边框，一键出片', enabled: true, route: '/ai-tools?tab=avatarframe' },
   { key: 'ai-signature', label: '手写签名', desc: '生成透明签名图，插入文档', enabled: true, route: '/ai-tools?tab=signature' },
