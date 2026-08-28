@@ -561,10 +561,11 @@ async def colorize_photo(
     _user: models.User = Depends(auth.get_current_user),
 ):
     """老照片上色（黑白 -> 彩色）。跟"黑白遗像"是相反方向的两件事——遗像是彩色转黑白 + 适配
-    相框尺寸，这个是黑白转彩色。纯本地推理（DDColor int8 量化 ONNX，走 onnxruntime CPU），
-    不调用 openlux，也不接敏感文件检测——上色是"修复/还原"不是"篡改"，跟扫描件/提字一个
-    定性（你没法靠给黑白照片上色去伪造证件，证件本来就是彩色的）。放独立子进程跑，模型加载
-    占约 300~500MB，处理完立刻释放。首次调用现场下载模型（~62MB），会明显慢一次。
+    相框尺寸，这个是黑白转彩色。纯本地推理（DDColor large int8 量化 ONNX，走 onnxruntime
+    CPU），不调用 openlux，也不接敏感文件检测——上色是"修复/还原"不是"篡改"，跟扫描件/
+    提字一个定性（你没法靠给黑白照片上色去伪造证件，证件本来就是彩色的）。放独立子进程跑，
+    推理峰值约 600MB，处理完立刻释放。首次调用现场下载模型（~235MB），会明显慢一次。
+    worker 会先做一遍轻度对比修复（翻拍老照片普遍偏灰，不修的话上色效果很淡）。
     saturation：>1 提饱和（模型输出偏保守时用），范围 0.5~2.0。"""
     image_bytes = await image.read()
     sat = min(2.0, max(0.5, saturation))

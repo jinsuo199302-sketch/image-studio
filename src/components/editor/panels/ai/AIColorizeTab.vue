@@ -14,7 +14,7 @@ const fileInput = ref<HTMLInputElement>()
 const originalImage = ref<string | null>(null)
 const colorizedImage = ref<string | null>(null)
 const processing = ref(false)
-const saturation = ref(1.1)
+const saturation = ref(1.25)
 // 对比滑块：0 = 全是原始黑白，100 = 全是上色结果
 const wipe = ref(60)
 
@@ -73,7 +73,7 @@ function download() {
         show-icon
       />
       <p class="mt-2 text-[11px] text-gray-400">
-        黑白老照片转彩色。只上色、不改动人脸和细节。跟"黑白遗像"是相反的两件事。
+        黑白/褪色老照片转彩色，自动修一下对比。翻拍的照片也能处理。跟"黑白遗像"是相反的两件事。
       </p>
     </div>
 
@@ -120,7 +120,7 @@ function download() {
             鲜艳度 <span class="text-gray-400">{{ saturation.toFixed(1) }}</span>
           </label>
           <el-slider v-model="saturation" :min="0.5" :max="2" :step="0.1" :show-tooltip="false" />
-          <p class="mt-1 text-[11px] text-gray-400">上色偏灰旧就往右调，调完点"重新上色"</p>
+          <p class="mt-1 text-[11px] text-gray-400">颜色偏淡就往右调，调完点"重新上色"</p>
         </div>
 
         <el-button

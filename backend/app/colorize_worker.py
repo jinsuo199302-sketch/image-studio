@@ -1,23 +1,29 @@
-"""独立子进程跑老照片上色（黑白 -> 彩色），跟主 FastAPI 进程隔离——上色模型加载后进程占
-约 300~500MB RSS，跟抠图一样不常驻在长期运行的 uvicorn worker 里。每次调用起新进程，
-处理完立刻退出，内存马上还给系统。stdin 读原图字节，stdout 写上色后的 JPEG 字节。
+"""独立子进程跑老照片修复上色（黑白/褪色 -> 彩色），跟主 FastAPI 进程隔离——上色模型加载
+后进程占约 300MB、推理峰值 ~750MB RSS，不常驻在长期运行的 uvicorn worker 里。每次调用起
+新进程，处理完立刻退出，内存马上还给系统。stdin 读原图字节，stdout 写 JPEG 字节。
 
 argv[1] 是饱和度系数（默认 "1.0"，范围 0.5~2.0）——>1 提饱和，1.0 是模型原始输出。
 
-模型：DDColor（Alibaba，ECCV/CVPR 系工作，当前开源上色里对人像最稳的之一）的 int8
-量化 ONNX。
+模型：DDColor（Alibaba）large 模型的 int8 量化 ONNX。
   - 依赖 opencv-python-headless + numpy + onnxruntime，**全是项目已装的，零新增依赖**；
-  - 固定 256×256 输入，**只输出 ab 两个色度通道**，亮度 L 用原图原分辨率——脸部/细节
-    结构一个像素不动；
-  - int8 量化，CPU 推理 ~0.7s，模型才 62MB，内存占用比抠图的 isnet 小得多；
-  - 换 DDColor 之前先用过 Zhang ECCV16（发黄发闷）和 DeOldify（白发/阴影处爱泛紫），
-    用户两次反馈"上色感觉不太好"。真实老照片（"Migrant Mother"）+ 人像转黑白回测，
-    DDColor 明显更干净：不泛紫、不脑补怪色（DeOldify 会把白色雏菊上成红色，DDColor
-    正确上成黄色），整体偏克制但对褪色老照片正合适。
+  - 固定 256×256 输入，**只输出 ab 两个色度通道**；
+  - int8 量化，CPU 推理 ~1.2s，模型 235MB。
 
-模型文件 ddcolor-int8.onnx（62MB）首次调用现场下载并缓存到 ~/.cache/image-studio-colorize/
-（或 COLORIZE_MODEL_DIR 指定的目录），之后走本地缓存。跟抠图 isnet 首次下模型一个套路，
-建议部署后手动预热一次别让线上第一个真实用户干等。
+**换过三轮模型 + 一个关键修复（都是用户反馈驱动）**：
+  1. Zhang ECCV16（cv2.dnn）——真实人像发黄发闷；
+  2. DeOldify ONNX——白发/阴影处泛紫，还会脑补怪色（白雏菊上成红）；
+  3. DDColor **small** int8——干净不泛紫，但**对"翻拍的老照片"这种低对比+带底色的输入
+     会直接塌成灰度输出**（chroma≈0），用户"这个上色不了"就是踩了这个；
+  4. DDColor **large** int8（当前）——对退化输入稳得多，配合下面的修复预处理才够看。
+
+**修复预处理**：翻拍的老照片普遍偏黄/发灰/对比压缩，直接喂模型上色效果很淡。先转纯灰度
+（去掉泛黄/偏色）+ 轻度 CLAHE + 1~99 百分位拉伸，把这张"修复过对比"的灰度图既喂给模型
+（让它看清楚、给出更饱满的颜色），也当作输出的亮度通道（老照片本来就需要顺带修一下）。
+CLAHE 力度压得比较轻（clipLimit 1.5），避免人脸被拉出脏噪点。
+
+模型文件 ddcolor-large-int8.onnx（235MB）首次调用现场下载并缓存到
+~/.cache/image-studio-colorize/（或 COLORIZE_MODEL_DIR 指定的目录），带 sha256 校验，
+之后走本地缓存。跟抠图 isnet 首次下模型一个套路，建议部署后手动预热一次。
 """
 import hashlib
 import io
@@ -34,17 +40,16 @@ from PIL import Image, ImageOps
 ort.set_default_logger_severity(3)
 
 _MODEL_DIR = Path(os.environ.get("COLORIZE_MODEL_DIR") or (Path.home() / ".cache" / "image-studio-colorize"))
-_MODEL = _MODEL_DIR / "ddcolor-int8.onnx"
-_MODEL_SHA256 = "8c9a8acd16dadc2ca3d6134717b6ca838540712b3a4624fd0f7eb9aab3e3a654"
-_MODEL_SIZE = 61926813
+_MODEL = _MODEL_DIR / "ddcolor-large-int8.onnx"
+_MODEL_SHA256 = "733233ca8926439e9d8ef9dbc5b5d82733f67c6e2dc2209047aae3a617810c20"
+_MODEL_SIZE = 235337627
 _MODEL_URLS = [
-    "https://huggingface.co/Faridzar/ddcolor-mirror/resolve/main/ddcolor-int8.onnx?download=true",
+    "https://huggingface.co/Faridzar/ddcolor-mirror/resolve/main/ddcolor-large-int8.onnx?download=true",
 ]
 
 _INPUT = 256  # 模型固定输入边长
 
 # 内存安全阀：亮度按原分辨率保留，超大图上 float32 的 LAB 数组能把小机器逼到 OOM。
-# 长边超过 2000 再多的像素对上色收益很小（色度本来就是 256 出的再放大），先等比缩。
 _MAX_SIDE = 2000
 
 
@@ -75,12 +80,22 @@ def _ensure_model() -> Path:
     raise RuntimeError(f"上色模型下载失败：{last_err}")
 
 
+def _restore_gray(bgr_u8: np.ndarray) -> np.ndarray:
+    """翻拍老照片修复：转纯灰度（去掉泛黄/偏色）+ 轻度 CLAHE + 百分位拉伸。"""
+    g = cv2.cvtColor(bgr_u8, cv2.COLOR_BGR2GRAY)
+    g = cv2.createCLAHE(clipLimit=1.5, tileGridSize=(8, 8)).apply(g)
+    lo, hi = np.percentile(g, [1, 99])
+    if hi > lo:
+        g = np.clip((g.astype(np.float32) - lo) * 255.0 / (hi - lo), 0, 255).astype(np.uint8)
+    return g
+
+
 def _colorize(sess: ort.InferenceSession, bgr_u8: np.ndarray, saturation: float) -> np.ndarray:
     h, w = bgr_u8.shape[:2]
-    img = bgr_u8.astype(np.float32) / 255.0
-    orig_l = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)[:, :, :1]  # 原图亮度，原分辨率，一个像素不动
+    gray = _restore_gray(bgr_u8)  # 修复过对比的灰度：既喂模型，也当输出亮度
 
-    small = cv2.resize(img, (_INPUT, _INPUT))
+    gray01 = gray.astype(np.float32) / 255.0
+    small = cv2.resize(cv2.cvtColor(gray01, cv2.COLOR_GRAY2BGR), (_INPUT, _INPUT))
     small_l = cv2.cvtColor(small, cv2.COLOR_BGR2LAB)[:, :, :1]
     gray_lab = np.concatenate([small_l, np.zeros_like(small_l), np.zeros_like(small_l)], axis=-1)
     gray_rgb = cv2.cvtColor(gray_lab, cv2.COLOR_LAB2RGB)
@@ -88,11 +103,10 @@ def _colorize(sess: ort.InferenceSession, bgr_u8: np.ndarray, saturation: float)
 
     ab = sess.run(None, {sess.get_inputs()[0].name: x})[0][0].transpose(1, 2, 0)  # 256×256×2
     ab = cv2.resize(ab, (w, h))
-
     if abs(saturation - 1.0) > 1e-3:
         ab = np.clip(ab * saturation, -127.0, 127.0)
 
-    out_lab = np.concatenate([orig_l, ab], axis=-1)
+    out_lab = np.concatenate([gray01[:, :, None] * 100.0, ab], axis=-1).astype(np.float32)
     out_bgr = np.clip(cv2.cvtColor(out_lab, cv2.COLOR_LAB2BGR), 0.0, 1.0)
     return (out_bgr * 255.0).round().astype(np.uint8)
 
