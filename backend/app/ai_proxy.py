@@ -496,6 +496,12 @@ def delete_generated_asset(
     return {"deleted": True}
 
 
+# 抠图 / 上色这类要现场加载几百 MB~1GB 模型的本地子进程，全局一次只放一个进去跑——
+# 这台机器只有 2GB（实测空载可用 ~1.4GB），两个大模型进程同时加载会把内存打爆。
+# 并发请求排队等前一个跑完（每个也就几秒），对当前访问量完全无感。
+_HEAVY_MODEL_SEM = asyncio.Semaphore(1)
+
+
 def _run_bg_removal_subprocess(image_bytes: bytes, edge: str = "soft") -> subprocess.CompletedProcess:
     """用同步 subprocess.run（不是 asyncio.create_subprocess_exec）——后者在 Windows 上
     uvicorn --reload 强制用的 SelectorEventLoop 下会直接抛 NotImplementedError（Windows
@@ -526,10 +532,11 @@ async def background_removal(
     image_bytes = await image.read()
     await _check_not_sensitive_document(image_bytes, image.content_type or "image/png", "AI 抠图")
     edge_mode = edge if edge in ("soft", "hard") else "soft"
-    try:
-        proc = await asyncio.to_thread(_run_bg_removal_subprocess, image_bytes, edge_mode)
-    except subprocess.TimeoutExpired:
-        raise HTTPException(status_code=504, detail="抠图处理超时，请重试")
+    async with _HEAVY_MODEL_SEM:
+        try:
+            proc = await asyncio.to_thread(_run_bg_removal_subprocess, image_bytes, edge_mode)
+        except subprocess.TimeoutExpired:
+            raise HTTPException(status_code=504, detail="抠图处理超时，请重试")
     if proc.returncode != 0:
         raise HTTPException(status_code=502, detail=f"抠图处理失败：{proc.stderr.decode(errors='ignore')[:500]}")
     b64 = base64.b64encode(proc.stdout).decode()
@@ -561,10 +568,11 @@ async def colorize_photo(
     saturation：>1 提饱和（模型输出偏保守时用），范围 0.5~2.0。"""
     image_bytes = await image.read()
     sat = min(2.0, max(0.5, saturation))
-    try:
-        proc = await asyncio.to_thread(_run_colorize_subprocess, image_bytes, sat)
-    except subprocess.TimeoutExpired:
-        raise HTTPException(status_code=504, detail="上色处理超时，请重试")
+    async with _HEAVY_MODEL_SEM:
+        try:
+            proc = await asyncio.to_thread(_run_colorize_subprocess, image_bytes, sat)
+        except subprocess.TimeoutExpired:
+            raise HTTPException(status_code=504, detail="上色处理超时，请重试")
     if proc.returncode != 0:
         raise HTTPException(status_code=502, detail=f"上色处理失败：{proc.stderr.decode(errors='ignore')[:500]}")
     b64 = base64.b64encode(proc.stdout).decode()
@@ -772,11 +780,12 @@ async def design_reference_to_asset(
         raise HTTPException(status_code=502, detail=f"素材生成失败：{gen_res.status_code} {gen_res.text}")
     gen_bytes = await _extract_openai_image_bytes(gen_res.json(), "素材生成")
 
-    try:
-        # 贴纸/文字图形是白底孤立单体，要干净的硬边，走 hard 档
-        proc = await asyncio.to_thread(_run_bg_removal_subprocess, gen_bytes, "hard")
-    except subprocess.TimeoutExpired:
-        raise HTTPException(status_code=504, detail="抠图处理超时，请重试")
+    async with _HEAVY_MODEL_SEM:
+        try:
+            # 贴纸/文字图形是白底孤立单体，要干净的硬边，走 hard 档
+            proc = await asyncio.to_thread(_run_bg_removal_subprocess, gen_bytes, "hard")
+        except subprocess.TimeoutExpired:
+            raise HTTPException(status_code=504, detail="抠图处理超时，请重试")
     if proc.returncode != 0:
         raise HTTPException(status_code=502, detail=f"抠图处理失败：{proc.stderr.decode(errors='ignore')[:500]}")
 
