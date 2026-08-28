@@ -169,6 +169,28 @@ async def watermark_pdf(
     )
 
 
+@router.post("/heic-to-jpg")
+async def heic_to_jpg(image: UploadFile = File(...)):
+    """HEIC/HEIF → JPEG。苹果默认拍照格式，浏览器 canvas 解不了，只能后端转。
+    纯格式转换，无 AI、无 openlux 依赖。转完前端再按需压缩/换格式。"""
+    from pillow_heif import register_heif_opener
+
+    register_heif_opener()
+    from PIL import Image as PILImg
+
+    data = await image.read()
+    try:
+        im = PILImg.open(io.BytesIO(data))
+        im = im.convert("RGB")
+    except Exception:
+        raise HTTPException(status_code=400, detail="无法解析 HEIC 文件")
+    buf = io.BytesIO()
+    im.save(buf, "JPEG", quality=95)
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="image/jpeg",
+                             headers={"Content-Disposition": "attachment; filename=converted.jpg"})
+
+
 @router.post("/scan")
 async def scan_to_pdf(
     files: List[UploadFile] = File(...),

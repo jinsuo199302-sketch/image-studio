@@ -35,6 +35,7 @@ const TOOL_TABS = [
   { key: 'ai-signature', label: '手写签名', desc: '生成透明签名图，插入文档', enabled: true, route: '/ai-tools?tab=signature' },
   { key: 'ai-scan', label: '照片转扫描件', desc: '文档照片转清晰 PDF', enabled: true, route: '/ai-tools?tab=scan' },
   { key: 'ai-table', label: '表格转 Excel', desc: '拍表格照片转可编辑表格', enabled: true, route: '/ai-tools?tab=table' },
+  { key: 'ai-compress', label: '图片压缩转换', desc: 'JPG/PNG/WebP互转、批量压缩、HEIC转JPG', enabled: true, route: '/ai-tools?tab=compress' },
   { key: 'collage', label: '图片拼贴', desc: '多图合成一张', enabled: false },
   { key: 'vectorize', label: '位图转矢量', desc: '照片转矢量图', enabled: false },
 ]

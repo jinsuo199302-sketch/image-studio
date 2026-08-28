@@ -16,6 +16,7 @@ import AIAvatarFrameTab from './ai/AIAvatarFrameTab.vue'
 import AISignatureTab from './ai/AISignatureTab.vue'
 import AIScanTab from './ai/AIScanTab.vue'
 import AITableTab from './ai/AITableTab.vue'
+import AICompressTab from './ai/AICompressTab.vue'
 
 type TabKey =
   | 'image'
@@ -34,6 +35,7 @@ type TabKey =
   | 'signature'
   | 'scan'
   | 'table'
+  | 'compress'
 
 const props = defineProps<{ selectedText: string | null; initialTab?: TabKey }>()
 const emit = defineEmits<{
@@ -77,6 +79,7 @@ function useSignatureInPdf(dataUrl: string) {
           { key: 'signature', label: '签名' },
           { key: 'scan', label: '扫描件' },
           { key: 'table', label: '表格识别' },
+          { key: 'compress', label: '压缩转换' },
         ]"
         :key="tab.key"
         class="flex-1 shrink-0 rounded-t-md px-1 py-2 text-xs transition"
@@ -116,7 +119,8 @@ function useSignatureInPdf(dataUrl: string) {
         @use-in-pdf="useSignatureInPdf"
       />
       <AIScanTab v-else-if="activeTab === 'scan'" />
-      <AITableTab v-else />
+      <AITableTab v-else-if="activeTab === 'table'" />
+      <AICompressTab v-else />
     </div>
   </div>
 </template>

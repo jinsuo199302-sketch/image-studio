@@ -23,6 +23,7 @@ const VALID_TABS = [
   'signature',
   'scan',
   'table',
+  'compress',
 ] as const
 const initialTab = computed(() => {
   const tab = route.query.tab
