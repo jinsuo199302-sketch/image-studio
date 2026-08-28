@@ -81,10 +81,13 @@ def _ensure_model() -> Path:
 
 
 def _restore_gray(bgr_u8: np.ndarray) -> np.ndarray:
-    """翻拍老照片修复：转纯灰度（去掉泛黄/偏色）+ 轻度 CLAHE + 百分位拉伸。"""
+    """翻拍老照片修复：转纯灰度（去掉泛黄/偏色）+ 轻度 CLAHE + 百分位拉伸。
+    拉伸的百分位只在非纯白/纯黑像素上算——抠图结果那种大片白底会把百分位带偏，
+    导致真正的主体被压成一小段灰阶。"""
     g = cv2.cvtColor(bgr_u8, cv2.COLOR_BGR2GRAY)
     g = cv2.createCLAHE(clipLimit=1.5, tileGridSize=(8, 8)).apply(g)
-    lo, hi = np.percentile(g, [1, 99])
+    mid = g[(g > 8) & (g < 247)]
+    lo, hi = np.percentile(mid if mid.size else g, [1, 99])
     if hi > lo:
         g = np.clip((g.astype(np.float32) - lo) * 255.0 / (hi - lo), 0, 255).astype(np.uint8)
     return g
@@ -102,7 +105,12 @@ def _colorize(sess: ort.InferenceSession, bgr_u8: np.ndarray, saturation: float)
     x = gray_rgb.transpose(2, 0, 1)[None].astype(np.float32)
 
     ab = sess.run(None, {sess.get_inputs()[0].name: x})[0][0].transpose(1, 2, 0)  # 256×256×2
-    ab = cv2.resize(ab, (w, h))
+    ab = cv2.resize(ab, (w, h)).astype(np.float32)
+
+    # 近白区域（抠图白底、吹爆的高光）把色度收掉——模型爱给大片平坦白区上一层脏色。
+    L = gray01 * 100.0
+    ab *= np.where(L > 92.0, np.clip((100.0 - L) / 8.0, 0.0, 1.0), 1.0)[:, :, None]
+
     if abs(saturation - 1.0) > 1e-3:
         ab = np.clip(ab * saturation, -127.0, 127.0)
 
