@@ -16,6 +16,12 @@ from app import doc_scan
 
 router = APIRouter(prefix="/api/pdf", tags=["pdf"])
 
+# HEIC 解码是这个文件里唯一吃内存的活（12MP 解出来 ~36MB + libheif 缓冲），
+# 2 核 2GB 的机器上最多同时跑 2 个，多的排队——HEIC 转换本身很快，队列很快消化。
+_HEIC_SEM = asyncio.Semaphore(2)
+_HEIC_MAX_BYTES = 30 * 1024 * 1024
+_HEIC_MAX_SIDE = 4096
+
 # reportlab 内置的 Helvetica 等 14 种基础字体不含中文字形——实测直接拿 Helvetica 画中文水印，
 # 每个汉字被拆成好几个乱码符号（不是异常，是静默画错）。STSong-Light 是 reportlab 自带的
 # Adobe CID 字体，不用额外装字体文件，注册一次全局生效。
@@ -169,25 +175,37 @@ async def watermark_pdf(
     )
 
 
-@router.post("/heic-to-jpg")
-async def heic_to_jpg(image: UploadFile = File(...)):
-    """HEIC/HEIF → JPEG。苹果默认拍照格式，浏览器 canvas 解不了，只能后端转。
-    纯格式转换，无 AI、无 openlux 依赖。转完前端再按需压缩/换格式。"""
+def _heic_decode(data: bytes) -> bytes:
     from pillow_heif import register_heif_opener
 
     register_heif_opener()
     from PIL import Image as PILImg
 
-    data = await image.read()
     try:
-        im = PILImg.open(io.BytesIO(data))
-        im = im.convert("RGB")
+        im = PILImg.open(io.BytesIO(data)).convert("RGB")
     except Exception:
-        raise HTTPException(status_code=400, detail="无法解析 HEIC 文件")
+        raise ValueError("无法解析 HEIC 文件")
+    if max(im.size) > _HEIC_MAX_SIDE:
+        s = _HEIC_MAX_SIDE / max(im.size)
+        im = im.resize((round(im.width * s), round(im.height * s)), PILImg.LANCZOS)
     buf = io.BytesIO()
     im.save(buf, "JPEG", quality=95)
-    buf.seek(0)
-    return StreamingResponse(buf, media_type="image/jpeg",
+    return buf.getvalue()
+
+
+@router.post("/heic-to-jpg")
+async def heic_to_jpg(image: UploadFile = File(...)):
+    """HEIC/HEIF → JPEG。苹果默认拍照格式，浏览器 canvas 解不了，只能后端转。
+    纯格式转换，无 AI/openlux 依赖。解码放线程池 + 全局限并发 2，避免高峰把小机器压垮。"""
+    data = await image.read()
+    if len(data) > _HEIC_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="HEIC 文件超过 30MB")
+    async with _HEIC_SEM:
+        try:
+            jpg = await asyncio.to_thread(_heic_decode, data)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+    return StreamingResponse(io.BytesIO(jpg), media_type="image/jpeg",
                              headers={"Content-Disposition": "attachment; filename=converted.jpg"})
 
 
