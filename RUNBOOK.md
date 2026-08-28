@@ -128,7 +128,7 @@ sudo journalctl -u image-studio-backend -n 50 --no-pager | grep -iE "DEV_UNRESTR
 | `git pull` 冲突 | 多半是 `dist/` 或构建产物被 git 跟踪了，把报错发出来 |
 | 部署后页面没变 | 先 `curl ... grep .js` 对 bundle 名；一致就是浏览器缓存，硬刷 |
 | 抠图第一次特别慢/超时 | isnet 模型首次下载 178MB，等它下完，之后就快（缓存在 `~/.u2net/`） |
-| 老照片上色第一次特别慢/超时 | 上色模型首次下载 ~129MB（HuggingFace 镜像），缓存在 `~/.cache/image-studio-colorize/`；部署后建议手动预热一次（见下） |
+| 老照片上色第一次特别慢/超时 | 上色模型首次下载 ~255MB（GitHub release），缓存在 `~/.cache/image-studio-colorize/`；部署后建议手动预热一次（见下） |
 | 本机改了后端代码不生效 | 杀掉所有 python 进程重启，别信 uvicorn `--reload`：`Get-Process python* \| Stop-Process -Force` 再 `run.py` |
 | `npm` 报「禁止运行脚本」 | 用 `npm.cmd`，或执行上面的 `Set-ExecutionPolicy` |
 | `findstr` / `cat` 在 PowerShell 里找不到 | 那是给 🖥️ 服务器跑的命令，别在 💻 本机敲 |
@@ -147,8 +147,9 @@ sudo journalctl -u image-studio-backend -n 50 --no-pager | grep -iE "DEV_UNRESTR
 ## 六、老照片上色
 
 - 代码：`backend/app/colorize_worker.py`（子进程跑，跟抠图同一套隔离方式），端点 `POST /api/ai/colorize`
-- 模型：Zhang ECCV16 Caffe 上色权重，走 `cv2.dnn`——**没加新 Python 依赖**（opencv 本来就装了）
-- 小文件（prototxt / pts_in_hull.npy）已 vendor 进仓库 `backend/app/vendor/colorize/`；129MB 的 caffemodel 首次调用现场下载，缓存到 `~/.cache/image-studio-colorize/`
+- 模型：DeOldify 的 ONNX 导出版，走 `onnxruntime` CPU——**没加新 Python 依赖**（onnxruntime/opencv/numpy 都是项目已装的）
+- `deoldify.onnx`（255MB）首次调用从 GitHub release 现场下载，缓存到 `~/.cache/image-studio-colorize/`
+- 内部固定 256×256 推理（~0.5s），只取色度、亮度用原图——脸部细节不动
 - 只依赖本地推理，**不调 openlux、不接敏感文件检测**（上色是还原不是篡改，跟扫描件同定性）
 - 部署后预热（🖥️ 服务器，避免线上第一个用户干等下载）：
 
