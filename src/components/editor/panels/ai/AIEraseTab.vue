@@ -2,8 +2,10 @@
 import { ref } from 'vue'
 import { UploadFilled, Delete } from '@element-plus/icons-vue'
 import { useAuthStore } from '../../../../stores/auth'
+import { ElMessage } from 'element-plus'
 import EraseDialog from '../../EraseDialog.vue'
 import BatchWatermarkDialog from '../../BatchWatermarkDialog.vue'
+import { prepareUpload } from '../../../../utils/prepImage'
 
 const authStore = useAuthStore()
 
@@ -12,15 +14,20 @@ const workingImage = ref<string | null>(null)
 const eraseDialogOpen = ref(false)
 const batchDialogOpen = ref(false)
 
-function onFileChange(e: Event) {
+async function onFileChange(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
+  ;(e.target as HTMLInputElement).value = ''
   if (!file) return
+  if (file.size > 30 * 1024 * 1024) {
+    ElMessage.error('图片超过 30MB，请先压缩')
+    return
+  }
+  const prepped = await prepareUpload(file)
   const reader = new FileReader()
   reader.onload = () => {
     workingImage.value = reader.result as string
   }
-  reader.readAsDataURL(file)
-  ;(e.target as HTMLInputElement).value = ''
+  reader.readAsDataURL(prepped)
 }
 
 function reset() {

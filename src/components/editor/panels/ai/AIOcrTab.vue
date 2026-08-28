@@ -4,6 +4,7 @@ import { ElMessage } from 'element-plus'
 import { UploadFilled, Delete } from '@element-plus/icons-vue'
 import { useAuthStore } from '../../../../stores/auth'
 import { extractTextFromImage } from '../../../../services/ocrApi'
+import { prepareUpload } from '../../../../utils/prepImage'
 
 const authStore = useAuthStore()
 
@@ -13,17 +14,18 @@ const extracting = ref(false)
 const resultText = ref('')
 const error = ref('')
 
-function onFileChange(e: Event) {
+async function onFileChange(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
+  ;(e.target as HTMLInputElement).value = ''
   if (!file) return
+  const prepped = await prepareUpload(file)
   const reader = new FileReader()
   reader.onload = () => {
     workingImage.value = reader.result as string
     resultText.value = ''
     error.value = ''
   }
-  reader.readAsDataURL(file)
-  ;(e.target as HTMLInputElement).value = ''
+  reader.readAsDataURL(prepped)
 }
 
 function reset() {

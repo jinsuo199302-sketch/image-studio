@@ -3,9 +3,10 @@ import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { UploadFilled, Close, ArrowUp, ArrowDown } from '@element-plus/icons-vue'
 import { scanToPdf, type ScanMode } from '../../../../services/pdfApi'
+import { prepareUpload } from '../../../../utils/prepImage'
 
 const MAX_FILES = 30
-const MAX_FILE_SIZE = 20 * 1024 * 1024
+const MAX_FILE_SIZE = 30 * 1024 * 1024
 
 interface Page {
   file: File
@@ -24,7 +25,7 @@ const MODES: { key: ScanMode; label: string; desc: string }[] = [
   { key: 'color', label: '彩色', desc: '带照片/彩色内容的页面' },
 ]
 
-function onPick(e: Event) {
+async function onPick(e: Event) {
   const picked = Array.from((e.target as HTMLInputElement).files ?? [])
   ;(e.target as HTMLInputElement).value = ''
   for (const f of picked) {
@@ -33,10 +34,11 @@ function onPick(e: Event) {
       break
     }
     if (f.size > MAX_FILE_SIZE) {
-      ElMessage.error(`${f.name} 超过 20MB，已跳过`)
+      ElMessage.error(`${f.name} 超过 30MB，已跳过`)
       continue
     }
-    pages.value.push({ file: f, url: URL.createObjectURL(f) })
+    const prepped = await prepareUpload(f)
+    pages.value.push({ file: prepped, url: URL.createObjectURL(prepped) })
   }
 }
 
