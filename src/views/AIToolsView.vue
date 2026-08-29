@@ -12,6 +12,7 @@ const VALID_TABS = [
   'translate',
   'video',
   'pdf',
+  'pdfconvert',
   'cutout',
   'erase',
   'textreplace',

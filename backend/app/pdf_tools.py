@@ -36,6 +36,13 @@ def _read_pdf(data: bytes, filename: str) -> PdfReader:
         raise HTTPException(status_code=400, detail=f"{filename} 不是有效的 PDF 文件")
 
 
+# 「PDF 转图片」渲染时每页 pixmap 会吃内存（300dpi 的 A4 约 25MB），2 核 2GB 上限并发 2，
+# 再靠页数/dpi 上限兜底，避免一个大 PDF 高 dpi 把机器打爆。
+_RENDER_SEM = asyncio.Semaphore(2)
+_MAX_RENDER_PAGES = 60
+_MAX_IMAGES_TO_PDF = 100
+
+
 @router.post("/merge")
 async def merge_pdfs(files: List[UploadFile] = File(...)):
     if len(files) < 2:
@@ -288,4 +295,210 @@ async def sign_pdf(
         buf,
         media_type="application/pdf",
         headers={"Content-Disposition": "attachment; filename=signed.pdf"},
+    )
+
+
+# ---------------------------------------------------------------------------
+# PDF 工具箱补全：图片转 PDF / PDF 转图片 / 加密解密 / 页面管理
+# 全部纯本地，不调 openlux，不接敏感文件检测——只是格式转换/页面重排，跟合并拆分同一性质。
+# ---------------------------------------------------------------------------
+
+_A4_PT = (595.0, 842.0)  # A4 in PostScript points (72dpi)
+
+
+def _images_to_pdf_sync(images: list[bytes], page_size: str) -> bytes:
+    from PIL import Image as PILImage, ImageOps
+
+    pages: list[PILImage.Image] = []
+    for raw in images:
+        try:
+            im = PILImage.open(io.BytesIO(raw))
+            im = ImageOps.exif_transpose(im).convert("RGB")
+        except Exception:
+            raise ValueError("有文件不是能识别的图片")
+        if max(im.size) > 3000:
+            s = 3000 / max(im.size)
+            im = im.resize((round(im.width * s), round(im.height * s)), PILImage.LANCZOS)
+        if page_size == "a4":
+            # A4 @150dpi 白底画布，图片等比缩放居中（resolution=150 存出，页面即真实 A4 尺寸）
+            canvas_w, canvas_h = 1240, 1754
+            if im.width > im.height:
+                canvas_w, canvas_h = canvas_h, canvas_w
+            scale = min(canvas_w / im.width, canvas_h / im.height)
+            im = im.resize((max(1, round(im.width * scale)), max(1, round(im.height * scale))), PILImage.LANCZOS)
+            bg = PILImage.new("RGB", (canvas_w, canvas_h), "white")
+            bg.paste(im, ((canvas_w - im.width) // 2, (canvas_h - im.height) // 2))
+            im = bg
+        pages.append(im)
+
+    buf = io.BytesIO()
+    pages[0].save(buf, "PDF", save_all=True, append_images=pages[1:], resolution=150.0)
+    return buf.getvalue()
+
+
+@router.post("/images-to-pdf")
+async def images_to_pdf(
+    files: List[UploadFile] = File(...),
+    page_size: str = Form("auto"),
+):
+    """多张图片打包成一个 PDF。page_size=auto 每页贴合图片本身比例；a4 统一放进 A4 白底居中。
+    跟「照片转扫描件」不同——这个不做任何图像处理，就是原样打包。"""
+    if not files:
+        raise HTTPException(status_code=400, detail="请至少上传一张图片")
+    if len(files) > _MAX_IMAGES_TO_PDF:
+        raise HTTPException(status_code=400, detail=f"一次最多 {_MAX_IMAGES_TO_PDF} 张图片")
+    images = [await f.read() for f in files]
+    if sum(len(b) for b in images) > 100 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="图片总体积超过 100MB")
+    try:
+        pdf_bytes = await asyncio.to_thread(_images_to_pdf_sync, images, "a4" if page_size == "a4" else "auto")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=images.pdf"},
+    )
+
+
+def _pdf_to_images_sync(data: bytes, fmt: str, dpi: int) -> bytes:
+    import fitz  # PyMuPDF
+
+    try:
+        doc = fitz.open(stream=data, filetype="pdf")
+    except Exception:
+        raise ValueError("不是有效的 PDF 文件")
+    if doc.needs_pass:
+        raise ValueError("这个 PDF 有密码，请先在「PDF 解密」里去掉密码")
+    if doc.page_count > _MAX_RENDER_PAGES:
+        raise ValueError(f"PDF 超过 {_MAX_RENDER_PAGES} 页，转图片请先拆分")
+
+    ext = "jpg" if fmt == "jpg" else "png"
+    zip_buf = io.BytesIO()
+    with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for i in range(doc.page_count):
+            pix = doc.load_page(i).get_pixmap(dpi=dpi)
+            if ext == "jpg":
+                img_bytes = pix.tobytes("jpg", jpg_quality=90)
+            else:
+                img_bytes = pix.tobytes("png")
+            zf.writestr(f"page_{i + 1:03d}.{ext}", img_bytes)
+    doc.close()
+    return zip_buf.getvalue()
+
+
+@router.post("/to-images")
+async def pdf_to_images(
+    file: UploadFile = File(...),
+    fmt: str = Form("png"),
+    dpi: int = Form(150),
+):
+    """PDF 每页导出成图片，打包 ZIP。dpi 限 72~300。"""
+    data = await file.read()
+    dpi = max(72, min(300, dpi))
+    async with _RENDER_SEM:
+        try:
+            zip_bytes = await asyncio.to_thread(_pdf_to_images_sync, data, fmt, dpi)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+    return StreamingResponse(
+        io.BytesIO(zip_bytes),
+        media_type="application/zip",
+        headers={"Content-Disposition": "attachment; filename=pages.zip"},
+    )
+
+
+@router.post("/encrypt")
+async def encrypt_pdf(
+    file: UploadFile = File(...),
+    password: str = Form(...),
+):
+    """给 PDF 加打开密码。"""
+    if not password.strip():
+        raise HTTPException(status_code=400, detail="密码不能为空")
+    reader = _read_pdf(await file.read(), file.filename or "文件")
+    if reader.is_encrypted:
+        raise HTTPException(status_code=400, detail="这个 PDF 已经加密了")
+    writer = PdfWriter()
+    for page in reader.pages:
+        writer.add_page(page)
+    writer.encrypt(password)
+    buf = io.BytesIO()
+    writer.write(buf)
+    buf.seek(0)
+    return StreamingResponse(
+        buf, media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=encrypted.pdf"},
+    )
+
+
+@router.post("/decrypt")
+async def decrypt_pdf(
+    file: UploadFile = File(...),
+    password: str = Form(...),
+):
+    """已知密码，去掉 PDF 的打开密码。只能处理自己知道密码的文件，不是破解。"""
+    try:
+        reader = PdfReader(io.BytesIO(await file.read()))
+    except PdfReadError:
+        raise HTTPException(status_code=400, detail="不是有效的 PDF 文件")
+    if reader.is_encrypted:
+        if reader.decrypt(password) == 0:
+            raise HTTPException(status_code=400, detail="密码不对")
+    else:
+        raise HTTPException(status_code=400, detail="这个 PDF 没有加密，不需要解密")
+    writer = PdfWriter()
+    for page in reader.pages:
+        writer.add_page(page)
+    buf = io.BytesIO()
+    writer.write(buf)
+    buf.seek(0)
+    return StreamingResponse(
+        buf, media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=decrypted.pdf"},
+    )
+
+
+@router.post("/pages")
+async def edit_pdf_pages(
+    file: UploadFile = File(...),
+    op: str = Form(...),
+    pages: str = Form(...),
+    angle: int = Form(90),
+):
+    """页面管理：op=delete 删除指定页 / op=extract 只保留指定页 / op=rotate 旋转指定页。
+    pages 用「1,3,5-8」这种格式；rotate 时 angle 取 90/180/270。"""
+    reader = _read_pdf(await file.read(), file.filename or "文件")
+    total = len(reader.pages)
+    ranges = _parse_ranges(pages, total)
+    selected = sorted({i for start, end in ranges for i in range(start, end + 1)})
+
+    writer = PdfWriter()
+    if op == "delete":
+        keep = [i for i in range(total) if i not in set(selected)]
+        if not keep:
+            raise HTTPException(status_code=400, detail="不能把所有页都删掉")
+        for i in keep:
+            writer.add_page(reader.pages[i])
+    elif op == "extract":
+        for i in selected:
+            writer.add_page(reader.pages[i])
+    elif op == "rotate":
+        if angle not in (90, 180, 270):
+            raise HTTPException(status_code=400, detail="旋转角度只能是 90 / 180 / 270")
+        sel = set(selected)
+        for i in range(total):
+            page = reader.pages[i]
+            if i in sel:
+                page.rotate(angle)
+            writer.add_page(page)
+    else:
+        raise HTTPException(status_code=400, detail="未知操作")
+
+    buf = io.BytesIO()
+    writer.write(buf)
+    buf.seek(0)
+    return StreamingResponse(
+        buf, media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={op}.pdf"},
     )

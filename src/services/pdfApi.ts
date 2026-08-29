@@ -86,6 +86,66 @@ export async function scanToPdf(files: File[], mode: ScanMode, autoCrop: boolean
   }
 }
 
+/** 多张图片打包成一个 PDF（不做任何处理，原样打包）。auto=每页贴合图片比例，a4=统一放进 A4 白底 */
+export async function imagesToPdf(files: File[], pageSize: 'auto' | 'a4'): Promise<Blob> {
+  const form = new FormData()
+  files.forEach((f) => form.append('files', f))
+  form.append('page_size', pageSize)
+  try {
+    const res = await http.post('/images-to-pdf', form, { responseType: 'blob' })
+    return res.data
+  } catch (e) {
+    throw new Error(await extractErrorMessage(e, '转换失败，请重试'))
+  }
+}
+
+/** PDF 每页导出成图片，返回 ZIP。dpi 72~300 */
+export async function pdfToImages(file: File, fmt: 'png' | 'jpg', dpi: number): Promise<Blob> {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('fmt', fmt)
+  form.append('dpi', String(dpi))
+  try {
+    const res = await http.post('/to-images', form, { responseType: 'blob' })
+    return res.data
+  } catch (e) {
+    throw new Error(await extractErrorMessage(e, '转换失败，请重试'))
+  }
+}
+
+/** 给 PDF 加打开密码 / 已知密码去掉密码 */
+export async function securePdf(file: File, mode: 'encrypt' | 'decrypt', password: string): Promise<Blob> {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('password', password)
+  try {
+    const res = await http.post(`/${mode}`, form, { responseType: 'blob' })
+    return res.data
+  } catch (e) {
+    throw new Error(await extractErrorMessage(e, mode === 'encrypt' ? '加密失败，请重试' : '解密失败，请重试'))
+  }
+}
+
+/** 页面管理：删除 / 只保留 / 旋转 指定页。pages 用「1,3,5-8」格式 */
+export async function editPdfPages(
+  file: File,
+  op: 'delete' | 'extract' | 'rotate',
+  pages: string,
+  angle: 90 | 180 | 270 = 90,
+): Promise<Blob> {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('op', op)
+  form.append('pages', pages)
+  form.append('angle', String(angle))
+  try {
+    const res = await http.post('/pages', form, { responseType: 'blob' })
+    return res.data
+  } catch (e) {
+    throw new Error(await extractErrorMessage(e, '处理失败，请重试'))
+  }
+}
+
 /** x/y/width 都是相对页面宽高的 0~1 比例（y 从顶部算），不是像素——不用管每页实际尺寸 */
 export async function signPdf(
   file: File,
