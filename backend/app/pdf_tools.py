@@ -12,7 +12,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.pdfgen import canvas as pdfcanvas
 
-from app import doc_scan
+from app import doc_format, doc_scan
 
 router = APIRouter(prefix="/api/pdf", tags=["pdf"])
 
@@ -501,4 +501,30 @@ async def edit_pdf_pages(
     return StreamingResponse(
         buf, media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename={op}.pdf"},
+    )
+
+
+@router.get("/doc-templates")
+async def doc_templates():
+    return {"templates": doc_format.templates()}
+
+
+@router.post("/format-doc")
+async def format_doc(
+    text: str = Form(...),
+    template: str = Form("general"),
+    title: str = Form(""),
+):
+    """把 AI 生成的带 markdown 符号、没排版的文本，解析后按中文办公模板重排成 .docx。
+    纯本地 python-docx 生成，不调任何模型——用户自己的文字自己排版。"""
+    if len(text) > 200_000:
+        raise HTTPException(status_code=413, detail="文本过长，请分批处理")
+    try:
+        docx_bytes = await asyncio.to_thread(doc_format.format_to_docx, text, template, title.strip() or None)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return StreamingResponse(
+        io.BytesIO(docx_bytes),
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": "attachment; filename=formatted.docx"},
     )

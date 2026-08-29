@@ -13,6 +13,7 @@ const VALID_TABS = [
   'video',
   'pdf',
   'pdfconvert',
+  'docformat',
   'cutout',
   'erase',
   'textreplace',

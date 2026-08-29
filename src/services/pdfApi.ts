@@ -146,6 +146,30 @@ export async function editPdfPages(
   }
 }
 
+export interface DocTemplate {
+  key: string
+  label: string
+}
+
+export async function getDocTemplates(): Promise<DocTemplate[]> {
+  const res = await http.get<{ templates: DocTemplate[] }>('/doc-templates')
+  return res.data.templates
+}
+
+/** 把 AI 生成的带 markdown 符号、没排版的文本，按中文办公模板重排成 .docx */
+export async function formatDoc(text: string, template: string, title: string): Promise<Blob> {
+  const form = new FormData()
+  form.append('text', text)
+  form.append('template', template)
+  form.append('title', title)
+  try {
+    const res = await http.post('/format-doc', form, { responseType: 'blob' })
+    return res.data
+  } catch (e) {
+    throw new Error(await extractErrorMessage(e, '排版失败，请重试'))
+  }
+}
+
 /** x/y/width 都是相对页面宽高的 0~1 比例（y 从顶部算），不是像素——不用管每页实际尺寸 */
 export async function signPdf(
   file: File,

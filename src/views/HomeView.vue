@@ -25,6 +25,7 @@ const TOOL_TABS = [
   { key: 'ai-video', label: 'AI 视频', desc: '文字生成视频', enabled: true, route: '/ai-tools?tab=video' },
   { key: 'pdf-tools', label: 'PDF 工具', desc: '合并 / 拆分', enabled: true, route: '/ai-tools?tab=pdf' },
   { key: 'pdf-convert', label: 'PDF 转换', desc: '图片↔PDF、加密、删页旋转', enabled: true, route: '/ai-tools?tab=pdfconvert' },
+  { key: 'doc-format', label: '排版成 Word', desc: 'AI文字自动排版导出Word', enabled: true, route: '/ai-tools?tab=docformat' },
   { key: 'ai-cutout', label: 'AI 抠图', desc: '一键去背景', enabled: true, route: '/ai-tools?tab=cutout' },
   { key: 'ai-erase', label: 'AI 消除', desc: '涂抹去水印', enabled: true, route: '/ai-tools?tab=erase' },
   { key: 'ai-textreplace', label: 'AI 改字', desc: '一键改日期/价格/文案', enabled: true, route: '/ai-tools?tab=textreplace' },

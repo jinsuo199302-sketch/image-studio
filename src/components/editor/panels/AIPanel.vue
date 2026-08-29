@@ -6,6 +6,7 @@ import AITranslateTab from './ai/AITranslateTab.vue'
 import AIVideoTab from './ai/AIVideoTab.vue'
 import AIPdfTab from './ai/AIPdfTab.vue'
 import AIPdfConvertTab from './ai/AIPdfConvertTab.vue'
+import AIDocFormatTab from './ai/AIDocFormatTab.vue'
 import AICutoutTab from './ai/AICutoutTab.vue'
 import AIEraseTab from './ai/AIEraseTab.vue'
 import AITextReplaceTab from './ai/AITextReplaceTab.vue'
@@ -27,6 +28,7 @@ type TabKey =
   | 'video'
   | 'pdf'
   | 'pdfconvert'
+  | 'docformat'
   | 'cutout'
   | 'erase'
   | 'textreplace'
@@ -73,6 +75,7 @@ function useSignatureInPdf(dataUrl: string) {
           { key: 'video', label: '视频' },
           { key: 'pdf', label: 'PDF' },
           { key: 'pdfconvert', label: 'PDF转换' },
+          { key: 'docformat', label: '排版Word' },
           { key: 'cutout', label: '抠图' },
           { key: 'erase', label: '消除' },
           { key: 'textreplace', label: '改字' },
@@ -112,6 +115,7 @@ function useSignatureInPdf(dataUrl: string) {
       <AIVideoTab v-else-if="activeTab === 'video'" />
       <AIPdfTab v-else-if="activeTab === 'pdf'" :preset-signature="pdfPresetSignature" />
       <AIPdfConvertTab v-else-if="activeTab === 'pdfconvert'" />
+      <AIDocFormatTab v-else-if="activeTab === 'docformat'" />
       <AICutoutTab v-else-if="activeTab === 'cutout'" />
       <AIEraseTab v-else-if="activeTab === 'erase'" />
       <AITextReplaceTab v-else-if="activeTab === 'textreplace'" />
