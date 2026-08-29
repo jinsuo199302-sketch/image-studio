@@ -514,6 +514,54 @@ async def doc_skeleton(key: str):
     return {"text": doc_format.skeleton(key)}
 
 
+@router.post("/pinyin")
+async def to_pinyin(text: str = Form(...), style: str = Form("tone")):
+    """汉字转拼音。style: tone(nǐ hǎo) / plain(ni hao) / tone_num(ni3 hao3) /
+    first(首字母连写 nh) / first_cap(每字首字母大写 NH)。非汉字原样保留。"""
+    if len(text) > 20000:
+        raise HTTPException(status_code=413, detail="文本过长")
+    import re as _re
+
+    from pypinyin import Style, pinyin
+
+    smap = {"tone": Style.TONE, "plain": Style.NORMAL, "tone_num": Style.TONE3}
+    letter_style = style in ("first", "first_cap")
+    st = smap.get(style, Style.TONE if not letter_style else Style.NORMAL)
+
+    # 非汉字整段原样保留（不逐字符拆），拼音才逐字给
+    parts = pinyin(text, style=st, heteronym=False, errors=lambda run: [run])
+    tokens = ["".join(p) for p in parts]
+
+    # 逐 token 判断是不是"从一个汉字转出来的拼音"（对应源字是汉字 = 是；非汉字 run 原样）
+    han_flags: list[bool] = []
+    src_i = 0
+    for t in tokens:
+        if src_i < len(text) and "一" <= text[src_i] <= "鿿":
+            han_flags.append(True)
+            src_i += 1
+        else:
+            han_flags.append(False)
+            src_i += len(t)
+
+    if letter_style:
+        out = []
+        for t, is_h in zip(tokens, han_flags):
+            out.append((t[:1].upper() if style == "first_cap" else t[:1]) if is_h and t else t)
+        result = "".join(out)
+    else:
+        buf = []
+        for t, is_h in zip(tokens, han_flags):
+            if is_h:
+                if buf and not buf[-1].endswith(" "):
+                    buf.append(" ")
+                buf.append(t + " ")
+            else:
+                buf.append(t)
+        result = "".join(buf).strip()
+        result = _re.sub(r" +([，。！？、；：）》,.!?;:)])", r"\1", result)
+    return {"result": result}
+
+
 _XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 _PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 

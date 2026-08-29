@@ -230,6 +230,19 @@ export async function mergeSheets(files: File[], dedupe: boolean, keyColumn: str
   }
 }
 
+/** 汉字转拼音。style: tone / plain / tone_num / first / first_cap */
+export async function toPinyin(text: string, style: string): Promise<string> {
+  const form = new FormData()
+  form.append('text', text)
+  form.append('style', style)
+  try {
+    const res = await http.post<{ result: string }>('/pinyin', form)
+    return res.data.result
+  } catch (e) {
+    throw new Error(await extractErrorMessage(e, '转换失败，请重试'))
+  }
+}
+
 /** x/y/width 都是相对页面宽高的 0~1 比例（y 从顶部算），不是像素——不用管每页实际尺寸 */
 export async function signPdf(
   file: File,

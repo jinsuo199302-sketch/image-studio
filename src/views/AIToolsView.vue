@@ -16,6 +16,7 @@ const VALID_TABS = [
   'docformat',
   'ppt',
   'excel',
+  'convert',
   'cutout',
   'erase',
   'textreplace',

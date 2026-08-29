@@ -9,6 +9,7 @@ import AIPdfConvertTab from './ai/AIPdfConvertTab.vue'
 import AIDocFormatTab from './ai/AIDocFormatTab.vue'
 import AIPptTab from './ai/AIPptTab.vue'
 import AIExcelTab from './ai/AIExcelTab.vue'
+import AIConvertTab from './ai/AIConvertTab.vue'
 import AICutoutTab from './ai/AICutoutTab.vue'
 import AIEraseTab from './ai/AIEraseTab.vue'
 import AITextReplaceTab from './ai/AITextReplaceTab.vue'
@@ -33,6 +34,7 @@ type TabKey =
   | 'docformat'
   | 'ppt'
   | 'excel'
+  | 'convert'
   | 'cutout'
   | 'erase'
   | 'textreplace'
@@ -82,6 +84,7 @@ function useSignatureInPdf(dataUrl: string) {
           { key: 'docformat', label: '排版Word' },
           { key: 'ppt', label: 'PPT' },
           { key: 'excel', label: 'Excel' },
+          { key: 'convert', label: '数字拼音' },
           { key: 'cutout', label: '抠图' },
           { key: 'erase', label: '消除' },
           { key: 'textreplace', label: '改字' },
@@ -124,6 +127,7 @@ function useSignatureInPdf(dataUrl: string) {
       <AIDocFormatTab v-else-if="activeTab === 'docformat'" />
       <AIPptTab v-else-if="activeTab === 'ppt'" />
       <AIExcelTab v-else-if="activeTab === 'excel'" />
+      <AIConvertTab v-else-if="activeTab === 'convert'" />
       <AICutoutTab v-else-if="activeTab === 'cutout'" />
       <AIEraseTab v-else-if="activeTab === 'erase'" />
       <AITextReplaceTab v-else-if="activeTab === 'textreplace'" />

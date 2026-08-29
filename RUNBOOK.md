@@ -171,6 +171,7 @@ venv/bin/python -m app.colorize_worker 1.0 < /tmp/_c.jpg > /dev/null && echo '�
 - **排版成 Word**（`doc_format.py` / `AIDocFormatTab`）：AI 吐的带 markdown 符号的文字 → 中文办公模板 .docx。6 个模板：通用/工作报告/公文/书信检讨书/介绍信/协议书。依赖 `python-docx`。
 - **PPT 工具**（`office_tools.py` / `AIPptTab`）：文字大纲→PPT、图片→PPT。依赖 `python-pptx`。
 - **Excel 工具**（`office_tools.py` / `AIExcelTab`）：工资条拆分、多表合并去重。用已有的 `openpyxl`。
+- **数字/拼音**（`AIConvertTab`）：数字转中文大写（金额大写/中文数字，纯前端 `src/utils/numberToChinese.ts`）、汉字转拼音（`POST /api/pdf/pinyin`，依赖 `pypinyin`）。
 - 文档字体只用 Windows 中文系统自带的（宋体/仿宋/黑体/楷体），西文 Times New Roman，换机器不掉字。
-- 这批陆续加了 `pymupdf` / `python-docx` / `python-pptx` 到 `requirements.txt`，**部署必须** `cd ~/image-studio/backend && venv/bin/python -m pip install -r requirements.txt`。
+- 这批陆续加了 `pymupdf` / `python-docx` / `python-pptx` / `pypinyin` 到 `requirements.txt`，**部署必须** `cd ~/image-studio/backend && venv/bin/python -m pip install -r requirements.txt`。
 - **PPT/Word/Excel 转 PDF 没做**——那要 LibreOffice（`soffice --headless --convert-to pdf`）渲染引擎，是 ~1GB 磁盘 + 每次转换 200~400MB 内存的服务器依赖，2C2G 上要单独评估。
