@@ -9,6 +9,8 @@ import zipfile
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.pagebreak import Break
+from openpyxl.worksheet.properties import PageSetupProperties
 from pptx import Presentation
 from pptx.util import Emu, Inches, Pt
 
@@ -159,17 +161,53 @@ def _read_first_sheet(data: bytes):
     return rows
 
 
+def _nonempty(row) -> int:
+    return sum(1 for c in row if str(c).strip() != "")
+
+
 def payslips(data: bytes, slip_title: str = "", per_page: int = 12) -> bytes:
-    """一张工资总表 -> 每人一条工资条，堆在一个 sheet 里，设好打印区域，打印后裁开即可。
-    每条 = 表头行 + 该员工数据行（+ 可选标题行）。"""
+    """一张工资总表 -> 每人一条工资条：每条 = 标题行 + 完整表头行 + 该员工数据行 + 空行，
+    堆在一个 sheet 里，设好分页，打印后按行裁开就是一张张能看懂的工资条。"""
     rows = _read_first_sheet(data)
     if len(rows) < 2:
         raise ValueError("表格至少要有表头行 + 1 行数据")
-    header = [str(c).strip() for c in rows[0]]
+
+    # 找真正的表头行：前 6 行里非空单元格最多的那行（总表常在表头上面还有个合并的大标题行）。
+    scan = rows[:6]
+    head_idx = max(range(len(scan)), key=lambda i: _nonempty(scan[i]))
+    if _nonempty(rows[head_idx]) < 2:
+        head_idx = 0
+
+    # 表头上方只有 1 个非空单元格的行，当作总表标题；用户没自己填标题就用它
+    if not slip_title:
+        for r in rows[:head_idx]:
+            if _nonempty(r) == 1:
+                slip_title = next(str(c).strip() for c in r if str(c).strip())
+                break
+
+    header = [str(c).strip() for c in rows[head_idx]]
     ncol = len(header)
-    people = [r + [""] * (ncol - len(r)) for r in rows[1:] if any(str(c).strip() for c in r)]
+    header_key = tuple(header)
+
+    # 姓名列：表头里带"姓名/名字/员工"的那列，用来剔除"合计/总计"这种汇总行
+    name_col = next((i for i, h in enumerate(header) if any(k in h for k in ("姓名", "名字", "员工"))), None)
+    _SUMMARY = {"合计", "总计", "小计", "平均", "总额", "合 计", "total", "sum", "average"}
+
+    def is_person(r: list) -> bool:
+        if _nonempty(r) < 2:
+            return False
+        vals = [str(c).strip() for c in r[:ncol]]
+        if tuple(vals) == header_key:
+            return False
+        if any(v.lower() in _SUMMARY for v in vals[:3]):
+            return False
+        if name_col is not None and name_col < len(vals) and not vals[name_col]:
+            return False
+        return True
+
+    people = [r + [""] * (ncol - len(r)) for r in rows[head_idx + 1:] if is_person(r)]
     if not people:
-        raise ValueError("没有找到员工数据行")
+        raise ValueError("表头下面没有找到员工数据行")
 
     wb = Workbook()
     ws = wb.active
@@ -177,7 +215,6 @@ def payslips(data: bytes, slip_title: str = "", per_page: int = 12) -> bytes:
     center = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
     r = 1
-    block_rows = (3 if slip_title else 2) + 1  # 标题? + 表头 + 数据 + 空行
     for idx, person in enumerate(people):
         if slip_title:
             ws.cell(r, 1, slip_title).alignment = center
@@ -196,7 +233,7 @@ def payslips(data: bytes, slip_title: str = "", per_page: int = 12) -> bytes:
         r += 2
         # 每 per_page 条一个分页符
         if (idx + 1) % per_page == 0 and idx + 1 < len(people):
-            ws.row_breaks.append(__import__("openpyxl").worksheet.pagebreak.Break(id=r - 1))
+            ws.row_breaks.append(Break(id=r - 1))
         r += 1  # 空行
 
     for c in range(ncol):
@@ -205,8 +242,6 @@ def payslips(data: bytes, slip_title: str = "", per_page: int = 12) -> bytes:
     ws.page_setup.orientation = "landscape" if ncol >= 7 else "portrait"
     ws.page_setup.fitToWidth = 1
     ws.page_setup.fitToHeight = 0
-    from openpyxl.worksheet.properties import PageSetupProperties
-
     ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
 
     buf = io.BytesIO()
