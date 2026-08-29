@@ -177,6 +177,59 @@ export async function formatDoc(text: string, template: string, title: string): 
   }
 }
 
+/** 结构化文字 → PPT 大纲（一级标题一页） */
+export async function textToPptx(text: string, title: string): Promise<Blob> {
+  const form = new FormData()
+  form.append('text', text)
+  form.append('title', title)
+  try {
+    const res = await http.post('/text-to-pptx', form, { responseType: 'blob' })
+    return res.data
+  } catch (e) {
+    throw new Error(await extractErrorMessage(e, '生成失败，请重试'))
+  }
+}
+
+/** 每张图片一页，生成 PPT */
+export async function imagesToPptx(files: File[]): Promise<Blob> {
+  const form = new FormData()
+  files.forEach((f) => form.append('files', f))
+  try {
+    const res = await http.post('/images-to-pptx', form, { responseType: 'blob' })
+    return res.data
+  } catch (e) {
+    throw new Error(await extractErrorMessage(e, '生成失败，请重试'))
+  }
+}
+
+/** 工资总表 → 每人一条工资条（一个 xlsx，打印后裁开） */
+export async function makePayslips(file: File, slipTitle: string, perPage: number): Promise<Blob> {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('slip_title', slipTitle)
+  form.append('per_page', String(perPage))
+  try {
+    const res = await http.post('/payslips', form, { responseType: 'blob' })
+    return res.data
+  } catch (e) {
+    throw new Error(await extractErrorMessage(e, '拆分失败，请重试'))
+  }
+}
+
+/** 多个 Excel 合并成一个，可去重 */
+export async function mergeSheets(files: File[], dedupe: boolean, keyColumn: string): Promise<Blob> {
+  const form = new FormData()
+  files.forEach((f) => form.append('files', f))
+  form.append('dedupe', String(dedupe))
+  form.append('key_column', keyColumn)
+  try {
+    const res = await http.post('/merge-sheets', form, { responseType: 'blob' })
+    return res.data
+  } catch (e) {
+    throw new Error(await extractErrorMessage(e, '合并失败，请重试'))
+  }
+}
+
 /** x/y/width 都是相对页面宽高的 0~1 比例（y 从顶部算），不是像素——不用管每页实际尺寸 */
 export async function signPdf(
   file: File,

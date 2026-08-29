@@ -12,7 +12,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.pdfgen import canvas as pdfcanvas
 
-from app import doc_format, doc_scan
+from app import doc_format, doc_scan, office_tools
 
 router = APIRouter(prefix="/api/pdf", tags=["pdf"])
 
@@ -512,6 +512,74 @@ async def doc_templates():
 @router.get("/doc-skeleton")
 async def doc_skeleton(key: str):
     return {"text": doc_format.skeleton(key)}
+
+
+_XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+_PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+
+
+@router.post("/text-to-pptx")
+async def text_to_pptx(text: str = Form(...), title: str = Form("")):
+    """结构化文字 -> PPT 大纲（一级标题一页，其下条目当要点）。纯本地 python-pptx。"""
+    if len(text) > 200_000:
+        raise HTTPException(status_code=413, detail="文本过长")
+    try:
+        data = await asyncio.to_thread(office_tools.text_to_pptx, text, title.strip() or None)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return StreamingResponse(io.BytesIO(data), media_type=_PPTX_MIME,
+                             headers={"Content-Disposition": "attachment; filename=outline.pptx"})
+
+
+@router.post("/images-to-pptx")
+async def images_to_pptx(files: List[UploadFile] = File(...)):
+    """每张图片一页。"""
+    if not files:
+        raise HTTPException(status_code=400, detail="请至少上传一张图片")
+    if len(files) > 60:
+        raise HTTPException(status_code=400, detail="一次最多 60 张")
+    imgs = [await f.read() for f in files]
+    if sum(len(b) for b in imgs) > 100 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="图片总体积超过 100MB")
+    data = await asyncio.to_thread(office_tools.images_to_pptx, imgs)
+    return StreamingResponse(io.BytesIO(data), media_type=_PPTX_MIME,
+                             headers={"Content-Disposition": "attachment; filename=slides.pptx"})
+
+
+@router.post("/payslips")
+async def payslips(file: UploadFile = File(...), slip_title: str = Form(""), per_page: int = Form(12)):
+    """工资总表 -> 每人一条工资条，堆在一个 xlsx 里，打印后裁开。"""
+    data = await file.read()
+    try:
+        out = await asyncio.to_thread(office_tools.payslips, data, slip_title.strip(), max(1, min(40, per_page)))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"无法处理这个表格：{str(e)[:200]}")
+    return StreamingResponse(io.BytesIO(out), media_type=_XLSX_MIME,
+                             headers={"Content-Disposition": "attachment; filename=payslips.xlsx"})
+
+
+@router.post("/merge-sheets")
+async def merge_sheets(
+    files: List[UploadFile] = File(...),
+    dedupe: str = Form("false"),
+    key_column: str = Form(""),
+):
+    """多个 Excel 合并成一个，可按整行或指定列去重。"""
+    if not files:
+        raise HTTPException(status_code=400, detail="请至少上传一个 Excel 文件")
+    if len(files) > 30:
+        raise HTTPException(status_code=400, detail="一次最多 30 个文件")
+    blobs = [await f.read() for f in files]
+    try:
+        out = await asyncio.to_thread(
+            office_tools.merge_sheets, blobs, dedupe == "true", key_column.strip()
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return StreamingResponse(io.BytesIO(out), media_type=_XLSX_MIME,
+                             headers={"Content-Disposition": "attachment; filename=merged.xlsx"})
 
 
 @router.post("/format-doc")

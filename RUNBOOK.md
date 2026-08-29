@@ -163,9 +163,14 @@ venv/bin/python -m app.colorize_worker 1.0 < /tmp/_c.jpg > /dev/null && echo '�
 
 ---
 
-## 七、PDF 转换 / 排版成 Word
+## 七、办公转换（PDF / Word / PPT / Excel）
 
-- **PDF 转换**（`pdf_tools.py` 追加 5 个端点）：图片转PDF / PDF转图片 / 加密解密 / 页面管理。**加依赖 `pymupdf`**（PDF转图片用）。
-- **排版成 Word**（`doc_format.py`）：`POST /api/pdf/format-doc`，把 AI 吐的带 markdown 符号没排版的文字，按中文办公模板（通用/工作报告/公文）重排成 .docx。纯本地 `python-docx`，不调模型。**加依赖 `python-docx`**。
-- 两个都只用 Windows 中文系统自带字体（宋体/仿宋/黑体/楷体），西文 Times New Roman，换机器打开不掉字。
-- 这批改了 `requirements.txt`，部署要 `cd ~/image-studio/backend && venv/bin/python -m pip install -r requirements.txt`。
+全部纯本地，不调模型。端点都在 `pdf_tools.py` 的 `/api/pdf` 前缀下。
+
+- **PDF 转换**（`AIPdfConvertTab`）：图片转PDF / PDF转图片 / 加密解密 / 页面管理。依赖 `pymupdf`。
+- **排版成 Word**（`doc_format.py` / `AIDocFormatTab`）：AI 吐的带 markdown 符号的文字 → 中文办公模板 .docx。6 个模板：通用/工作报告/公文/书信检讨书/介绍信/协议书。依赖 `python-docx`。
+- **PPT 工具**（`office_tools.py` / `AIPptTab`）：文字大纲→PPT、图片→PPT。依赖 `python-pptx`。
+- **Excel 工具**（`office_tools.py` / `AIExcelTab`）：工资条拆分、多表合并去重。用已有的 `openpyxl`。
+- 文档字体只用 Windows 中文系统自带的（宋体/仿宋/黑体/楷体），西文 Times New Roman，换机器不掉字。
+- 这批陆续加了 `pymupdf` / `python-docx` / `python-pptx` 到 `requirements.txt`，**部署必须** `cd ~/image-studio/backend && venv/bin/python -m pip install -r requirements.txt`。
+- **PPT/Word/Excel 转 PDF 没做**——那要 LibreOffice（`soffice --headless --convert-to pdf`）渲染引擎，是 ~1GB 磁盘 + 每次转换 200~400MB 内存的服务器依赖，2C2G 上要单独评估。

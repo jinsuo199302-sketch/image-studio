@@ -14,6 +14,8 @@ const VALID_TABS = [
   'pdf',
   'pdfconvert',
   'docformat',
+  'ppt',
+  'excel',
   'cutout',
   'erase',
   'textreplace',

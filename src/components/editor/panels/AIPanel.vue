@@ -7,6 +7,8 @@ import AIVideoTab from './ai/AIVideoTab.vue'
 import AIPdfTab from './ai/AIPdfTab.vue'
 import AIPdfConvertTab from './ai/AIPdfConvertTab.vue'
 import AIDocFormatTab from './ai/AIDocFormatTab.vue'
+import AIPptTab from './ai/AIPptTab.vue'
+import AIExcelTab from './ai/AIExcelTab.vue'
 import AICutoutTab from './ai/AICutoutTab.vue'
 import AIEraseTab from './ai/AIEraseTab.vue'
 import AITextReplaceTab from './ai/AITextReplaceTab.vue'
@@ -29,6 +31,8 @@ type TabKey =
   | 'pdf'
   | 'pdfconvert'
   | 'docformat'
+  | 'ppt'
+  | 'excel'
   | 'cutout'
   | 'erase'
   | 'textreplace'
@@ -76,6 +80,8 @@ function useSignatureInPdf(dataUrl: string) {
           { key: 'pdf', label: 'PDF' },
           { key: 'pdfconvert', label: 'PDF转换' },
           { key: 'docformat', label: '排版Word' },
+          { key: 'ppt', label: 'PPT' },
+          { key: 'excel', label: 'Excel' },
           { key: 'cutout', label: '抠图' },
           { key: 'erase', label: '消除' },
           { key: 'textreplace', label: '改字' },
@@ -116,6 +122,8 @@ function useSignatureInPdf(dataUrl: string) {
       <AIPdfTab v-else-if="activeTab === 'pdf'" :preset-signature="pdfPresetSignature" />
       <AIPdfConvertTab v-else-if="activeTab === 'pdfconvert'" />
       <AIDocFormatTab v-else-if="activeTab === 'docformat'" />
+      <AIPptTab v-else-if="activeTab === 'ppt'" />
+      <AIExcelTab v-else-if="activeTab === 'excel'" />
       <AICutoutTab v-else-if="activeTab === 'cutout'" />
       <AIEraseTab v-else-if="activeTab === 'erase'" />
       <AITextReplaceTab v-else-if="activeTab === 'textreplace'" />
