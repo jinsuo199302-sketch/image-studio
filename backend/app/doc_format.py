@@ -41,6 +41,41 @@ class Block:
     spans: list[Span] = field(default_factory=list)
     text: str = ""            # code 用
     rows: list[list[str]] = field(default_factory=list)  # table 用
+    role: str = ""            # 书信类专用：salutation(称谓) / closing(此致) / regards(敬礼) / signature(落款)
+
+
+def _plain(b: Block) -> str:
+    return "".join(s.text for s in b.spans)
+
+
+def _apply_letter_layout(blocks: list[Block]) -> None:
+    """书信/介绍信/检讨书/协议书这类：识别称谓、此致敬礼、落款，标上 role 供排版时特殊处理。
+    正文用户照常写，套路格式由这里补。"""
+    body = [b for b in blocks if b.kind not in ("title",)]
+
+    # 称谓：正文前两块里，短、以冒号结尾的那行（尊敬的XX领导：）
+    for b in body[:2]:
+        if b.kind == "para" and re.fullmatch(r".{1,25}[：:]\s*", _plain(b)):
+            b.role = "salutation"
+            break
+
+    # 此致 / 敬礼
+    for b in body:
+        t = _plain(b).strip()
+        if t == "此致":
+            b.role = "closing"
+        elif t in ("敬礼", "敬礼！", "敬礼!"):
+            b.role = "regards"
+
+    # 落款：从结尾往前，连续的短行（无句末标点、不是敬礼/此致）当署名块
+    for b in reversed(body):
+        if b.role:
+            break
+        t = _plain(b).strip()
+        if b.kind == "para" and 0 < len(t) <= 26 and not re.search(r"[。！？!?；;]$", t):
+            b.role = "signature"
+        else:
+            break
 
 
 _CN_NUM = "一二三四五六七八九十百千零两"
@@ -251,11 +286,133 @@ _TEMPLATES: dict[str, dict] = {
         ],
         "body": {"font": "仿宋", "size": 16, "line": 1.5625, "indent": True},  # 28磅 / 16pt ≈ 1.5625 行距近似
     },
+    "letter": {
+        # 书信类：检讨书 / 申请书 / 说明书 / 承诺书 / 感谢信 / 辞职信 等
+        "label": "书信/检讨书",
+        "margins": (2.8, 2.8, 3.0, 3.0),
+        "title": {"font": "黑体", "size": 22, "align": "center", "bold": True, "after": 18},
+        "headings": [
+            {"font": "黑体", "size": 15, "bold": False, "before": 10, "after": 4},
+            {"font": "黑体", "size": 14, "bold": True, "before": 8, "after": 3},
+            {"font": "宋体", "size": 14, "bold": True, "before": 6, "after": 2},
+            {"font": "宋体", "size": 14, "bold": True, "before": 4, "after": 2},
+        ],
+        "body": {"font": "宋体", "size": 14, "line": 1.5, "indent": True},
+        "letter_style": True,
+    },
+    "intro": {
+        # 介绍信
+        "label": "介绍信",
+        "margins": (2.8, 2.8, 3.0, 3.0),
+        "title": {"font": "黑体", "size": 24, "align": "center", "bold": True, "after": 22},
+        "headings": [
+            {"font": "黑体", "size": 15, "bold": False, "before": 8, "after": 3},
+            {"font": "黑体", "size": 14, "bold": True, "before": 6, "after": 2},
+            {"font": "宋体", "size": 14, "bold": True, "before": 4, "after": 2},
+            {"font": "宋体", "size": 14, "bold": True, "before": 4, "after": 2},
+        ],
+        "body": {"font": "仿宋", "size": 15, "line": 1.6, "indent": True},
+        "letter_style": True,
+    },
+    "agreement": {
+        # 协议书 / 合同：离婚协议、合作协议、租赁协议 等
+        "label": "协议书",
+        "margins": (2.54, 2.54, 3.0, 3.0),
+        "title": {"font": "黑体", "size": 22, "align": "center", "bold": True, "after": 18},
+        "headings": [
+            {"font": "黑体", "size": 14, "bold": True, "before": 10, "after": 4},
+            {"font": "宋体", "size": 13, "bold": True, "before": 8, "after": 3},
+            {"font": "宋体", "size": 13, "bold": True, "before": 6, "after": 2},
+            {"font": "宋体", "size": 13, "bold": True, "before": 4, "after": 2},
+        ],
+        "body": {"font": "宋体", "size": 13, "line": 1.5, "indent": True},
+        "letter_style": True,
+    },
+}
+
+
+# 选了书信/介绍信/协议书但正文空时，前端可拉一份范文骨架让用户改
+_SKELETONS: dict[str, str] = {
+    "letter": """检讨书
+
+尊敬的公司领导：
+
+我怀着十分愧疚和懊悔的心情写下这份检讨，以深刻反省我的错误。
+
+一、事情经过
+
+（在此说明事情的时间、经过和造成的影响。）
+
+二、错误原因
+
+（在此分析自己在思想认识、工作态度等方面存在的问题。）
+
+三、整改措施
+
+1. （具体的改正措施一。）
+2. （具体的改正措施二。）
+
+我恳请领导给我一次改正的机会，我一定吸取教训，认真改正。
+
+此致
+敬礼！
+
+检讨人：（姓名）
+（年）年（月）月（日）日
+""",
+    "intro": """介绍信
+
+（收信单位名称）：
+
+兹介绍我单位（姓名）（性别）等（人数）人，前往你处联系（办理事项）事宜，请予接洽为盼。
+
+有效期（天数）天。
+
+此致
+敬礼！
+
+（发信单位名称）（盖章）
+（年）年（月）月（日）日
+""",
+    "agreement": """离婚协议书
+
+男方：（姓名），（身份证号）
+女方：（姓名），（身份证号）
+
+男方与女方于（年）年（月）月（日）日在（民政局名称）登记结婚，现因感情不和，双方自愿离婚，经协商一致，达成如下协议：
+
+一、双方自愿离婚。
+
+二、子女抚养
+
+（约定子女由哪方抚养、抚养费金额与支付方式、探望权等。）
+
+三、财产分割
+
+（约定房产、存款、车辆等财产的具体分割方案。）
+
+四、债权债务
+
+（约定共同债权债务的处理方式。）
+
+五、其他约定
+
+（如有其他约定在此写明。）
+
+本协议一式三份，双方各执一份，婚姻登记机关存档一份，自双方签字之日起生效。
+
+男方（签字）：            女方（签字）：
+（年）年（月）月（日）日
+""",
 }
 
 
 def templates() -> list[dict]:
-    return [{"key": k, "label": v["label"]} for k, v in _TEMPLATES.items()]
+    return [{"key": k, "label": v["label"], "skeleton": k in _SKELETONS} for k, v in _TEMPLATES.items()]
+
+
+def skeleton(template_key: str) -> str:
+    return _SKELETONS.get(template_key, "")
 
 
 def _set_font(run, cjk_name: str, size_pt: float, bold: bool = False, italic: bool = False):
@@ -334,9 +491,26 @@ def build_docx(blocks: list[Block], template_key: str) -> bytes:
         elif b.kind == "para":
             p = doc.add_paragraph()
             p.paragraph_format.line_spacing = tpl["body"]["line"]
-            if tpl["body"]["indent"]:
+            if b.role == "salutation":
+                # 称谓顶格，不缩进，与下段留点空
+                p.paragraph_format.space_after = Pt(4)
+                _add_spans(p, b.spans, body_f, body_s)
+            elif b.role == "closing":
+                # 此致 —— 顶格
+                _add_spans(p, b.spans, body_f, body_s)
+            elif b.role == "regards":
+                # 敬礼！ —— 缩进两字
                 p.paragraph_format.first_line_indent = Pt(body_s * 2)
-            _add_spans(p, b.spans, body_f, body_s)
+                _add_spans(p, b.spans, body_f, body_s)
+            elif b.role == "signature":
+                # 落款 —— 右对齐
+                p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                p.paragraph_format.space_before = Pt(2)
+                _add_spans(p, b.spans, body_f, body_s)
+            else:
+                if tpl["body"]["indent"]:
+                    p.paragraph_format.first_line_indent = Pt(body_s * 2)
+                _add_spans(p, b.spans, body_f, body_s)
 
         elif b.kind in ("bullet", "ordered"):
             style = "List Bullet" if b.kind == "bullet" else "List Number"
@@ -395,4 +569,6 @@ def format_to_docx(text: str, template_key: str, title: str | None = None) -> by
     blocks = parse(text, explicit_title=title or None)
     if not blocks:
         raise ValueError("没有可排版的内容")
+    if _TEMPLATES.get(template_key, {}).get("letter_style"):
+        _apply_letter_layout(blocks)
     return build_docx(blocks, template_key)

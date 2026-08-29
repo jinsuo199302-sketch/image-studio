@@ -149,11 +149,18 @@ export async function editPdfPages(
 export interface DocTemplate {
   key: string
   label: string
+  skeleton?: boolean
 }
 
 export async function getDocTemplates(): Promise<DocTemplate[]> {
   const res = await http.get<{ templates: DocTemplate[] }>('/doc-templates')
   return res.data.templates
+}
+
+/** 拉一份范文骨架（介绍信/检讨书/协议书等），让用户在此基础上改 */
+export async function getDocSkeleton(key: string): Promise<string> {
+  const res = await http.get<{ text: string }>('/doc-skeleton', { params: { key } })
+  return res.data.text
 }
 
 /** 把 AI 生成的带 markdown 符号、没排版的文本，按中文办公模板重排成 .docx */

@@ -509,6 +509,11 @@ async def doc_templates():
     return {"templates": doc_format.templates()}
 
 
+@router.get("/doc-skeleton")
+async def doc_skeleton(key: str):
+    return {"text": doc_format.skeleton(key)}
+
+
 @router.post("/format-doc")
 async def format_doc(
     text: str = Form(...),

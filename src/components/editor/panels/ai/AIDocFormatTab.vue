@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
-import { formatDoc, getDocTemplates, type DocTemplate } from '../../../../services/pdfApi'
+import { formatDoc, getDocTemplates, getDocSkeleton, type DocTemplate } from '../../../../services/pdfApi'
 import { extractTextFromImage } from '../../../../services/ocrApi'
 import { prepareUpload } from '../../../../utils/prepImage'
 import { useAuthStore } from '../../../../stores/auth'
@@ -17,7 +17,21 @@ const templates = ref<DocTemplate[]>([
   { key: 'general', label: '通用文档' },
   { key: 'report', label: '工作报告' },
   { key: 'official', label: '公文格式' },
+  { key: 'letter', label: '书信/检讨书', skeleton: true },
+  { key: 'intro', label: '介绍信', skeleton: true },
+  { key: 'agreement', label: '协议书', skeleton: true },
 ])
+const currentTpl = computed(() => templates.value.find((t) => t.key === template.value))
+
+async function insertSkeleton() {
+  if (text.value.trim() && !window.confirm('会替换当前正文内容，继续？')) return
+  try {
+    text.value = await getDocSkeleton(template.value)
+    source.value = 'text'
+  } catch {
+    ElMessage.error('范文加载失败')
+  }
+}
 const busy = ref(false)
 const ocrBusy = ref(false)
 const imgInput = ref<HTMLInputElement>()
@@ -122,7 +136,16 @@ async function run() {
       </div>
 
       <div>
-        <label class="mb-1 block text-xs font-medium text-gray-600">格式模板</label>
+        <div class="mb-1 flex items-center justify-between">
+          <label class="text-xs font-medium text-gray-600">格式模板</label>
+          <button
+            v-if="currentTpl?.skeleton"
+            class="text-[11px] text-violet-500 hover:underline"
+            @click="insertSkeleton"
+          >
+            插入范文骨架
+          </button>
+        </div>
         <div class="flex flex-wrap gap-1.5">
           <button
             v-for="t in templates"
@@ -135,7 +158,7 @@ async function run() {
           </button>
         </div>
         <p class="mt-1 text-[11px] text-gray-400">
-          通用=黑体标题+宋体正文；工作报告/公文=仿宋正文、三号字、分级标题
+          通用/报告/公文=普通文档；书信/介绍信/协议书=自动处理称谓、此致敬礼、落款右对齐
         </p>
       </div>
 
