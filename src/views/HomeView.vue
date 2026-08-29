@@ -30,6 +30,7 @@ const TOOL_TABS = [
   { key: 'excel-tools', label: 'Excel 工具', desc: '工资条拆分、多表合并去重', enabled: true, route: '/ai-tools?tab=excel' },
   { key: 'convert-tools', label: '数字/拼音', desc: '金额大写、汉字转拼音', enabled: true, route: '/ai-tools?tab=convert' },
   { key: 'calc-tools', label: '计算器', desc: '房贷、个税、价税分离、日期', enabled: true, route: '/ai-tools?tab=calc' },
+  { key: 'img-watermark', label: '图片加水印', desc: '文字/logo水印，可平铺防盗图', enabled: true, route: '/ai-tools?tab=imgwatermark' },
   { key: 'ai-cutout', label: 'AI 抠图', desc: '一键去背景', enabled: true, route: '/ai-tools?tab=cutout' },
   { key: 'ai-erase', label: 'AI 消除', desc: '涂抹去水印', enabled: true, route: '/ai-tools?tab=erase' },
   { key: 'ai-textreplace', label: 'AI 改字', desc: '一键改日期/价格/文案', enabled: true, route: '/ai-tools?tab=textreplace' },

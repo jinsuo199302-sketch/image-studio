@@ -18,6 +18,7 @@ const VALID_TABS = [
   'excel',
   'convert',
   'calc',
+  'imgwatermark',
   'cutout',
   'erase',
   'textreplace',

@@ -11,6 +11,7 @@ import AIPptTab from './ai/AIPptTab.vue'
 import AIExcelTab from './ai/AIExcelTab.vue'
 import AIConvertTab from './ai/AIConvertTab.vue'
 import AICalcTab from './ai/AICalcTab.vue'
+import AIImageWatermarkTab from './ai/AIImageWatermarkTab.vue'
 import AICutoutTab from './ai/AICutoutTab.vue'
 import AIEraseTab from './ai/AIEraseTab.vue'
 import AITextReplaceTab from './ai/AITextReplaceTab.vue'
@@ -37,6 +38,7 @@ type TabKey =
   | 'excel'
   | 'convert'
   | 'calc'
+  | 'imgwatermark'
   | 'cutout'
   | 'erase'
   | 'textreplace'
@@ -88,6 +90,7 @@ function useSignatureInPdf(dataUrl: string) {
           { key: 'excel', label: 'Excel' },
           { key: 'convert', label: '数字拼音' },
           { key: 'calc', label: '计算器' },
+          { key: 'imgwatermark', label: '图片水印' },
           { key: 'cutout', label: '抠图' },
           { key: 'erase', label: '消除' },
           { key: 'textreplace', label: '改字' },
@@ -132,6 +135,7 @@ function useSignatureInPdf(dataUrl: string) {
       <AIExcelTab v-else-if="activeTab === 'excel'" />
       <AIConvertTab v-else-if="activeTab === 'convert'" />
       <AICalcTab v-else-if="activeTab === 'calc'" />
+      <AIImageWatermarkTab v-else-if="activeTab === 'imgwatermark'" />
       <AICutoutTab v-else-if="activeTab === 'cutout'" />
       <AIEraseTab v-else-if="activeTab === 'erase'" />
       <AITextReplaceTab v-else-if="activeTab === 'textreplace'" />
