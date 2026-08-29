@@ -5,7 +5,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
-from app import crud, models
+from pydantic import BaseModel
+from starlette.requests import Request
+
+from app import analytics, crud, models
 from app.ai_proxy import GENERATED_ASSETS_DIR
 from app.ai_proxy import router as ai_proxy_router
 from app.auth import get_current_user, get_current_user_optional
@@ -41,6 +44,54 @@ app.add_middleware(
 app.include_router(pdf_router)
 app.include_router(auth_router)
 app.include_router(ai_proxy_router)
+
+
+@app.middleware("http")
+async def _track_tool_usage(request: Request, call_next):
+    """工具接口调用完自动记一行埋点（异步、失败不影响请求）。"""
+    response = await call_next(request)
+    try:
+        if analytics.feature_for_path(request.url.path):
+            with SessionLocal() as db:
+                analytics.record_from_request(
+                    db, request.url.path, request.headers.get("authorization"), response.status_code
+                )
+    except Exception:
+        pass
+    return response
+
+
+class EventIn(BaseModel):
+    feature: str
+    kind: str = "view"
+
+
+@app.post("/api/event")
+def log_event(
+    payload: EventIn,
+    db: Session = Depends(get_db),
+    user: Optional[models.User] = Depends(get_current_user_optional),
+):
+    """前端埋点：纯前端工具（计算器/水印/压缩等）没有后端调用，靠这个上报"打开了 X"。"""
+    feat = payload.feature.strip()[:60]
+    if feat:
+        analytics.record(db, feat, "view" if payload.kind != "action" else "action", user.id if user else None, True)
+    return {"ok": True}
+
+
+@app.get("/api/admin/stats")
+def admin_stats(
+    days: int = 7,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    from app.config import ADMIN_EMAILS
+
+    first_user = db.query(models.User).order_by(models.User.created_at).first()
+    allowed = (user.email.lower() in ADMIN_EMAILS) if ADMIN_EMAILS else (first_user and first_user.id == user.id)
+    if not allowed:
+        raise HTTPException(status_code=403, detail="无权访问")
+    return analytics.stats(db, days=max(1, min(90, days)))
 # 落在 /api/ 前缀下才会被 nginx 的 /api/ location 代理到这个后端进程，不用额外改 nginx 配置
 app.mount("/api/ai/generated", StaticFiles(directory=GENERATED_ASSETS_DIR), name="generated-assets")
 

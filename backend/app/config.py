@@ -55,6 +55,9 @@ BOCHA_API_KEY = os.environ.get("BOCHA_API_KEY", "")
 # 开启时：启动打一次横幅，之后每个被跳过的请求都往 stderr 记一行，方便事后发现忘了关。
 DEV_UNRESTRICTED = os.environ.get("DEV_UNRESTRICTED", "").strip().lower() in ("1", "true", "yes", "on")
 
+# 看数据看板的管理员邮箱（逗号分隔）。不设则第一个注册的用户是管理员。
+ADMIN_EMAILS = [e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()]
+
 if DEV_UNRESTRICTED:
     _banner = "!" * 64
     print(_banner, file=sys.stderr)

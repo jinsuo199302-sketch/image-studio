@@ -40,6 +40,20 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class ToolEvent(Base):
+    """轻量埋点：每次工具被调用/打开记一行。只为了知道哪些工具有人用、用得多不多，
+    不存任何用户输入内容。`feature` 形如 'colorize' / 'tab:calc'，`kind` = action(真跑了) / view(打开了)。"""
+    __tablename__ = "tool_events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    feature = Column(String, nullable=False, index=True)
+    kind = Column(String, nullable=False, default="action")
+    user_id = Column(String, nullable=True, index=True)
+    ok = Column(Integer, nullable=False, default=1)
+    day = Column(String, nullable=False, index=True)  # 'YYYY-MM-DD'，按天聚合用
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class GeneratedAsset(Base):
     """AI 生成的图片素材（目前只有"参考图生成"的背景图会自动存），私有——只有生成者自己能看到/删除。
     只存 file_name（磁盘上的相对文件名），不存完整 URL，域名/端口变了也不用改数据。"""

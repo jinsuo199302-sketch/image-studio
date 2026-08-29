@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { logView } from '../../../services/analytics'
 import AIImageTab from './ai/AIImageTab.vue'
 import AIWriteTab from './ai/AIWriteTab.vue'
 import AITranslateTab from './ai/AITranslateTab.vue'
@@ -61,8 +62,10 @@ const emit = defineEmits<{
 }>()
 
 const activeTab = ref<TabKey>(props.initialTab ?? 'image')
+logView('tab:' + activeTab.value)
 function pickTab(key: string) {
   activeTab.value = key as TabKey
+  logView('tab:' + key)
 }
 
 // 「签名」→「PDF 签名」的跨 tab 交接：签名 tab 生成的 PNG 直接塞进 PDF tab 的签名流程，

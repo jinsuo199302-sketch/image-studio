@@ -120,6 +120,15 @@ sudo journalctl -u image-studio-backend -n 50 --no-pager | grep -iE "DEV_UNRESTR
 
 ---
 
+## 三点五、使用数据看板
+
+- 访问 `https://picflowlab.cn/admin` —— 近 7/14/30 天各工具的打开次数、实际调用次数、成功数 + 每日活跃 + 新增用户。
+- **谁能看**：默认第一个注册的用户。要指定别人,在 🖥️ 服务器 `backend/.env` 加一行 `ADMIN_EMAILS=a@x.com,b@y.com` 再 `sudo systemctl restart image-studio-backend`。
+- 埋点表 `tool_events`,只记 feature 名 + 用户 id + 成功与否 + 日期,**不存任何用户上传/输入的内容**。
+- 直接查数据库:`cd ~/image-studio/backend && venv/bin/python -c "from app.database import SessionLocal; from app import analytics; import json; print(json.dumps(analytics.stats(SessionLocal(),7),ensure_ascii=False,indent=1))"`
+
+---
+
 ## 四、排障速查
 
 | 症状 | 先做什么 |
