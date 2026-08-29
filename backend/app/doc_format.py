@@ -125,6 +125,22 @@ def parse(text: str, explicit_title: str | None = None) -> list[Block]:
             i = j
             continue
 
+        # 文档标题：第一个内容块、不是 markdown 标题行、较短、无句末标点 —— 当文档大标题。
+        # 不受 has_md_heading 影响（豆包常见写法是首行裸标题 + 下面全是 ## 小标题）。
+        if (
+            not blocks
+            and not title_used
+            and not explicit_title
+            and not line.startswith("#")
+            and not re.match(r"^\s*([-*+>|]|\d+[.)、])\s", raw)
+            and len(line) <= 32
+            and not re.search(r"[。！？，、；：,.!?]$", line)
+        ):
+            blocks.append(Block("title", spans=_parse_spans(line)))
+            title_used = True
+            i += 1
+            continue
+
         # markdown 标题
         m = re.match(r"^(#{1,6})\s+(.*)", line)
         if m:
@@ -179,12 +195,6 @@ def parse(text: str, explicit_title: str | None = None) -> list[Block]:
                 blocks.append(Block("heading", level=4, spans=_parse_spans(line)))
                 i += 1
                 continue
-            # 首行且短、无句末标点 —— 当标题
-            if not blocks and len(line) <= 30 and not re.search(r"[。！？，、；：]$", line):
-                blocks.append(Block("title", spans=_parse_spans(line)))
-                title_used = True
-                i += 1
-                continue
 
         blocks.append(Block("para", spans=_parse_spans(line)))
         i += 1
@@ -204,7 +214,7 @@ _TEMPLATES: dict[str, dict] = {
     "general": {
         "label": "通用文档",
         "margins": (2.54, 2.54, 3.18, 3.18),  # 上下左右 cm
-        "title": {"font": "黑体", "size": 22, "align": "center", "bold": False, "after": 18},
+        "title": {"font": "黑体", "size": 22, "align": "center", "bold": True, "after": 18},
         "headings": [
             {"font": "黑体", "size": 16, "bold": False, "before": 12, "after": 6},
             {"font": "黑体", "size": 14, "bold": False, "before": 10, "after": 4},
@@ -216,7 +226,7 @@ _TEMPLATES: dict[str, dict] = {
     "report": {
         "label": "工作报告",
         "margins": (2.54, 2.54, 2.8, 2.8),
-        "title": {"font": "方正小标宋简体", "size": 22, "align": "center", "bold": False, "after": 24,
+        "title": {"font": "方正小标宋简体", "size": 22, "align": "center", "bold": True, "after": 24,
                   "fallback": "宋体"},
         "headings": [
             {"font": "黑体", "size": 16, "bold": False, "before": 12, "after": 6},
@@ -231,7 +241,7 @@ _TEMPLATES: dict[str, dict] = {
         # 二级"（一）"楷体，三级"1."仿宋加粗。字体名用系统自带的。
         "label": "公文格式",
         "margins": (3.7, 3.5, 2.8, 2.6),
-        "title": {"font": "方正小标宋简体", "size": 22, "align": "center", "bold": False, "after": 24,
+        "title": {"font": "方正小标宋简体", "size": 22, "align": "center", "bold": True, "after": 24,
                   "fallback": "宋体"},
         "headings": [
             {"font": "黑体", "size": 16, "bold": False, "before": 0, "after": 0},
