@@ -29,4 +29,9 @@ def migrate_schema():
             conn.execute(text("ALTER TABLE templates ADD COLUMN industry TEXT NOT NULL DEFAULT '通用场景'"))
         if "user_id" not in existing:
             conn.execute(text("ALTER TABLE templates ADD COLUMN user_id TEXT"))
+
+        user_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(users)"))}
+        if user_cols and "credits" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN credits INTEGER NOT NULL DEFAULT 0"))
+
         conn.commit()

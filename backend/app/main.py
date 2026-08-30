@@ -79,19 +79,73 @@ def log_event(
     return {"ok": True}
 
 
-@app.get("/api/admin/stats")
-def admin_stats(
-    days: int = 7,
-    db: Session = Depends(get_db),
-    user: models.User = Depends(get_current_user),
-):
+def _require_admin(user: models.User, db: Session) -> None:
     from app.config import ADMIN_EMAILS
 
     first_user = db.query(models.User).order_by(models.User.created_at).first()
     allowed = (user.email.lower() in ADMIN_EMAILS) if ADMIN_EMAILS else (first_user and first_user.id == user.id)
     if not allowed:
         raise HTTPException(status_code=403, detail="无权访问")
+
+
+@app.get("/api/admin/stats")
+def admin_stats(
+    days: int = 7,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    _require_admin(user, db)
     return analytics.stats(db, days=max(1, min(90, days)))
+
+
+@app.get("/api/billing/info")
+def billing_info():
+    from app import config
+
+    return {
+        "signup_free": config.SIGNUP_FREE_CREDITS,
+        "packages": config.CREDIT_PACKAGES,
+        "qr_url": config.PAYMENT_QR_URL,
+        "contact": config.PAYMENT_CONTACT,
+        "metered": config.METERED_FEATURES,  # 空 = 全部免费
+    }
+
+
+@app.get("/api/billing/logs")
+def billing_logs(db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+    rows = crud.list_credit_logs(db, user.id)
+    return {
+        "credits": user.credits,
+        "logs": [
+            {"delta": r.delta, "balance_after": r.balance_after, "reason": r.reason,
+             "feature": r.feature, "note": r.note, "at": r.created_at.isoformat()}
+            for r in rows
+        ],
+    }
+
+
+class GrantCreditsIn(BaseModel):
+    email: str
+    amount: int
+    note: str = ""
+
+
+@app.post("/api/admin/grant-credits")
+def grant_credits(
+    payload: GrantCreditsIn,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    _require_admin(user, db)
+    target = crud.get_user_by_email(db, payload.email.strip().lower())
+    if not target:
+        raise HTTPException(status_code=404, detail="没有这个邮箱的用户")
+    if not -100000 < payload.amount < 100000 or payload.amount == 0:
+        raise HTTPException(status_code=400, detail="数量不合理")
+    new_balance = crud.adjust_credits(
+        db, target, payload.amount, reason="grant", note=payload.note or f"管理员{'充值' if payload.amount > 0 else '扣减'}"
+    )
+    return {"email": target.email, "delta": payload.amount, "balance": new_balance}
 # 落在 /api/ 前缀下才会被 nginx 的 /api/ location 代理到这个后端进程，不用额外改 nginx 配置
 app.mount("/api/ai/generated", StaticFiles(directory=GENERATED_ASSETS_DIR), name="generated-assets")
 

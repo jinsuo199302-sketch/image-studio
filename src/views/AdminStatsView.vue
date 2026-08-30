@@ -22,6 +22,28 @@ const stats = ref<Stats | null>(null)
 const error = ref('')
 const loading = ref(false)
 
+const grantEmail = ref('')
+const grantAmount = ref(10)
+const grantNote = ref('')
+const grantMsg = ref('')
+async function grant() {
+  grantMsg.value = ''
+  try {
+    const res = await fetch('/api/admin/grant-credits', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
+      body: JSON.stringify({ email: grantEmail.value.trim(), amount: grantAmount.value, note: grantNote.value.trim() }),
+    })
+    const d = await res.json()
+    if (!res.ok) throw new Error(d?.detail || '失败')
+    grantMsg.value = `${d.email} 现在有 ${d.balance} 次（${d.delta > 0 ? '+' : ''}${d.delta}）`
+    grantEmail.value = ''
+    grantNote.value = ''
+  } catch (e) {
+    grantMsg.value = e instanceof Error ? e.message : '失败'
+  }
+}
+
 async function load() {
   loading.value = true
   error.value = ''
@@ -100,6 +122,17 @@ onMounted(load)
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <div class="mb-4 rounded-lg border border-gray-200 bg-white p-4">
+          <div class="mb-2 text-xs font-medium text-gray-500">手动加/扣次数（收到付款后用）</div>
+          <div class="flex flex-wrap items-center gap-2">
+            <el-input v-model="grantEmail" size="small" placeholder="用户邮箱" class="!w-48" />
+            <el-input-number v-model="grantAmount" size="small" :step="5" class="!w-28" />
+            <el-input v-model="grantNote" size="small" placeholder="备注（可选）" class="!w-40" />
+            <el-button size="small" type="primary" @click="grant">提交</el-button>
+          </div>
+          <p v-if="grantMsg" class="mt-2 text-xs text-gray-600">{{ grantMsg }}</p>
         </div>
 
         <div class="overflow-hidden rounded-lg border border-gray-200 bg-white">

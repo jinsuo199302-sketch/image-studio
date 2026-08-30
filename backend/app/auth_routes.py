@@ -3,7 +3,7 @@ import re
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app import auth, crud, models, schemas
+from app import auth, config, crud, models, schemas
 from app.database import get_db
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -20,7 +20,9 @@ def register(payload: schemas.UserRegister, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="密码至少 6 位")
     if crud.get_user_by_email(db, email):
         raise HTTPException(status_code=400, detail="该邮箱已注册")
-    user = crud.create_user(db, email, auth.hash_password(payload.password))
+    user = crud.create_user(
+        db, email, auth.hash_password(payload.password), free_credits=config.SIGNUP_FREE_CREDITS
+    )
     return {"token": auth.create_token(user.id), "user": user}
 
 

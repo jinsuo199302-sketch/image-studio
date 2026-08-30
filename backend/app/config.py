@@ -58,6 +58,22 @@ DEV_UNRESTRICTED = os.environ.get("DEV_UNRESTRICTED", "").strip().lower() in ("1
 # 看数据看板的管理员邮箱（逗号分隔）。不设则第一个注册的用户是管理员。
 ADMIN_EMAILS = [e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()]
 
+# ── 次数系统 ──────────────────────────────────────────────────────
+# 新用户注册赠送的免费次数
+SIGNUP_FREE_CREDITS = int(os.environ.get("SIGNUP_FREE_CREDITS", "5"))
+# 收款码图片 URL（放 public/ 里或外链），充值弹窗展示。空 = 弹窗只显示套餐+联系方式
+PAYMENT_QR_URL = os.environ.get("PAYMENT_QR_URL", "")
+PAYMENT_CONTACT = os.environ.get("PAYMENT_CONTACT", "付款后请把「注册邮箱 + 付款截图」发给客服，人工到账")
+# 充值套餐（展示用，实际到账靠管理员手动加）
+CREDIT_PACKAGES = [
+    {"credits": 10, "price": 9},
+    {"credits": 50, "price": 39},
+    {"credits": 100, "price": 69},
+]
+# 哪些工具要扣次数、扣几次。**留空 = 全部免费**，等埋点数据出来再按需填。
+# 例：{"老照片上色": 1, "AI生图": 1, "参考图生成": 2}
+METERED_FEATURES: dict[str, int] = {}
+
 if DEV_UNRESTRICTED:
     _banner = "!" * 64
     print(_banner, file=sys.stderr)

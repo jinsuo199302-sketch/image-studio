@@ -37,6 +37,21 @@ class User(Base):
     id = Column(String, primary_key=True, index=True)
     email = Column(String, nullable=False, unique=True, index=True)
     password_hash = Column(String, nullable=False)
+    credits = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class CreditLog(Base):
+    """次数流水：每次充值/扣费/赠送记一行，可审计。delta 正=加、负=扣。"""
+    __tablename__ = "credit_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, nullable=False, index=True)
+    delta = Column(Integer, nullable=False)
+    balance_after = Column(Integer, nullable=False)
+    reason = Column(String, nullable=False)  # signup / grant / spend / refund
+    feature = Column(String, nullable=False, default="")
+    note = Column(String, nullable=False, default="")
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

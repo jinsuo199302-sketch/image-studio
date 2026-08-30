@@ -120,12 +120,17 @@ sudo journalctl -u image-studio-backend -n 50 --no-pager | grep -iE "DEV_UNRESTR
 
 ---
 
-## 三点五、使用数据看板
+## 三点五、数据看板 + 次数系统
 
-- 访问 `https://picflowlab.cn/admin` —— 近 7/14/30 天各工具的打开次数、实际调用次数、成功数 + 每日活跃 + 新增用户。
-- **谁能看**：默认第一个注册的用户。要指定别人,在 🖥️ 服务器 `backend/.env` 加一行 `ADMIN_EMAILS=a@x.com,b@y.com` 再 `sudo systemctl restart image-studio-backend`。
-- 埋点表 `tool_events`,只记 feature 名 + 用户 id + 成功与否 + 日期,**不存任何用户上传/输入的内容**。
-- 直接查数据库:`cd ~/image-studio/backend && venv/bin/python -c "from app.database import SessionLocal; from app import analytics; import json; print(json.dumps(analytics.stats(SessionLocal(),7),ensure_ascii=False,indent=1))"`
+**看板**：`https://picflowlab.cn/admin` —— 近 7/14/30 天各工具打开/调用/成功数 + 每日活跃 + 新增用户 + 底部「手动加/扣次数」表单。
+- **谁能看/操作**：默认第一个注册的用户。指定别人：`backend/.env` 加 `ADMIN_EMAILS=a@x.com,b@y.com` 再重启。
+- 埋点表 `tool_events`：feature名 + user id + 成功与否 + 日期，**不存任何用户内容**。
+
+**次数系统（骨架已上线，当前全部工具免费）**：
+- `User.credits` 余额 + `credit_logs` 流水（充值/扣费/赠送/退回，可审计）。新用户注册送 `SIGNUP_FREE_CREDITS`（默认 5，`.env` 可改）。
+- **哪些工具收费、扣几次**：`backend/app/config.py` 的 `METERED_FEATURES`（现在是空 `{}` = 全免费）。等看板数据出来再填，例：`METERED_FEATURES = {"老照片上色": 1, "AI生图": 1}`。填完对应接口里加 `billing.ensure_and_charge` / `billing.refund`（见 `app/billing.py` 注释，接口还没接）。
+- **收款**：`.env` 设 `PAYMENT_QR_URL`（收款码图 URL）、`PAYMENT_CONTACT`（联系方式文案）；套餐在 `config.CREDIT_PACKAGES`。用户扫码付款 → 发邮箱+截图 → 你在 `/admin` 手动加次数。聚合支付（虎皮椒等）以后再接。
+- 前端：Header 显示「剩余 N 次」，点开是充值弹窗。
 
 ---
 

@@ -63,6 +63,14 @@ export const useAuthStore = defineStore('auth', {
         this.logout()
       }
     },
+    async refreshMe() {
+      if (!this.token) return
+      try {
+        this.user = await authApi.fetchMe(this.token)
+      } catch {
+        /* 保持现状 */
+      }
+    },
     logout() {
       this.token = ''
       this.user = null

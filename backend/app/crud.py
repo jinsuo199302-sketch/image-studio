@@ -90,12 +90,40 @@ def get_user(db: Session, user_id: str):
     return db.query(models.User).filter(models.User.id == user_id).first()
 
 
-def create_user(db: Session, email: str, password_hash: str):
-    user = models.User(id=uuid.uuid4().hex[:16], email=email, password_hash=password_hash)
+def create_user(db: Session, email: str, password_hash: str, free_credits: int = 0):
+    user = models.User(
+        id=uuid.uuid4().hex[:16], email=email, password_hash=password_hash, credits=max(0, free_credits)
+    )
     db.add(user)
     db.commit()
     db.refresh(user)
+    if free_credits > 0:
+        db.add(models.CreditLog(
+            user_id=user.id, delta=free_credits, balance_after=user.credits, reason="signup", note="注册赠送"
+        ))
+        db.commit()
     return user
+
+
+def adjust_credits(db: Session, user: models.User, delta: int, reason: str, feature: str = "", note: str = "") -> int:
+    """给用户加/扣次数并记流水。返回新余额。扣费时若余额不足会扣成 0（调用方应先校验）。"""
+    user.credits = max(0, user.credits + delta)
+    db.add(models.CreditLog(
+        user_id=user.id, delta=delta, balance_after=user.credits, reason=reason, feature=feature, note=note
+    ))
+    db.commit()
+    db.refresh(user)
+    return user.credits
+
+
+def list_credit_logs(db: Session, user_id: str, limit: int = 50):
+    return (
+        db.query(models.CreditLog)
+        .filter(models.CreditLog.user_id == user_id)
+        .order_by(models.CreditLog.id.desc())
+        .limit(limit)
+        .all()
+    )
 
 
 def create_generated_asset(db: Session, user_id: str, category: str, file_name: str):

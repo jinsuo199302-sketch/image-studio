@@ -75,6 +75,7 @@ class UserOut(BaseModel):
 
     id: str
     email: str
+    credits: int = 0
     created_at: datetime
 
 
