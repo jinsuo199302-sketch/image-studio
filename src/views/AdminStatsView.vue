@@ -47,6 +47,50 @@ async function grant() {
 const memEmail = ref('')
 const memMonths = ref(1)
 const memMsg = ref('')
+
+interface Recharge {
+  id: number
+  email: string
+  kind: string
+  amount_yuan: string
+  want: string
+  note: string
+  at: string
+}
+const recharges = ref<Recharge[]>([])
+async function loadRecharges() {
+  try {
+    const d = await fetch('/api/admin/recharge-requests', {
+      headers: { Authorization: `Bearer ${authToken()}` },
+    }).then((r) => r.json())
+    recharges.value = d.list || []
+  } catch {
+    /* ignore */
+  }
+}
+async function resolveRecharge(r: Recharge, action: string) {
+  const body: Record<string, unknown> = { id: r.id, action }
+  if (action === 'confirm_credits') {
+    const n = Number(window.prompt(`给 ${r.email} 加几次？（TA想买：${r.want || '未填'}，付了 ¥${r.amount_yuan || '?'}）`, '100'))
+    if (!n || n <= 0) return
+    body.credits = n
+  } else if (action === 'confirm_membership') {
+    const m = Number(window.prompt(`给 ${r.email} 开几个月会员？`, r.want.replace(/\D/g, '') || '1'))
+    if (!m || m <= 0) return
+    body.months = m
+  }
+  try {
+    const res = await fetch('/api/admin/resolve-recharge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
+      body: JSON.stringify(body),
+    })
+    if (!res.ok) throw new Error((await res.json())?.detail || '失败')
+    await loadRecharges()
+  } catch (e) {
+    window.alert(e instanceof Error ? e.message : '失败')
+  }
+}
 async function grantMember() {
   memMsg.value = ''
   try {
@@ -82,7 +126,10 @@ async function load() {
     loading.value = false
   }
 }
-onMounted(load)
+onMounted(() => {
+  load()
+  loadRecharges()
+})
 </script>
 
 <template>
@@ -142,6 +189,23 @@ onMounted(load)
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <div v-if="recharges.length" class="mb-4 overflow-hidden rounded-lg border border-amber-200 bg-white">
+          <div class="border-b border-amber-100 bg-amber-50 px-4 py-2 text-xs font-medium text-amber-700">
+            待确认充值 ({{ recharges.length }})
+          </div>
+          <div v-for="r in recharges" :key="r.id" class="flex flex-wrap items-center gap-2 border-b border-gray-50 px-4 py-2 text-xs last:border-0">
+            <span class="font-medium text-gray-700">{{ r.email }}</span>
+            <span class="text-gray-500">付 ¥{{ r.amount_yuan || '?' }} · 想要「{{ r.want || '未填' }}」</span>
+            <span v-if="r.note" class="text-gray-400">备注：{{ r.note }}</span>
+            <span class="text-gray-300">{{ r.at.slice(5, 16).replace('T', ' ') }}</span>
+            <div class="ml-auto flex gap-1.5">
+              <button class="rounded border border-violet-300 px-2 py-0.5 text-violet-600" @click="resolveRecharge(r, 'confirm_credits')">确认→加次数</button>
+              <button class="rounded border border-amber-300 px-2 py-0.5 text-amber-600" @click="resolveRecharge(r, 'confirm_membership')">确认→开会员</button>
+              <button class="rounded border border-gray-200 px-2 py-0.5 text-gray-400" @click="resolveRecharge(r, 'reject')">驳回</button>
+            </div>
+          </div>
         </div>
 
         <div class="mb-4 space-y-3 rounded-lg border border-gray-200 bg-white p-4">

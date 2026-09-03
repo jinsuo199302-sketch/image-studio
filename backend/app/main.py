@@ -138,6 +138,33 @@ def ad_reward(payload: AdRewardIn, db: Session = Depends(get_db),
     return billing.grant_ad_reward(db, user, payload.feature.strip())
 
 
+class RechargeIn(BaseModel):
+    kind: str = "credits"       # credits / membership
+    amount_yuan: str = ""
+    want: str = ""
+    note: str = ""
+
+
+@app.post("/api/billing/recharge-request")
+def recharge_request(payload: RechargeIn, db: Session = Depends(get_db),
+                     user: models.User = Depends(get_current_user)):
+    """用户扫码付款后提交「我已付款」。进 pending 队列，等管理员在 /admin 确认。"""
+    pending = (
+        db.query(models.RechargeRequest)
+        .filter(models.RechargeRequest.user_id == user.id, models.RechargeRequest.status == "pending")
+        .count()
+    )
+    if pending >= 5:
+        raise HTTPException(status_code=429, detail="你有多条待处理的充值，请等客服确认")
+    r = models.RechargeRequest(
+        user_id=user.id, email=user.email, kind=payload.kind,
+        amount_yuan=payload.amount_yuan.strip()[:20], want=payload.want.strip()[:60], note=payload.note.strip()[:200],
+    )
+    db.add(r)
+    db.commit()
+    return {"ok": True, "id": r.id}
+
+
 @app.get("/api/billing/logs")
 def billing_logs(db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
     rows = crud.list_credit_logs(db, user.id)
@@ -205,6 +232,67 @@ def grant_membership(
         "membership_until": target.membership_until.isoformat(),
         "credits": target.credits,
     }
+
+
+@app.get("/api/admin/recharge-requests")
+def admin_recharge_requests(db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+    _require_admin(user, db)
+    rows = (
+        db.query(models.RechargeRequest)
+        .filter(models.RechargeRequest.status == "pending")
+        .order_by(models.RechargeRequest.id.desc())
+        .limit(50)
+        .all()
+    )
+    return {"list": [
+        {"id": r.id, "email": r.email, "kind": r.kind, "amount_yuan": r.amount_yuan,
+         "want": r.want, "note": r.note, "at": r.created_at.isoformat()}
+        for r in rows
+    ]}
+
+
+class ResolveRechargeIn(BaseModel):
+    id: int
+    action: str            # confirm_credits / confirm_membership / reject
+    credits: int = 0
+    months: int = 1
+    note: str = ""
+
+
+@app.post("/api/admin/resolve-recharge")
+def admin_resolve_recharge(
+    payload: ResolveRechargeIn, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)
+):
+    from app import config
+
+    _require_admin(user, db)
+    r = db.query(models.RechargeRequest).filter(models.RechargeRequest.id == payload.id).first()
+    if not r or r.status != "pending":
+        raise HTTPException(status_code=404, detail="记录不存在或已处理")
+    target = crud.get_user(db, r.user_id)
+    result: dict = {}
+    if payload.action == "reject":
+        r.status = "rejected"
+    elif payload.action == "confirm_credits":
+        if payload.credits <= 0:
+            raise HTTPException(status_code=400, detail="次数要大于 0")
+        bal = crud.adjust_credits(db, target, payload.credits, reason="grant", note=payload.note or "确认充值")
+        r.status = "done"
+        result = {"credits": bal}
+    elif payload.action == "confirm_membership":
+        months = max(1, min(24, payload.months))
+        base = target.membership_until if (target.membership_until and target.membership_until > datetime.utcnow()) else datetime.utcnow()
+        target.membership_until = base + timedelta(days=config.MEMBERSHIP_DAYS * months)
+        bonus = config.MEMBER_MONTHLY_CREDITS * months
+        if bonus:
+            crud.adjust_credits(db, target, bonus, reason="grant", note=f"会员 {months} 个月")
+        r.status = "done"
+        result = {"membership_until": target.membership_until.isoformat(), "credits": target.credits}
+    else:
+        raise HTTPException(status_code=400, detail="未知操作")
+    r.handled_at = datetime.utcnow()
+    db.commit()
+    return {"email": r.email, **result}
 # 落在 /api/ 前缀下才会被 nginx 的 /api/ location 代理到这个后端进程，不用额外改 nginx 配置
 app.mount("/api/ai/generated", StaticFiles(directory=GENERATED_ASSETS_DIR), name="generated-assets")
 

@@ -62,8 +62,12 @@ ADMIN_EMAILS = [e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").sp
 # 新用户注册赠送的免费次数
 SIGNUP_FREE_CREDITS = int(os.environ.get("SIGNUP_FREE_CREDITS", "5"))
 # 收款码图片 URL（放 public/ 里或外链），充值弹窗展示。空 = 弹窗只显示套餐+联系方式
-PAYMENT_QR_URL = os.environ.get("PAYMENT_QR_URL", "")
-PAYMENT_CONTACT = os.environ.get("PAYMENT_CONTACT", "付款后请把「注册邮箱 + 付款截图」发给客服，人工到账")
+# 收款码图片：把图片放 前端 public/pay-qr.png（部署后即 /pay-qr.png），或用 .env 指到别处
+PAYMENT_QR_URL = os.environ.get("PAYMENT_QR_URL", "/pay-qr.png")
+PAYMENT_CONTACT = os.environ.get(
+    "PAYMENT_CONTACT",
+    "微信扫码支付后，把「注册邮箱 + 付款截图 + 想买的套餐」发给客服（微信号：待填），一般 10 分钟内到账。",
+)
 # 充值套餐（展示用，实际到账靠管理员手动加）
 CREDIT_PACKAGES = [
     {"credits": 50, "price": 6},

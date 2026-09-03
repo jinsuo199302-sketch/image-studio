@@ -46,6 +46,22 @@ class User(Base):
         return self.membership_until is not None and self.membership_until > datetime.utcnow()
 
 
+class RechargeRequest(Base):
+    """用户扫码付款后自己提交的"我已付款"记录。管理员在 /admin 核对到账后一键确认加次数。"""
+    __tablename__ = "recharge_requests"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, nullable=False, index=True)
+    email = Column(String, nullable=False)
+    kind = Column(String, nullable=False, default="credits")  # credits / membership
+    amount_yuan = Column(String, nullable=False, default="")   # 用户填的付款金额
+    want = Column(String, nullable=False, default="")          # 想买什么（套餐/几个月会员）
+    note = Column(String, nullable=False, default="")          # 付款方式/昵称/备注
+    status = Column(String, nullable=False, default="pending", index=True)  # pending / done / rejected
+    created_at = Column(DateTime, default=datetime.utcnow)
+    handled_at = Column(DateTime, nullable=True)
+
+
 class DailyUsage(Base):
     """每个用户每天每个功能用了多少次免费额度。零点后自然失效（按 day 字段判断）。"""
     __tablename__ = "daily_usage"
