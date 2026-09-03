@@ -10,7 +10,6 @@ const VALID_TABS = [
   'image',
   'write',
   'translate',
-  'video',
   'pdf',
   'pdfconvert',
   'docformat',
@@ -65,7 +64,7 @@ function downloadImage(url: string) {
       <div class="flex h-full w-full max-w-sm flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
         <div class="border-b border-gray-100 px-4 py-3">
           <h1 class="text-sm font-semibold text-gray-800">工具箱</h1>
-          <p class="text-xs text-gray-400">生图 / 文案 / 翻译 / 视频 / PDF / 抠图 / 消除 / 改字 / 提字，结果可直接复制或下载</p>
+          <p class="text-xs text-gray-400">生图 / 文案 / 翻译 / PDF / 抠图 / 消除 / 改字 / 提字，结果可直接复制或下载</p>
         </div>
         <div class="min-h-0 flex-1">
           <AIPanel

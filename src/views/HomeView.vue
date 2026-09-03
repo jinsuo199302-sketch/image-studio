@@ -22,7 +22,6 @@ const TOOL_TABS = [
   { key: 'ai-image', label: 'AI 生图', desc: '文字生成图片', enabled: true, route: '/ai-tools?tab=image' },
   { key: 'ai-write', label: 'AI 文案', desc: '场景化模板一键出文案', enabled: true, route: '/ai-tools?tab=write' },
   { key: 'ai-translate', label: 'AI 翻译', desc: '多语言互译', enabled: true, route: '/ai-tools?tab=translate' },
-  { key: 'ai-video', label: 'AI 视频', desc: '文字生成视频', enabled: true, route: '/ai-tools?tab=video' },
   { key: 'pdf-tools', label: 'PDF 工具', desc: '合并 / 拆分', enabled: true, route: '/ai-tools?tab=pdf' },
   { key: 'pdf-convert', label: 'PDF 转换', desc: '图片↔PDF、加密、删页旋转', enabled: true, route: '/ai-tools?tab=pdfconvert' },
   { key: 'doc-format', label: '排版成 Word', desc: 'AI文字自动排版导出Word', enabled: true, route: '/ai-tools?tab=docformat' },

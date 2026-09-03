@@ -4,7 +4,6 @@ import { logView } from '../../../services/analytics'
 import AIImageTab from './ai/AIImageTab.vue'
 import AIWriteTab from './ai/AIWriteTab.vue'
 import AITranslateTab from './ai/AITranslateTab.vue'
-import AIVideoTab from './ai/AIVideoTab.vue'
 import AIPdfTab from './ai/AIPdfTab.vue'
 import AIPdfConvertTab from './ai/AIPdfConvertTab.vue'
 import AIDocFormatTab from './ai/AIDocFormatTab.vue'
@@ -31,7 +30,6 @@ type TabKey =
   | 'image'
   | 'write'
   | 'translate'
-  | 'video'
   | 'pdf'
   | 'pdfconvert'
   | 'docformat'
@@ -85,7 +83,6 @@ function useSignatureInPdf(dataUrl: string) {
           { key: 'image', label: '生图' },
           { key: 'write', label: '文案' },
           { key: 'translate', label: '翻译' },
-          { key: 'video', label: '视频' },
           { key: 'pdf', label: 'PDF' },
           { key: 'pdfconvert', label: 'PDF转换' },
           { key: 'docformat', label: '排版Word' },
@@ -130,7 +127,6 @@ function useSignatureInPdf(dataUrl: string) {
         @insert="(text) => emit('insert-text', text)"
         @replace-selected="(text) => emit('replace-selected-text', text)"
       />
-      <AIVideoTab v-else-if="activeTab === 'video'" />
       <AIPdfTab v-else-if="activeTab === 'pdf'" :preset-signature="pdfPresetSignature" />
       <AIPdfConvertTab v-else-if="activeTab === 'pdfconvert'" />
       <AIDocFormatTab v-else-if="activeTab === 'docformat'" />
