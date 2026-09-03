@@ -33,5 +33,7 @@ def migrate_schema():
         user_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(users)"))}
         if user_cols and "credits" not in user_cols:
             conn.execute(text("ALTER TABLE users ADD COLUMN credits INTEGER NOT NULL DEFAULT 0"))
+        if user_cols and "membership_until" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN membership_until DATETIME"))
 
         conn.commit()

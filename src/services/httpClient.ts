@@ -1,3 +1,5 @@
+import { openCreditsDialog } from '../composables/creditsDialog'
+
 const TOKEN_KEY = 'image-studio.authToken'
 
 export function authToken(): string {
@@ -8,10 +10,12 @@ async function parseErrorOrThrow(res: Response, label: string): Promise<never> {
   let detail = `${label}：${res.status}`
   try {
     const data = await res.json()
-    if (data?.detail) detail = `${label}：${data.detail}`
+    if (data?.detail) detail = data.detail
   } catch {
     // 非 JSON 响应体时保留默认错误信息
   }
+  // 402 = 次数不足，自动弹充值/开会员
+  if (res.status === 402) openCreditsDialog()
   throw new Error(detail)
 }
 

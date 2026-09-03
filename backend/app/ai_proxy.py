@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from PIL import Image as PILImage
 from sqlalchemy.orm import Session
 
-from app import auth, crud, models
+from app import auth, billing, crud, models
 from app import content_research
 from app.config import (
     BASE_DIR,
@@ -228,19 +228,25 @@ async def _check_not_sensitive_document(image_bytes: bytes, media_type: str, fea
 @router.post("/images/generations")
 async def images_generations(
     payload: ImageGenerationRequest,
-    _user: models.User = Depends(auth.get_current_user),
+    user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
 ):
     _require_openlux()
     await _moderate_text(payload.prompt)
-    res = await _post_openlux(
-        f"{OPENLUX_BASE_URL}/images/generations",
-        timeout=170,
-        headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
-        json=payload.model_dump(),
-    )
-    if res.status_code >= 400:
-        raise HTTPException(status_code=502, detail=f"{res.status_code} {res.text}")
-    return res.json()
+    ticket = billing.consume(db, user, "AI生图")
+    try:
+        res = await _post_openlux(
+            f"{OPENLUX_BASE_URL}/images/generations",
+            timeout=170,
+            headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
+            json=payload.model_dump(),
+        )
+        if res.status_code >= 400:
+            raise HTTPException(status_code=502, detail=f"{res.status_code} {res.text}")
+        return res.json()
+    except Exception:
+        billing.refund_ticket(db, user, ticket)
+        raise
 
 
 @router.post("/images/edits")
@@ -416,7 +422,16 @@ async def design_reference_to_background(
     media_type = image.content_type or "image/png"
     await _check_not_sensitive_document(image_bytes, media_type, "参考图生成")
     b64_in = base64.b64encode(image_bytes).decode()
+    ticket = billing.consume(db, user, "参考图生成")
 
+    try:
+        return await _do_reference_to_background(db, user, media_type, b64_in)
+    except Exception:
+        billing.refund_ticket(db, user, ticket)
+        raise
+
+
+async def _do_reference_to_background(db, user, media_type: str, b64_in: str):
     vision_res = await _post_openlux(
         f"{OPENLUX_BASE_URL}/chat/completions",
         timeout=60,
@@ -744,6 +759,15 @@ async def design_reference_to_asset(
     img.crop(box).save(crop_buf, format="PNG")
     crop_b64 = base64.b64encode(crop_buf.getvalue()).decode()
 
+    ticket = billing.consume(db, user, "素材生成")
+    try:
+        return await _do_reference_to_asset(db, user, asset_type, text, crop_b64)
+    except Exception:
+        billing.refund_ticket(db, user, ticket)
+        raise
+
+
+async def _do_reference_to_asset(db, user, asset_type: str, text: str | None, crop_b64: str):
     instruction = _ASSET_ILLUSTRATION_STYLE_INSTRUCTION if asset_type == "illustration" else _ASSET_TEXT_STYLE_INSTRUCTION
     vision_res = await _post_openlux(
         f"{OPENLUX_BASE_URL}/chat/completions",

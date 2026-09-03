@@ -4,11 +4,11 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import LoginDialog from './LoginDialog.vue'
 import CreditsDialog from './CreditsDialog.vue'
+import { creditsDialogOpen } from '../composables/creditsDialog'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const loginOpen = ref(false)
-const creditsOpen = ref(false)
 
 authStore.restoreSession()
 </script>
@@ -33,10 +33,14 @@ authStore.restoreSession()
     <div class="flex items-center gap-3">
       <template v-if="authStore.isAuthenticated">
         <button
-          class="rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs text-violet-600 hover:bg-violet-100"
-          @click="creditsOpen = true"
+          class="rounded-full border px-3 py-1 text-xs"
+          :class="authStore.user?.is_member
+            ? '!border-amber-300 !bg-amber-50 !text-amber-600'
+            : 'border-violet-200 bg-violet-50 text-violet-600 hover:bg-violet-100'"
+          @click="creditsDialogOpen = true"
         >
-          剩余 {{ authStore.user?.credits ?? 0 }} 次
+          <span v-if="authStore.user?.is_member">👑 会员 · {{ authStore.user?.credits ?? 0 }} 次</span>
+          <span v-else>剩余 {{ authStore.user?.credits ?? 0 }} 次</span>
         </button>
         <el-dropdown>
           <span class="flex cursor-pointer items-center gap-2">
@@ -58,6 +62,6 @@ authStore.restoreSession()
     </div>
 
     <LoginDialog v-model="loginOpen" />
-    <CreditsDialog v-model="creditsOpen" />
+    <CreditsDialog v-model="creditsDialogOpen" />
   </header>
 </template>

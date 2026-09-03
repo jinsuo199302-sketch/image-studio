@@ -69,6 +69,7 @@ export const useGenerationStore = defineStore('generation', {
         })
         this.history = this.history.slice(0, MAX_HISTORY_SESSIONS)
         saveHistory(this.history)
+        authStore.refreshMe() // 刷新剩余次数
       } catch (e) {
         this.error = e instanceof Error ? e.message : '生成失败，请重试'
       } finally {

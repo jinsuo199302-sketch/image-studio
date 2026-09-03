@@ -58,7 +58,7 @@ DEV_UNRESTRICTED = os.environ.get("DEV_UNRESTRICTED", "").strip().lower() in ("1
 # 看数据看板的管理员邮箱（逗号分隔）。不设则第一个注册的用户是管理员。
 ADMIN_EMAILS = [e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()]
 
-# ── 次数系统 ──────────────────────────────────────────────────────
+# ── 次数系统 + 会员 ───────────────────────────────────────────────
 # 新用户注册赠送的免费次数
 SIGNUP_FREE_CREDITS = int(os.environ.get("SIGNUP_FREE_CREDITS", "5"))
 # 收款码图片 URL（放 public/ 里或外链），充值弹窗展示。空 = 弹窗只显示套餐+联系方式
@@ -66,13 +66,31 @@ PAYMENT_QR_URL = os.environ.get("PAYMENT_QR_URL", "")
 PAYMENT_CONTACT = os.environ.get("PAYMENT_CONTACT", "付款后请把「注册邮箱 + 付款截图」发给客服，人工到账")
 # 充值套餐（展示用，实际到账靠管理员手动加）
 CREDIT_PACKAGES = [
-    {"credits": 10, "price": 9},
-    {"credits": 50, "price": 39},
-    {"credits": 100, "price": 69},
+    {"credits": 50, "price": 6},
+    {"credits": 100, "price": 9.9},
+    {"credits": 300, "price": 25},
 ]
-# 哪些工具要扣次数、扣几次。**留空 = 全部免费**，等埋点数据出来再按需填。
-# 例：{"老照片上色": 1, "AI生图": 1, "参考图生成": 2}
-METERED_FEATURES: dict[str, int] = {}
+
+# 会员：¥9.9/月，本地工具无限 + 去广告 + 批量/高清/优先 + 每月赠送 N 次
+MEMBERSHIP_PRICE = float(os.environ.get("MEMBERSHIP_PRICE", "9.9"))
+MEMBERSHIP_DAYS = int(os.environ.get("MEMBERSHIP_DAYS", "31"))
+MEMBER_MONTHLY_CREDITS = int(os.environ.get("MEMBER_MONTHLY_CREDITS", "100"))
+
+# 调 openlux 的功能：扣几次 + 免费用户每天白送几次。
+# 免费额度用完 → 扣 credits；credits 也没了 → 402（提示充值/开会员）。
+# 会员跟免费用户走同一套，只是有每月赠送的 100 次垫底。
+METERED_FEATURES: dict[str, int] = {
+    "AI生图": 1,
+    "参考图生成": 2,
+    "素材生成": 2,
+}
+DAILY_FREE_QUOTA: dict[str, int] = {
+    "AI生图": 5,
+    "参考图生成": 1,
+    "素材生成": 1,
+}
+AD_REWARD_AMOUNT = int(os.environ.get("AD_REWARD_AMOUNT", "3"))      # 看一次广告加几次免费额度
+MAX_AD_REWARDS_PER_DAY = int(os.environ.get("MAX_AD_REWARDS_PER_DAY", "5"))
 
 if DEV_UNRESTRICTED:
     _banner = "!" * 64

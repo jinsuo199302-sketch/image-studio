@@ -4,6 +4,7 @@ import { Notebook } from '@element-plus/icons-vue'
 import { useGenerationStore, STYLE_PRESETS } from '../../../../stores/generation'
 import { useAuthStore } from '../../../../stores/auth'
 import PromptLibraryDialog from '../../PromptLibraryDialog.vue'
+import BillingHint from '../../../BillingHint.vue'
 
 const emit = defineEmits<{ (e: 'insert', url: string): void }>()
 const store = useGenerationStore()
@@ -124,7 +125,8 @@ function ratioStyle(ratio: string) {
       </div>
     </div>
 
-    <div class="border-t border-gray-100 p-3">
+    <div class="space-y-1.5 border-t border-gray-100 p-3">
+      <BillingHint feature="AI生图" />
       <el-button
         type="primary"
         class="!w-full !bg-gradient-to-r !from-violet-500 !to-fuchsia-500 !border-none"

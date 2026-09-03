@@ -38,7 +38,24 @@ class User(Base):
     email = Column(String, nullable=False, unique=True, index=True)
     password_hash = Column(String, nullable=False)
     credits = Column(Integer, nullable=False, default=0)
+    membership_until = Column(DateTime, nullable=True)  # None / 过期 = 非会员
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    @property
+    def is_member(self) -> bool:
+        return self.membership_until is not None and self.membership_until > datetime.utcnow()
+
+
+class DailyUsage(Base):
+    """每个用户每天每个功能用了多少次免费额度。零点后自然失效（按 day 字段判断）。"""
+    __tablename__ = "daily_usage"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, nullable=False, index=True)
+    day = Column(String, nullable=False, index=True)  # 'YYYY-MM-DD'
+    feature = Column(String, nullable=False)
+    used = Column(Integer, nullable=False, default=0)      # 已用免费额度
+    ad_bonus = Column(Integer, nullable=False, default=0)  # 看广告加的额度
 
 
 class CreditLog(Base):

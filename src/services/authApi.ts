@@ -2,6 +2,8 @@ export interface AuthUser {
   id: string
   email: string
   credits: number
+  is_member: boolean
+  membership_until: string | null
   created_at: string
 }
 

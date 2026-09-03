@@ -8,7 +8,9 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from starlette.requests import Request
 
-from app import analytics, crud, models
+from datetime import datetime, timedelta
+
+from app import analytics, billing, crud, models
 from app.ai_proxy import GENERATED_ASSETS_DIR
 from app.ai_proxy import router as ai_proxy_router
 from app.auth import get_current_user, get_current_user_optional
@@ -99,7 +101,7 @@ def admin_stats(
 
 
 @app.get("/api/billing/info")
-def billing_info():
+def billing_info(user: Optional[models.User] = Depends(get_current_user_optional)):
     from app import config
 
     return {
@@ -107,8 +109,33 @@ def billing_info():
         "packages": config.CREDIT_PACKAGES,
         "qr_url": config.PAYMENT_QR_URL,
         "contact": config.PAYMENT_CONTACT,
-        "metered": config.METERED_FEATURES,  # 空 = 全部免费
+        "metered": config.METERED_FEATURES,          # {功能: 扣几次}
+        "daily_free": config.DAILY_FREE_QUOTA,        # {功能: 每天白送几次}
+        "ad_reward": config.AD_REWARD_AMOUNT,
+        "membership_price": config.MEMBERSHIP_PRICE,
+        "membership_monthly_credits": config.MEMBER_MONTHLY_CREDITS,
+        "credits": user.credits if user else 0,
+        "is_member": bool(user and user.is_member),
+        "membership_until": user.membership_until.isoformat() if user and user.membership_until else None,
     }
+
+
+@app.get("/api/billing/status")
+def billing_status(feature: str, db: Session = Depends(get_db),
+                   user: Optional[models.User] = Depends(get_current_user_optional)):
+    """前端在生成按钮旁显示"本次消耗 N 次 / 今日还剩 X 次免费"。"""
+    return billing.status(db, user, feature)
+
+
+class AdRewardIn(BaseModel):
+    feature: str
+
+
+@app.post("/api/billing/ad-reward")
+def ad_reward(payload: AdRewardIn, db: Session = Depends(get_db),
+              user: models.User = Depends(get_current_user)):
+    """小程序端：用户看完激励视频后调这个，给对应功能加免费额度。"""
+    return billing.grant_ad_reward(db, user, payload.feature.strip())
 
 
 @app.get("/api/billing/logs")
@@ -146,6 +173,38 @@ def grant_credits(
         db, target, payload.amount, reason="grant", note=payload.note or f"管理员{'充值' if payload.amount > 0 else '扣减'}"
     )
     return {"email": target.email, "delta": payload.amount, "balance": new_balance}
+
+
+class GrantMembershipIn(BaseModel):
+    email: str
+    months: int = 1
+
+
+@app.post("/api/admin/grant-membership")
+def grant_membership(
+    payload: GrantMembershipIn,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """收到会员付款后，管理员在 /admin 开通。按月延长会员期，并补上每月赠送的次数。"""
+    from app import config
+
+    _require_admin(user, db)
+    target = crud.get_user_by_email(db, payload.email.strip().lower())
+    if not target:
+        raise HTTPException(status_code=404, detail="没有这个邮箱的用户")
+    months = max(1, min(24, payload.months))
+    base = target.membership_until if (target.membership_until and target.membership_until > datetime.utcnow()) else datetime.utcnow()
+    target.membership_until = base + timedelta(days=config.MEMBERSHIP_DAYS * months)
+    db.commit()
+    bonus = config.MEMBER_MONTHLY_CREDITS * months
+    if bonus:
+        crud.adjust_credits(db, target, bonus, reason="grant", note=f"会员赠送 {months} 个月")
+    return {
+        "email": target.email,
+        "membership_until": target.membership_until.isoformat(),
+        "credits": target.credits,
+    }
 # 落在 /api/ 前缀下才会被 nginx 的 /api/ location 代理到这个后端进程，不用额外改 nginx 配置
 app.mount("/api/ai/generated", StaticFiles(directory=GENERATED_ASSETS_DIR), name="generated-assets")
 

@@ -126,11 +126,20 @@ sudo journalctl -u image-studio-backend -n 50 --no-pager | grep -iE "DEV_UNRESTR
 - **谁能看/操作**：默认第一个注册的用户。指定别人：`backend/.env` 加 `ADMIN_EMAILS=a@x.com,b@y.com` 再重启。
 - 埋点表 `tool_events`：feature名 + user id + 成功与否 + 日期，**不存任何用户内容**。
 
-**次数系统（骨架已上线，当前全部工具免费）**：
-- `User.credits` 余额 + `credit_logs` 流水（充值/扣费/赠送/退回，可审计）。新用户注册送 `SIGNUP_FREE_CREDITS`（默认 5，`.env` 可改）。
-- **哪些工具收费、扣几次**：`backend/app/config.py` 的 `METERED_FEATURES`（现在是空 `{}` = 全免费）。等看板数据出来再填，例：`METERED_FEATURES = {"老照片上色": 1, "AI生图": 1}`。填完对应接口里加 `billing.ensure_and_charge` / `billing.refund`（见 `app/billing.py` 注释，接口还没接）。
-- **收款**：`.env` 设 `PAYMENT_QR_URL`（收款码图 URL）、`PAYMENT_CONTACT`（联系方式文案）；套餐在 `config.CREDIT_PACKAGES`。用户扫码付款 → 发邮箱+截图 → 你在 `/admin` 手动加次数。聚合支付（虎皮椒等）以后再接。
-- 前端：Header 显示「剩余 N 次」，点开是充值弹窗。
+**次数系统 + 会员（已启用）**：
+- `User.credits` 余额 + `User.membership_until` + `credit_logs` 流水 + `daily_usage`（每日免费额度计数）。新用户送 `SIGNUP_FREE_CREDITS`（默认 5）。
+- **计费规则**（`config.py`）：
+  - `METERED_FEATURES = {"AI生图":1, "参考图生成":2, "素材生成":2}` —— 扣几次
+  - `DAILY_FREE_QUOTA = {"AI生图":5, ...}` —— 免费用户每天白送几次
+  - 逻辑：先用今日免费额度（不扣次数）→ 用完扣 `credits` → 也没了返回 **402**（前端自动弹充值/开会员）
+  - 本地工具（抠图/证件照/PDF/上色/排版…）不在 `METERED_FEATURES` 里 = 永久免费
+  - 视频已从前端下线（成本太高），后端 `/api/ai/video/*` 保留
+- **会员 ¥9.9/月**（`MEMBERSHIP_PRICE` / `MEMBERSHIP_DAYS` / `MEMBER_MONTHLY_CREDITS=100`）：本地工具无限 + 去广告 + 批量/高清/优先 + 每月赠 100 次。跟免费用户走同一套计费，只是有 100 次垫底。
+- **看广告 +次数**（小程序用）：`POST /api/billing/ad-reward` +`AD_REWARD_AMOUNT`(3) 次，每天最多 `MAX_AD_REWARDS_PER_DAY`(5) 次。网页接不了激励视频，这个只给小程序。
+- **收款（没商户号前，手动）**：`.env` 设 `PAYMENT_QR_URL`（收款码图 URL）、`PAYMENT_CONTACT`。用户扫码付款 → 发邮箱 → 你在 `/admin`：
+  - 「加次数」→ `POST /api/admin/grant-credits`
+  - 「开通会员」→ `POST /api/admin/grant-membership`（按月延期 + 自动补每月赠送次数）
+- 前端：Header 显「剩余 N 次」/「👑 会员」，点开会员+充值弹窗；生图按钮上方显「今日还可免费 X 次 / 本次消耗 N 次」。
 
 ---
 

@@ -76,6 +76,8 @@ class UserOut(BaseModel):
     id: str
     email: str
     credits: int = 0
+    is_member: bool = False
+    membership_until: datetime | None = None
     created_at: datetime
 
 
