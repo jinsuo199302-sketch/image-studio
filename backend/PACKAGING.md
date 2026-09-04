@@ -30,6 +30,15 @@ API 和页面都由这一个 exe 提供，不用另开前端、不用浏览器�
 `app/main.py` 末尾挂了个 SPA 兜底路由：非 `/api/*` 的请求，有对应文件就发文件，没有就发 `index.html`
 （配合 vue-router 的 history 模式）。线上有 nginx 发前端，这段路由收不到非 API 请求，是死代码、不影响。
 
+## 下载 / 导出
+
+WebView2 会静默吞掉网页里 `<a download>` / `blob:` / `data:` 触发的下载。所以前端所有"下载/导出"
+统一走 `src/utils/saveFile.ts`：
+- 桌面版（`window.pywebview` 存在）→ 调 `window.pywebview.api.save_file(name, dataURL)`，
+  `run.py` 的 `_DesktopApi.save_file` 弹原生"另存为"对话框 + 落盘。
+- 网页版 → 还是老的 `<a download>`，不变。
+新增工具的下载记得也用 `saveFile()`，别再自己 `createElement('a')`。
+
 ## 数据放哪
 
 exe 旁边自动建 `image-studio-data\`：`data.db` / `.jwt_secret` / `.env` / `generated_assets\`。
