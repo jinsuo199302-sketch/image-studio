@@ -5,7 +5,9 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+from app.paths import DATA_DIR
+
+BASE_DIR = DATA_DIR
 load_dotenv(BASE_DIR / ".env")
 
 

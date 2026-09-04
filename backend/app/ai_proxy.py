@@ -523,8 +523,10 @@ def _run_bg_removal_subprocess(image_bytes: bytes, edge: str = "soft") -> subpro
     独有的坑，asyncio 文档里写明 selector loop 不支持子进程；Linux 生产环境不受影响，
     但这样写本地 Windows 开发环境也能跑通同一条代码路径，不用靠"生产是 Linux 应该没事"硬赌）。
     外层用 asyncio.to_thread 扔到线程池，不阻塞事件循环。edge 透传给 worker 决定边缘处理档位。"""
+    from app.worker_cmd import worker_argv
+
     return subprocess.run(
-        [sys.executable, "-m", "app.bg_removal_worker", edge],
+        worker_argv("bg_removal", edge),
         input=image_bytes,
         capture_output=True,
         timeout=170,
@@ -561,8 +563,10 @@ async def background_removal(
 def _run_colorize_subprocess(image_bytes: bytes, saturation: float) -> subprocess.CompletedProcess:
     """同 _run_bg_removal_subprocess：同步 subprocess.run + asyncio.to_thread 包一层，
     绕开 asyncio 子进程在 Windows selector loop 上的坑，本地/生产同一条代码路径。"""
+    from app.worker_cmd import worker_argv
+
     return subprocess.run(
-        [sys.executable, "-m", "app.colorize_worker", str(saturation)],
+        worker_argv("colorize", str(saturation)),
         input=image_bytes,
         capture_output=True,
         timeout=170,

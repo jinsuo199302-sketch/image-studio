@@ -6,3 +6,7 @@ data.db
 .env
 .jwt_secret
 generated_assets/
+build/
+dist/
+*.spec.bak
+image-studio-data/
