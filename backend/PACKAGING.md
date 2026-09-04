@@ -41,8 +41,14 @@ WebView2 会静默吞掉网页里 `<a download>` / `blob:` / `data:` 触发的�
 
 ## 数据放哪
 
-exe 旁边自动建 `image-studio-data\`：`data.db` / `.jwt_secret` / `.env` / `generated_assets\`。
-要用 AI 功能（生图/OCR/翻译）就在 `image-studio-data\.env` 里填：
+**`%LOCALAPPDATA%\image-studio-data\`**（即 `C:\Users\你\AppData\Local\image-studio-data\`）：
+`data.db` / `.jwt_secret` / `.env` / `generated_assets\`。
+
+> 为什么不放 exe 旁边：exe 旁边那个目录每次 `pyinstaller --clean` 重新打包都会被整个删掉，
+> 账号和历史数据会丢。放 LOCALAPPDATA 后，换新版 exe 数据照样在。
+> 首次启动时如果发现老位置（exe 旁 `image-studio-data\`）有数据，会自动迁一次过来。
+
+要用 AI 功能（生图/OCR/翻译）就在 `%LOCALAPPDATA%\image-studio-data\.env` 里填：
 
 ```
 OPENLUX_BASE_URL=...
