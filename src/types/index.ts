@@ -1,5 +1,8 @@
 export type AspectRatio = '1:1' | '3:4' | '4:3' | '9:16' | '16:9'
 
+/** 输出清晰度：standard = 模型原生尺寸；2k/4k = 生成后本地高质量放大到对应长边 */
+export type OutputRes = 'standard' | '2k' | '4k'
+
 export interface StylePreset {
   key: string
   label: string
@@ -12,6 +15,7 @@ export interface GenerationParams {
   aspectRatio: AspectRatio
   batchSize: 1 | 2 | 4 | 6 | 9
   referenceImage: string | null
+  outputRes: OutputRes
 }
 
 export interface GeneratedImage {

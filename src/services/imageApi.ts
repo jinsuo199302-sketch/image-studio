@@ -1,12 +1,14 @@
 import type { AspectRatio, GenerationParams, GeneratedImage } from '../types'
 import { authPostJson } from './httpClient'
 
+// gpt-image-2 只接受这三种尺寸（1024²、竖 1024×1536、横 1536×1024），
+// 其它比例就近取。更大的分辨率靠前端本地放大（见 utils/upscale.ts）。
 const ASPECT_SIZE: Record<AspectRatio, [number, number]> = {
-  '1:1': [768, 768],
-  '3:4': [768, 1024],
-  '4:3': [1024, 768],
-  '9:16': [576, 1024],
-  '16:9': [1024, 576],
+  '1:1': [1024, 1024],
+  '3:4': [1024, 1536],
+  '4:3': [1536, 1024],
+  '9:16': [1024, 1536],
+  '16:9': [1536, 1024],
 }
 
 function delay(ms: number) {

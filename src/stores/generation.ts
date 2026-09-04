@@ -42,6 +42,7 @@ export const useGenerationStore = defineStore('generation', {
       aspectRatio: '1:1',
       batchSize: 4,
       referenceImage: null,
+      outputRes: 'standard',
     } as GenerationParams,
     currentResults: [] as GeneratedImage[],
     history: loadHistory(),

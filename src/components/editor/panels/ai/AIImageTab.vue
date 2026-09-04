@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { ElMessage } from 'element-plus'
 import { Notebook, Download } from '@element-plus/icons-vue'
 import { useGenerationStore, STYLE_PRESETS } from '../../../../stores/generation'
 import { useAuthStore } from '../../../../stores/auth'
 import { saveFile } from '../../../../utils/saveFile'
+import { upscaleImage, RES_LONG_EDGE } from '../../../../utils/upscale'
 import PromptLibraryDialog from '../../PromptLibraryDialog.vue'
 import BillingHint from '../../../BillingHint.vue'
 
@@ -11,16 +13,50 @@ const emit = defineEmits<{ (e: 'insert', url: string): void }>()
 const store = useGenerationStore()
 const authStore = useAuthStore()
 const promptLibraryOpen = ref(false)
+const busyImg = ref('')
 
 const ASPECT_RATIOS = ['1:1', '3:4', '4:3', '9:16', '16:9'] as const
+const RES_OPTIONS = [
+  { key: 'standard', label: '标准' },
+  { key: '2k', label: '2K' },
+  { key: '4k', label: '4K' },
+] as const
 
 function ratioStyle(ratio: string) {
   const [w, h] = ratio.split(':')
   return { aspectRatio: `${w} / ${h}` }
 }
 
-function downloadImage(url: string, i: number) {
-  saveFile(`AI生图-${Date.now()}-${i + 1}.png`, url)
+async function resolveOutput(url: string): Promise<Blob | string> {
+  const longEdge = RES_LONG_EDGE[store.params.outputRes]
+  if (!longEdge) return url
+  return upscaleImage(url, longEdge)
+}
+
+async function downloadImage(url: string, i: number) {
+  const id = `${i}`
+  busyImg.value = id
+  try {
+    const suffix = store.params.outputRes === 'standard' ? '' : `-${store.params.outputRes.toUpperCase()}`
+    await saveFile(`AI生图-${Date.now()}-${i + 1}${suffix}.png`, await resolveOutput(url))
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '保存失败')
+  } finally {
+    busyImg.value = ''
+  }
+}
+
+async function insertImage(url: string, i: number) {
+  if (store.params.outputRes === 'standard') return emit('insert', url)
+  busyImg.value = `${i}`
+  try {
+    const blob = await resolveOutput(url)
+    emit('insert', typeof blob === 'string' ? blob : URL.createObjectURL(blob))
+  } catch {
+    emit('insert', url)
+  } finally {
+    busyImg.value = ''
+  }
 }
 </script>
 
@@ -105,6 +141,28 @@ function downloadImage(url: string, i: number) {
         </div>
       </div>
 
+      <div>
+        <label class="mb-1 block text-xs font-medium text-gray-600">清晰度</label>
+        <div class="flex flex-wrap gap-1.5">
+          <button
+            v-for="o in RES_OPTIONS"
+            :key="o.key"
+            class="rounded-full border px-2.5 py-0.5 text-[11px] transition"
+            :class="
+              store.params.outputRes === o.key
+                ? 'border-violet-500 bg-violet-50 text-violet-600'
+                : 'border-gray-200 text-gray-500'
+            "
+            @click="store.params.outputRes = o.key"
+          >
+            {{ o.label }}
+          </button>
+        </div>
+        <p v-if="store.params.outputRes !== 'standard'" class="mt-1 text-[11px] text-gray-400">
+          保存 / 插入时本地放大到 {{ store.params.outputRes === '2k' ? '2560' : '3840' }}px 长边，边缘更平滑，不会增加细节
+        </p>
+      </div>
+
       <p v-if="store.error" class="text-xs text-red-500">{{ store.error }}</p>
 
       <div v-if="store.currentResults.length || store.isGenerating">
@@ -127,8 +185,14 @@ function downloadImage(url: string, i: number) {
               :src="img.url"
               class="w-full cursor-pointer object-cover transition hover:opacity-80"
               :style="ratioStyle(img.aspectRatio)"
-              @click="emit('insert', img.url)"
+              @click="insertImage(img.url, i)"
             />
+            <div
+              v-if="busyImg === `${i}`"
+              class="absolute inset-0 flex items-center justify-center bg-white/60 text-[11px] text-violet-600"
+            >
+              处理中…
+            </div>
             <button
               class="absolute right-1 top-1 flex items-center gap-0.5 rounded bg-black/55 px-1.5 py-0.5 text-[10px] text-white opacity-0 transition group-hover:opacity-100"
               title="保存到本地"
@@ -139,7 +203,7 @@ function downloadImage(url: string, i: number) {
             </button>
           </div>
         </div>
-        <p class="mt-1.5 text-[11px] text-gray-400">点图插入画布，右上角「保存」下载原图</p>
+        <p class="mt-1.5 text-[11px] text-gray-400">点图插入画布，右上角「保存」下载到本地</p>
       </div>
     </div>
 
