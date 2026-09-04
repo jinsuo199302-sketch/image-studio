@@ -25,6 +25,14 @@ def _run_server() -> None:
     import uvicorn
 
     frozen = getattr(sys, "frozen", False)
+    if frozen:
+        # 桌面版：起服务后自动打开浏览器到本地页面
+        import threading
+        import webbrowser
+
+        threading.Timer(1.8, lambda: webbrowser.open("http://127.0.0.1:8001/")).start()
+        print("万能画图 本地版已启动：http://127.0.0.1:8001/  （关掉这个黑窗口即退出）", flush=True)
+
     uvicorn.run(
         "app.main:app",
         host="127.0.0.1" if frozen else "0.0.0.0",

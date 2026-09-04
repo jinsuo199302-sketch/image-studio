@@ -5,12 +5,24 @@
 ## 打包（💻 本机 PowerShell）
 
 ```powershell
-cd D:\code\image-studio\backend
+cd D:\code\image-studio
+npm run build                                        # 先生成前端 dist/（spec 会把它收进 exe）
+cd backend
 venv\Scripts\python.exe -m pip install pyinstaller   # 只装一次
 venv\Scripts\pyinstaller.exe --noconfirm --clean image-studio-backend.spec
 ```
 
-产物：`backend\dist\image-studio-backend\`（约 535MB），双击 `image-studio-backend.exe` 起服务在 `http://127.0.0.1:8001`。
+产物：`backend\dist\image-studio-backend\`（约 550MB）。双击 `image-studio-backend.exe`：
+起一个黑窗口（关掉即退出），1.8 秒后自动打开浏览器到 `http://127.0.0.1:8001/`，
+API 和页面都由这一个 exe 提供，不用另开前端。
+
+> 没跑 `npm run build` 就打包会直接报错「找不到 ../dist」。前端改了要重新 build 再重新打包。
+
+## 前端
+
+前端静态文件（`dist/`）直接打进 exe（`app/paths.py` 的 `FRONTEND_DIR` → `_MEIPASS/frontend`），
+`app/main.py` 末尾挂了个 SPA 兜底路由：非 `/api/*` 的请求，有对应文件就发文件，没有就发 `index.html`
+（配合 vue-router 的 history 模式）。线上有 nginx 发前端，这段路由收不到非 API 请求，是死代码、不影响。
 
 ## 数据放哪
 

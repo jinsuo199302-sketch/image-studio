@@ -380,3 +380,22 @@ def get_snippet(snippet_id: str, db: Session = Depends(get_db)):
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+
+# ── 前端静态托管（桌面版：一个 exe 同时提供 API + 页面） ──────────────
+# 只在打包 / 本地 build 过 dist 时生效；线上仍由 nginx 发前端，这段是死代码不影响。
+from fastapi.responses import FileResponse  # noqa: E402
+from app.paths import FRONTEND_DIR  # noqa: E402
+
+if FRONTEND_DIR.is_dir() and (FRONTEND_DIR / "index.html").is_file():
+    _INDEX = FRONTEND_DIR / "index.html"
+
+    @app.get("/{full_path:path}")
+    async def _spa(full_path: str):
+        # /api/* 已在上面注册，不会走到这里；防御性再挡一次
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not Found")
+        candidate = (FRONTEND_DIR / full_path).resolve()
+        if FRONTEND_DIR.resolve() in candidate.parents and candidate.is_file():
+            return FileResponse(candidate)
+        return FileResponse(_INDEX)  # vue-router history 模式的深链回退
