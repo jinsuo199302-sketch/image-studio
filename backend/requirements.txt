@@ -20,3 +20,5 @@ pymupdf==1.24.13
 python-docx==1.1.2
 python-pptx==1.0.2
 pypinyin==0.53.0
+# 桌面版原生窗口（仅打包成 exe 时用；服务器不需要，装了也不影响）
+pywebview==6.2.1

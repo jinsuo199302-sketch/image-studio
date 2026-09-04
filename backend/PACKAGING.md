@@ -12,9 +12,15 @@ venv\Scripts\python.exe -m pip install pyinstaller   # 只装一次
 venv\Scripts\pyinstaller.exe --noconfirm --clean image-studio-backend.spec
 ```
 
-产物：`backend\dist\image-studio-backend\`（约 550MB）。双击 `image-studio-backend.exe`：
-起一个黑窗口（关掉即退出），1.8 秒后自动打开浏览器到 `http://127.0.0.1:8001/`，
-API 和页面都由这一个 exe 提供，不用另开前端。
+产物：`backend\dist\image-studio-backend\`（约 560MB）。双击 `image-studio-backend.exe`：
+后端在后台起，弹一个**原生窗口**（pywebview + 系统自带的 WebView2）显示界面，关窗即退出。
+API 和页面都由这一个 exe 提供，不用另开前端、不用浏览器。
+
+- 想只起服务不弹窗（调试 / 想用浏览器开）：设环境变量 `IMAGE_STUDIO_NO_WINDOW=1`，
+  这时行为回到「起服务 + 1.8 秒后拿默认浏览器打开」。
+- WebView2 运行时：Win10/11 一般自带；缺了会自动退回默认浏览器（窗口那步 try/except）。
+- 想去掉那个黑控制台窗口：`image-studio-backend.spec` 里 `EXE(..., console=True)` 改 `False` 重打
+  （改完看不到报错，先留着 True 自测）。
 
 > 没跑 `npm run build` 就打包会直接报错「找不到 ../dist」。前端改了要重新 build 再重新打包。
 

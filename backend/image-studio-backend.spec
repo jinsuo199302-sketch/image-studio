@@ -13,7 +13,8 @@ if os.path.isdir(_dist):
 else:
     raise SystemExit("找不到 ../dist ——先在仓库根执行 npm run build 再打包")
 for pkg in ("cv2", "onnxruntime", "rembg", "fitz", "docx", "pptx", "pypinyin",
-            "reportlab", "pillow_heif", "numba", "llvmlite", "pymatting"):
+            "reportlab", "pillow_heif", "numba", "llvmlite", "pymatting",
+            "webview", "clr_loader", "pythonnet"):
     d, b, h = collect_all(pkg)
     datas += d
     binaries += b
@@ -23,6 +24,7 @@ hiddenimports += collect_submodules("uvicorn")
 hiddenimports += [
     "app.main", "app.bg_removal_worker", "app.colorize_worker",
     "anyio._backends._asyncio", "sqlalchemy.dialects.sqlite",
+    "clr", "webview.platforms.winforms", "webview.platforms.edgechromium",
 ]
 
 a = Analysis(
