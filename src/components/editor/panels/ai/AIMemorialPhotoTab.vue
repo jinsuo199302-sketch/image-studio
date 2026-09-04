@@ -7,6 +7,7 @@ import { removeBackground } from '../../../../services/backgroundRemovalApi'
 import { detectFace, type FaceBox } from '../../../../services/faceDetectApi'
 import { computeDrawRect } from '../../../../services/idPhotoLayout'
 import { embedPngDpi } from '../../../../services/pngDpi'
+import { saveFile } from '../../../../utils/saveFile'
 
 const authStore = useAuthStore()
 
@@ -164,10 +165,7 @@ function download() {
   const h = Math.round((sizePreset.value.mmH / 25.4) * dpi)
   const scaleFactor = w / (sizePreset.value.mmW * PREVIEW_SCALE)
   const rendered = renderPhoto(w, h, scaleFactor)
-  const a = document.createElement('a')
-  a.href = embedPngDpi(rendered.toDataURL('image/png'), dpi)
-  a.download = `黑白照片-${sizePreset.value.key}.png`
-  a.click()
+  saveFile(`黑白照片-${sizePreset.value.key}.png`, embedPngDpi(rendered.toDataURL('image/png'), dpi))
 }
 </script>
 

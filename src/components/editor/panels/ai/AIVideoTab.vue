@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import type { VideoParams } from '../../../../services/videoApi'
 import { useAuthStore } from '../../../../stores/auth'
 import { useVideoStore } from '../../../../stores/video'
+import { saveFile, isDesktopApp } from '../../../../utils/saveFile'
 
 const authStore = useAuthStore()
 const store = useVideoStore()
@@ -18,14 +19,18 @@ async function generate() {
   if (url) videoUrl.value = url
 }
 
-function download() {
+async function download() {
   if (!videoUrl.value) return
-  const a = document.createElement('a')
-  a.href = videoUrl.value
-  a.download = 'ai-video.mp4'
-  a.target = '_blank'
-  a.rel = 'noreferrer'
-  a.click()
+  // 视频是外链（Vidu），桌面版 fetch 会被 CORS 挡，直接丢给系统浏览器
+  if (isDesktopApp()) {
+    window.open(videoUrl.value, '_blank')
+    return
+  }
+  try {
+    await saveFile('ai-video.mp4', videoUrl.value)
+  } catch {
+    window.open(videoUrl.value, '_blank')
+  }
 }
 </script>
 

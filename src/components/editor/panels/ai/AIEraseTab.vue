@@ -6,6 +6,7 @@ import { ElMessage } from 'element-plus'
 import EraseDialog from '../../EraseDialog.vue'
 import BatchWatermarkDialog from '../../BatchWatermarkDialog.vue'
 import { prepareUpload } from '../../../../utils/prepImage'
+import { saveFile } from '../../../../utils/saveFile'
 
 const authStore = useAuthStore()
 
@@ -36,10 +37,7 @@ function reset() {
 
 function download() {
   if (!workingImage.value) return
-  const a = document.createElement('a')
-  a.href = workingImage.value
-  a.download = 'erased.png'
-  a.click()
+  saveFile('erased.png', workingImage.value)
 }
 </script>
 

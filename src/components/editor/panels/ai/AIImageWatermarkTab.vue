@@ -4,6 +4,7 @@ import { ElMessage } from 'element-plus'
 import { UploadFilled, Close } from '@element-plus/icons-vue'
 import { prepareUpload } from '../../../../utils/prepImage'
 import { makeStoreZip } from '../../../../utils/storeZip'
+import { saveFile } from '../../../../utils/saveFile'
 import { applyWatermark, loadImageEl, DEFAULT_WM, type WatermarkOpts, type WmLayout } from '../../../../utils/imageWatermark'
 
 const files = ref<{ file: File; url: string }[]>([])
@@ -78,11 +79,8 @@ async function download() {
   try {
     if (files.value.length === 1) {
       const blob = await applyWatermark(files.value[0].file, { ...opts })
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(blob)
-      a.download = '水印_' + files.value[0].file.name.replace(/\.\w+$/, '') + (blob.type === 'image/png' ? '.png' : '.jpg')
-      a.click()
-      URL.revokeObjectURL(a.href)
+      const name = '水印_' + files.value[0].file.name.replace(/\.\w+$/, '') + (blob.type === 'image/png' ? '.png' : '.jpg')
+      await saveFile(name, blob)
     } else {
       const entries: { name: string; data: Uint8Array }[] = []
       for (let i = 0; i < files.value.length; i++) {
@@ -93,12 +91,7 @@ async function download() {
           data: new Uint8Array(await blob.arrayBuffer()),
         })
       }
-      const zip = makeStoreZip(entries)
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(zip)
-      a.download = '加水印.zip'
-      a.click()
-      URL.revokeObjectURL(a.href)
+      await saveFile('加水印.zip', makeStoreZip(entries))
     }
     ElMessage.success('已导出')
   } catch (e) {

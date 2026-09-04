@@ -3,6 +3,7 @@ import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { UploadFilled, Close, ArrowUp, ArrowDown } from '@element-plus/icons-vue'
 import { mergePdfs, splitPdf, watermarkPdf, signPdf, type SplitMode } from '../../../../services/pdfApi'
+import { saveFile } from '../../../../utils/saveFile'
 
 const props = defineProps<{ presetSignature?: string | null }>()
 
@@ -14,12 +15,7 @@ const MAX_FILE_SIZE_MB = 50
 const MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024
 
 function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  a.click()
-  URL.revokeObjectURL(url)
+  return saveFile(filename, blob)
 }
 
 function formatSize(bytes: number) {
@@ -64,7 +60,7 @@ async function doMerge() {
   merging.value = true
   try {
     const blob = await mergePdfs(mergeFiles.value)
-    downloadBlob(blob, 'merged.pdf')
+    await downloadBlob(blob, 'merged.pdf')
     ElMessage.success('合并完成，已开始下载')
   } catch (e) {
     mergeError.value = e instanceof Error ? e.message : '合并失败，请重试'
@@ -110,7 +106,7 @@ async function doSplit() {
       pagesPerFile: pagesPerFile.value,
       ranges: ranges.value.trim(),
     })
-    downloadBlob(blob, 'split.zip')
+    await downloadBlob(blob, 'split.zip')
     ElMessage.success('拆分完成，已开始下载')
   } catch (e) {
     splitError.value = e instanceof Error ? e.message : '拆分失败，请重试'
@@ -156,7 +152,7 @@ async function doWatermark() {
       opacity: watermarkOpacity.value,
       fontSize: watermarkFontSize.value,
     })
-    downloadBlob(blob, 'watermarked.pdf')
+    await downloadBlob(blob, 'watermarked.pdf')
     ElMessage.success('加水印完成，已开始下载')
   } catch (e) {
     watermarkError.value = e instanceof Error ? e.message : '加水印失败，请重试'
@@ -243,7 +239,7 @@ async function doSign() {
       y,
       width: signWidth.value,
     })
-    downloadBlob(blob, 'signed.pdf')
+    await downloadBlob(blob, 'signed.pdf')
     ElMessage.success('签名完成，已开始下载')
   } catch (e) {
     signError.value = e instanceof Error ? e.message : '签名失败，请重试'

@@ -5,6 +5,7 @@ import { UploadFilled } from '@element-plus/icons-vue'
 import { formatDoc, getDocTemplates, getDocSkeleton, type DocTemplate } from '../../../../services/pdfApi'
 import { extractTextFromImage } from '../../../../services/ocrApi'
 import { prepareUpload } from '../../../../utils/prepImage'
+import { saveFile } from '../../../../utils/saveFile'
 import { useAuthStore } from '../../../../stores/auth'
 
 const authStore = useAuthStore()
@@ -78,12 +79,7 @@ async function run() {
   busy.value = true
   try {
     const blob = await formatDoc(text.value, template.value, title.value.trim())
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${title.value.trim() || '排版文档'}.docx`
-    a.click()
-    URL.revokeObjectURL(url)
+    await saveFile(`${title.value.trim() || '排版文档'}.docx`, blob)
     ElMessage.success('Word 已生成')
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '排版失败，请重试')

@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { Notebook } from '@element-plus/icons-vue'
+import { Notebook, Download } from '@element-plus/icons-vue'
 import { useGenerationStore, STYLE_PRESETS } from '../../../../stores/generation'
 import { useAuthStore } from '../../../../stores/auth'
+import { saveFile } from '../../../../utils/saveFile'
 import PromptLibraryDialog from '../../PromptLibraryDialog.vue'
 import BillingHint from '../../../BillingHint.vue'
 
@@ -16,6 +17,10 @@ const ASPECT_RATIOS = ['1:1', '3:4', '4:3', '9:16', '16:9'] as const
 function ratioStyle(ratio: string) {
   const [w, h] = ratio.split(':')
   return { aspectRatio: `${w} / ${h}` }
+}
+
+function downloadImage(url: string, i: number) {
+  saveFile(`AI生图-${Date.now()}-${i + 1}.png`, url)
 }
 </script>
 
@@ -113,15 +118,28 @@ function ratioStyle(ratio: string) {
           />
         </div>
         <div v-else class="grid grid-cols-2 gap-2">
-          <img
-            v-for="img in store.currentResults"
+          <div
+            v-for="(img, i) in store.currentResults"
             :key="img.id"
-            :src="img.url"
-            class="w-full cursor-pointer rounded-md object-cover transition hover:opacity-80"
-            :style="ratioStyle(img.aspectRatio)"
-            @click="emit('insert', img.url)"
-          />
+            class="group relative overflow-hidden rounded-md"
+          >
+            <img
+              :src="img.url"
+              class="w-full cursor-pointer object-cover transition hover:opacity-80"
+              :style="ratioStyle(img.aspectRatio)"
+              @click="emit('insert', img.url)"
+            />
+            <button
+              class="absolute right-1 top-1 flex items-center gap-0.5 rounded bg-black/55 px-1.5 py-0.5 text-[10px] text-white opacity-0 transition group-hover:opacity-100"
+              title="保存到本地"
+              @click.stop="downloadImage(img.url, i)"
+            >
+              <el-icon :size="11"><Download /></el-icon>
+              保存
+            </button>
+          </div>
         </div>
+        <p class="mt-1.5 text-[11px] text-gray-400">点图插入画布，右上角「保存」下载原图</p>
       </div>
     </div>
 

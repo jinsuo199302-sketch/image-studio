@@ -4,6 +4,7 @@ import { ElMessage } from 'element-plus'
 import { UploadFilled, Close, ArrowUp, ArrowDown } from '@element-plus/icons-vue'
 import { prepareUpload } from '../../../../utils/prepImage'
 import { imagesToPdf, pdfToImages, securePdf, editPdfPages } from '../../../../services/pdfApi'
+import { saveFile } from '../../../../utils/saveFile'
 
 type Mode = 'img2pdf' | 'pdf2img' | 'secure' | 'pages'
 const mode = ref<Mode>('img2pdf')
@@ -17,18 +18,13 @@ const MODES: { key: Mode; label: string }[] = [
 const busy = ref(false)
 
 function saveBlob(blob: Blob, name: string) {
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = name
-  a.click()
-  URL.revokeObjectURL(url)
+  return saveFile(name, blob)
 }
 
 async function run(fn: () => Promise<Blob>, name: string, ok: string) {
   busy.value = true
   try {
-    saveBlob(await fn(), name)
+    await saveBlob(await fn(), name)
     ElMessage.success(ok)
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '处理失败，请重试')

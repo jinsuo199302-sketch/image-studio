@@ -9,6 +9,7 @@ import { computeDrawRect, packGrid, PRINT_SHEETS } from '../../../../services/id
 import { embedPngDpi } from '../../../../services/pngDpi'
 import { fixRedEye } from '../../../../services/redEyeApi'
 import { convertToCmyk } from '../../../../services/cmykApi'
+import { saveFile } from '../../../../utils/saveFile'
 
 const authStore = useAuthStore()
 const fixingRedEye = ref(false)
@@ -207,10 +208,7 @@ function download() {
   const h = Math.round((sizePreset.value.mmH / 25.4) * dpi)
   const scaleFactor = w / (sizePreset.value.mmW * PREVIEW_SCALE)
   const photoCanvas = renderSinglePhoto(w, h, scaleFactor)
-  const a = document.createElement('a')
-  a.href = embedPngDpi(photoCanvas.toDataURL('image/png'), dpi)
-  a.download = `证件照-${sizePreset.value.key}.png`
-  a.click()
+  saveFile(`证件照-${sizePreset.value.key}.png`, embedPngDpi(photoCanvas.toDataURL('image/png'), dpi))
 }
 
 const convertingCmyk = ref(false)
@@ -225,10 +223,7 @@ async function downloadCmyk() {
     const scaleFactor = w / (sizePreset.value.mmW * PREVIEW_SCALE)
     const photoCanvas = renderSinglePhoto(w, h, scaleFactor)
     const cmykDataUrl = await convertToCmyk(photoCanvas.toDataURL('image/png'))
-    const a = document.createElement('a')
-    a.href = cmykDataUrl
-    a.download = `证件照-${sizePreset.value.key}-CMYK.jpg`
-    a.click()
+    await saveFile(`证件照-${sizePreset.value.key}-CMYK.jpg`, cmykDataUrl)
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : 'CMYK 转换失败，请重试')
   } finally {
@@ -268,10 +263,10 @@ function downloadPrintSheet() {
       ctx.drawImage(photoCanvas, x, y)
     }
   }
-  const a = document.createElement('a')
-  a.href = embedPngDpi(sheetCanvas.toDataURL('image/png'), dpi)
-  a.download = `证件照排版-${printSheet.value.key}-${sizePreset.value.key}.png`
-  a.click()
+  saveFile(
+    `证件照排版-${printSheet.value.key}-${sizePreset.value.key}.png`,
+    embedPngDpi(sheetCanvas.toDataURL('image/png'), dpi),
+  )
 }
 </script>
 

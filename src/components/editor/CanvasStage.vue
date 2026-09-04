@@ -2026,8 +2026,14 @@ function captureDataUrl(multiplier: number): string {
   return dataUrl
 }
 
-function exportPNG(): string {
-  return captureDataUrl(2)
+/** longEdge：导出图长边目标像素（2K=2560 / 4K=3840）。不传按 2 倍截图。 */
+function exportPNG(longEdge?: number): string {
+  let multiplier = 2
+  if (longEdge && longEdge > 0) {
+    const base = Math.max(canvasSize.width, canvasSize.height)
+    multiplier = Math.max(1, longEdge / base)
+  }
+  return captureDataUrl(multiplier)
 }
 
 /** 矢量导出——Fabric 的 toSVG() 按对象坐标序列化，不是截图，图表/图示/文字这些矢量内容

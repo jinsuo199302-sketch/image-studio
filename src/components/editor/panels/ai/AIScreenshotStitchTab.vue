@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { UploadFilled, Close, ArrowUp, ArrowDown } from '@element-plus/icons-vue'
 import { stitchScreenshots } from '../../../../services/screenshotStitch'
+import { saveFile } from '../../../../utils/saveFile'
 
 const fileInput = ref<HTMLInputElement>()
 const files = ref<File[]>([])
@@ -52,10 +53,7 @@ async function doStitch() {
 
 function download() {
   if (!resultUrl.value) return
-  const a = document.createElement('a')
-  a.href = resultUrl.value
-  a.download = 'stitched.png'
-  a.click()
+  saveFile('stitched.png', resultUrl.value)
 }
 </script>
 

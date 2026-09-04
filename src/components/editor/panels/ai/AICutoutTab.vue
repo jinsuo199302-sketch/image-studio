@@ -4,6 +4,7 @@ import { ElMessage } from 'element-plus'
 import { UploadFilled, Delete } from '@element-plus/icons-vue'
 import { removeBackground, type CutoutEdge } from '../../../../services/backgroundRemovalApi'
 import { useAuthStore } from '../../../../stores/auth'
+import { saveFile } from '../../../../utils/saveFile'
 
 const authStore = useAuthStore()
 
@@ -46,10 +47,7 @@ async function runRemoveBg() {
 
 function download() {
   if (!workingImage.value) return
-  const a = document.createElement('a')
-  a.href = workingImage.value
-  a.download = 'cutout.png'
-  a.click()
+  saveFile('cutout.png', workingImage.value)
 }
 </script>
 

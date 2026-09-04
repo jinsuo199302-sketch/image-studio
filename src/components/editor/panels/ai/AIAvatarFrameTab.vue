@@ -2,6 +2,7 @@
 import { nextTick, ref, watch } from 'vue'
 import { UploadFilled } from '@element-plus/icons-vue'
 import { AVATAR_FRAME_THEMES, renderAvatarFrame } from '../../../../services/avatarFrames'
+import { saveFile } from '../../../../utils/saveFile'
 
 const fileInput = ref<HTMLInputElement>()
 const photoUrl = ref<string | null>(null)
@@ -47,10 +48,7 @@ watch([photoUrl, activeTheme, bannerText], redraw)
 
 function download() {
   if (!canvasEl.value) return
-  const a = document.createElement('a')
-  a.href = canvasEl.value.toDataURL('image/png')
-  a.download = `头像框-${activeTheme.value.key}.png`
-  a.click()
+  saveFile(`头像框-${activeTheme.value.key}.png`, canvasEl.value.toDataURL('image/png'))
 }
 </script>
 

@@ -5,6 +5,7 @@ import { UploadFilled, Delete } from '@element-plus/icons-vue'
 import { useAuthStore } from '../../../../stores/auth'
 import { imageToXlsx, type Orient, type Paper } from '../../../../services/tableRecognizeApi'
 import { prepareUpload } from '../../../../utils/prepImage'
+import { saveFile } from '../../../../utils/saveFile'
 
 const authStore = useAuthStore()
 const fileInput = ref<HTMLInputElement>()
@@ -32,13 +33,8 @@ async function convert() {
   processing.value = true
   try {
     const blob = await imageToXlsx(authStore.isAuthenticated, workingImage.value, paper.value, orientation.value)
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = '表格.xlsx'
-    a.click()
-    URL.revokeObjectURL(url)
-    ElMessage.success('已转换，Excel 文件开始下载')
+    await saveFile('表格.xlsx', blob)
+    ElMessage.success('已转换')
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '转换失败，请重试')
   } finally {

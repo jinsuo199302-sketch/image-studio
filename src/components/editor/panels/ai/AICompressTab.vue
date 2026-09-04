@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { UploadFilled, Close } from '@element-plus/icons-vue'
 import { makeStoreZip } from '../../../../utils/storeZip'
+import { saveFile } from '../../../../utils/saveFile'
 
 type OutFmt = 'keep' | 'jpeg' | 'png' | 'webp'
 type Mode = 'quality' | 'target'
@@ -149,12 +150,7 @@ function outName(it: Item): string {
 }
 function downloadOne(it: Item) {
   if (!it.outBlob) return
-  const url = URL.createObjectURL(it.outBlob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = outName(it)
-  a.click()
-  URL.revokeObjectURL(url)
+  saveFile(outName(it), it.outBlob)
 }
 async function downloadAll() {
   const done = items.value.filter((i) => i.outBlob)
@@ -163,12 +159,7 @@ async function downloadAll() {
   const entries = await Promise.all(
     done.map(async (it) => ({ name: outName(it), data: new Uint8Array(await it.outBlob!.arrayBuffer()) })),
   )
-  const url = URL.createObjectURL(makeStoreZip(entries))
-  const a = document.createElement('a')
-  a.href = url
-  a.download = '图片.zip'
-  a.click()
-  URL.revokeObjectURL(url)
+  await saveFile('图片.zip', makeStoreZip(entries))
 }
 
 const anyDone = computed(() => items.value.some((i) => i.outBlob))

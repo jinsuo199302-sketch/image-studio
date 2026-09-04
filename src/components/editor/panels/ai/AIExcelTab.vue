@@ -3,23 +3,19 @@ import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { UploadFilled, Close } from '@element-plus/icons-vue'
 import { makePayslips, mergeSheets } from '../../../../services/pdfApi'
+import { saveFile } from '../../../../utils/saveFile'
 
 type Mode = 'payslip' | 'merge'
 const mode = ref<Mode>('payslip')
 const busy = ref(false)
 
 function saveBlob(blob: Blob, name: string) {
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = name
-  a.click()
-  URL.revokeObjectURL(url)
+  return saveFile(name, blob)
 }
 async function run(fn: () => Promise<Blob>, name: string, ok: string) {
   busy.value = true
   try {
-    saveBlob(await fn(), name)
+    await saveBlob(await fn(), name)
     ElMessage.success(ok)
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '处理失败，请重试')

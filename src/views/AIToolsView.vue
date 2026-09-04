@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import AppHeader from '../components/AppHeader.vue'
 import AIPanel from '../components/editor/panels/AIPanel.vue'
+import { saveFile } from '../utils/saveFile'
 
 const route = useRoute()
 const VALID_TABS = [
@@ -47,12 +48,7 @@ async function copyText(text: string) {
 }
 
 function downloadImage(url: string) {
-  const a = document.createElement('a')
-  a.href = url
-  a.download = 'ai-image.png'
-  a.target = '_blank'
-  a.rel = 'noreferrer'
-  a.click()
+  saveFile('ai-image.png', url)
 }
 </script>
 

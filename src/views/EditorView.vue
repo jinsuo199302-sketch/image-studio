@@ -23,6 +23,7 @@ import AIDesignPanel from '../components/editor/panels/AIDesignPanel.vue'
 import PlaceholderPanel from '../components/editor/panels/PlaceholderPanel.vue'
 import type { Template } from '../data/templates'
 import type { GeneratedDesign } from '../services/designApi'
+import { saveFile } from '../utils/saveFile'
 import { useTemplateStore } from '../stores/templates'
 import { useAuthStore } from '../stores/auth'
 import { removeBackground } from '../services/backgroundRemovalApi'
@@ -113,32 +114,25 @@ function replaceViaUpload() {
   input.click()
 }
 
-function download() {
-  const dataUrl = stageRef.value?.exportPNG()
+const PNG_LONG_EDGE: Record<string, number | undefined> = { png: undefined, '2k': 2560, '4k': 3840 }
+
+async function download(command = 'png') {
+  const dataUrl = stageRef.value?.exportPNG(PNG_LONG_EDGE[command])
   if (!dataUrl || !template.value) return
-  const a = document.createElement('a')
-  a.href = dataUrl
-  a.download = `${template.value.name}.png`
-  a.click()
+  const suffix = command === 'png' ? '' : `-${command.toUpperCase()}`
+  await saveFile(`${template.value.name}${suffix}.png`, dataUrl)
 }
 
-/** SVG 是矢量序列化（Fabric toSVG()），不是截图——所以走 Blob URL 而不是直接用 dataURL，
- * 避免大体积 SVG（背景图内嵌成 base64 后文本会很长）撑爆 <a href> 的实际长度限制。 */
-function downloadSVG() {
+/** SVG 是矢量序列化（Fabric toSVG()），不是截图。 */
+async function downloadSVG() {
   const svg = stageRef.value?.exportSVG()
   if (!svg || !template.value) return
-  const blob = new Blob([svg], { type: 'image/svg+xml' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `${template.value.name}.svg`
-  a.click()
-  URL.revokeObjectURL(url)
+  await saveFile(`${template.value.name}.svg`, new Blob([svg], { type: 'image/svg+xml' }))
 }
 
 function onDownloadCommand(command: string) {
   if (command === 'svg') downloadSVG()
-  else download()
+  else download(command)
 }
 
 function onSaved(newId: string) {
@@ -205,15 +199,17 @@ async function onRemoveBackground() {
           type="primary"
           class="!ml-1 [&_.el-button--primary]:!bg-violet-500 [&_.el-button--primary]:!border-none"
           :disabled="!template"
-          @click="download"
+          @click="download()"
           @command="onDownloadCommand"
         >
           <el-icon class="mr-1"><Download /></el-icon>
           下载
           <template #dropdown>
             <el-dropdown-menu>
-              <el-dropdown-item command="png">下载 PNG</el-dropdown-item>
-              <el-dropdown-item command="svg">下载 SVG</el-dropdown-item>
+              <el-dropdown-item command="png">下载 PNG（标准）</el-dropdown-item>
+              <el-dropdown-item command="2k">下载 PNG · 2K（2560px）</el-dropdown-item>
+              <el-dropdown-item command="4k">下载 PNG · 4K（3840px）</el-dropdown-item>
+              <el-dropdown-item command="svg" divided>下载 SVG（矢量）</el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>

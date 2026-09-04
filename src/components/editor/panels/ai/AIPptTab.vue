@@ -4,23 +4,19 @@ import { ElMessage } from 'element-plus'
 import { UploadFilled, Close, ArrowUp, ArrowDown } from '@element-plus/icons-vue'
 import { textToPptx, imagesToPptx } from '../../../../services/pdfApi'
 import { prepareUpload } from '../../../../utils/prepImage'
+import { saveFile } from '../../../../utils/saveFile'
 
 type Mode = 'text' | 'image'
 const mode = ref<Mode>('text')
 const busy = ref(false)
 
 function saveBlob(blob: Blob, name: string) {
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = name
-  a.click()
-  URL.revokeObjectURL(url)
+  return saveFile(name, blob)
 }
 async function run(fn: () => Promise<Blob>, name: string) {
   busy.value = true
   try {
-    saveBlob(await fn(), name)
+    await saveBlob(await fn(), name)
     ElMessage.success('PPT 已生成')
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '生成失败，请重试')

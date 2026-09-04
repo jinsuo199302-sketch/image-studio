@@ -4,6 +4,7 @@ import { ElMessage } from 'element-plus'
 import { UploadFilled, Close, ArrowUp, ArrowDown } from '@element-plus/icons-vue'
 import { scanToPdf, type ScanMode } from '../../../../services/pdfApi'
 import { prepareUpload } from '../../../../utils/prepImage'
+import { saveFile } from '../../../../utils/saveFile'
 
 const MAX_FILES = 30
 const MAX_FILE_SIZE = 30 * 1024 * 1024
@@ -62,12 +63,7 @@ async function generate() {
       mode.value,
       autoCrop.value,
     )
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'scan.pdf'
-    a.click()
-    URL.revokeObjectURL(url)
+    await saveFile('scan.pdf', blob)
     ElMessage.success('扫描件已生成')
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '扫描失败，请重试')

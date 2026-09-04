@@ -4,6 +4,7 @@ import { ElMessage } from 'element-plus'
 import { UploadFilled, Delete } from '@element-plus/icons-vue'
 import { colorizePhoto } from '../../../../services/colorizeApi'
 import { prepareUpload } from '../../../../utils/prepImage'
+import { saveFile } from '../../../../utils/saveFile'
 import { useAuthStore } from '../../../../stores/auth'
 
 const emit = defineEmits<{ (e: 'insert-image', url: string): void }>()
@@ -52,10 +53,7 @@ async function run() {
 
 function download() {
   if (!colorizedImage.value) return
-  const a = document.createElement('a')
-  a.href = colorizedImage.value
-  a.download = '上色照片.jpg'
-  a.click()
+  saveFile('上色照片.jpg', colorizedImage.value)
 }
 </script>
 

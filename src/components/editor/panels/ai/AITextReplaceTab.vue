@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { UploadFilled, Delete } from '@element-plus/icons-vue'
 import { useAuthStore } from '../../../../stores/auth'
 import TextReplaceDialog from '../../TextReplaceDialog.vue'
+import { saveFile } from '../../../../utils/saveFile'
 
 const authStore = useAuthStore()
 
@@ -27,10 +28,7 @@ function reset() {
 
 function download() {
   if (!workingImage.value) return
-  const a = document.createElement('a')
-  a.href = workingImage.value
-  a.download = 'text-replaced.png'
-  a.click()
+  saveFile('text-replaced.png', workingImage.value)
 }
 </script>
 

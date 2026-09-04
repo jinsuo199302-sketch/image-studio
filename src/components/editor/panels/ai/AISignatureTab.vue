@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Delete, RefreshLeft, UploadFilled } from '@element-plus/icons-vue'
+import { saveFile } from '../../../../utils/saveFile'
 
 /**
  * 签名生成器。纯前端 canvas，无后端。
@@ -456,10 +457,7 @@ function currentPng(): string | null {
 function download() {
   const url = currentPng()
   if (!url) return
-  const a = document.createElement('a')
-  a.href = url
-  a.download = mode.value.startsWith('seal') ? '印章.png' : '签名.png'
-  a.click()
+  saveFile(mode.value.startsWith('seal') ? '印章.png' : '签名.png', url)
 }
 function insertToCanvas() {
   const url = currentPng()
@@ -479,10 +477,7 @@ function downloadPerfStrip(i: number) {
   c.width = Math.ceil(sw)
   c.height = img.naturalHeight
   c.getContext('2d')!.drawImage(img, i * sw, 0, sw, img.naturalHeight, 0, 0, sw, img.naturalHeight)
-  const a = document.createElement('a')
-  a.href = c.toDataURL('image/png')
-  a.download = `骑缝章-第${i + 1}页.png`
-  a.click()
+  saveFile(`骑缝章-第${i + 1}页.png`, c.toDataURL('image/png'))
 }
 
 onMounted(() => {

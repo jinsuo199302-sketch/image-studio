@@ -49,6 +49,31 @@ def _wait_until_up(timeout_s: float = 60.0) -> bool:
     return False
 
 
+class _DesktopApi:
+    """暴露给前端 window.pywebview.api 的方法。前端所有"下载/导出"都走 save_file——
+    WebView2 会静默吞掉 <a download> / blob: / data: 触发的下载，只能用原生另存为对话框。"""
+
+    def save_file(self, filename: str, data_url: str) -> dict:
+        import base64
+
+        try:
+            import webview
+
+            payload = data_url.split(",", 1)[1] if data_url.startswith("data:") and "," in data_url else data_url
+            raw = base64.b64decode(payload)
+            win = webview.windows[0]
+            result = win.create_file_dialog(webview.SAVE_DIALOG, save_filename=filename)
+            if not result:
+                return {"ok": False, "canceled": True}
+            path = result if isinstance(result, str) else result[0]
+            with open(path, "wb") as f:
+                f.write(raw)
+            return {"ok": True, "path": path}
+        except Exception as e:  # noqa: BLE001
+            print(f"[save_file] {e}", file=sys.stderr, flush=True)
+            return {"ok": False, "error": str(e)}
+
+
 def _run_desktop() -> None:
     """起服务（后台线程）+ 原生窗口。窗口关掉即退出整个程序。"""
     import threading
@@ -60,7 +85,9 @@ def _run_desktop() -> None:
     try:
         import webview
 
-        webview.create_window("万能画图", URL, width=1440, height=900, min_size=(1024, 680))
+        webview.create_window(
+            "万能画图", URL, width=1440, height=900, min_size=(1024, 680), js_api=_DesktopApi()
+        )
         webview.start()
     except Exception as e:  # 没装 WebView2 运行时等 → 退回系统浏览器
         print(f"[window] 原生窗口不可用（{e}），改用默认浏览器打开", file=sys.stderr, flush=True)
