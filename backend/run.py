@@ -26,6 +26,39 @@ def _pick_free_port() -> int:
         s.close()
 
 
+def _load_db_settings_into_env() -> None:
+    """桌面版这台机器上实测过：exe 自己写的 data.db 读写完全正常，但外部进程放进同一个
+    文件夹的任何文件（不管叫什么名字），这个 exe 都读不到——具体是哪层安全软件/沙箱拦的
+    没查清楚，干脆不再依赖外部文件。改成走 /admin 页面填 key → 存进 data.db（exe 自己
+    写自己读，路径已验证可靠）→ 下次启动时这里在 import app.config 之前把值塞进
+    os.environ，config.py 照常从环境变量读，对其余代码完全透明。必须在 uvicorn.run(...)
+    之前调用（那一步才会真正 import app.config）。"""
+    if os.environ.get("OPENLUX_API_KEY"):
+        return  # 已经有 .env / 系统环境变量设置的，DB 里的值不覆盖
+    try:
+        import sqlite3
+
+        from app.paths import DATA_DIR
+
+        db_path = DATA_DIR / "data.db"
+        if not db_path.is_file():
+            return
+        conn = sqlite3.connect(str(db_path))
+        try:
+            rows = conn.execute(
+                "select key, value from app_settings where key in ('openlux_api_key','openlux_base_url')"
+            ).fetchall()
+        except sqlite3.OperationalError:
+            return  # 表还没建出来（老 data.db，或者还没人在 /admin 填过）
+        finally:
+            conn.close()
+        for key, value in rows:
+            if value:
+                os.environ[key.upper()] = value
+    except Exception as e:  # noqa: BLE001 — 这步失败不能把整个程序带崩
+        print(f"[settings] 读取 data.db 里的配置失败：{e}", file=sys.stderr, flush=True)
+
+
 def _run_worker() -> None:
     # sys.argv == [exe, "--worker", <name>, *args]
     name = sys.argv[2]
@@ -43,6 +76,7 @@ def _run_worker() -> None:
 def _serve(reload: bool, port: int = PORT) -> None:
     import uvicorn
 
+    _load_db_settings_into_env()
     uvicorn.run("app.main:app", host="0.0.0.0" if reload else HOST, port=port, reload=reload)
 
 

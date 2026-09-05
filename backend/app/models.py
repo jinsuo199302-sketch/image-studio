@@ -102,6 +102,24 @@ class ToolEvent(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class AppSetting(Base):
+    """桌面版专用的键值配置（目前只存 openlux_api_key/openlux_base_url）。
+    背景：桌面版这台机器上实测过，image-studio-backend.exe 自己创建的文件（data.db/
+    .jwt_secret）读写正常，但外部进程（哪怕是系统自带的 PowerShell）事后放进同一个
+    文件夹的任何文件——不管叫什么名字、内容是什么——这个 exe 都看不到（is_file() 直接
+    返回 False），具体是哪层安全软件/沙箱机制干的没查清楚。绕不开就不绕了：AI key 不
+    再指望放一个外部文件让 exe 去读，改成走「进程自己读写自己的 data.db」这条已验证
+    可靠的路径——管理员在 /admin 页面填 key，写进这张表；下次重启时 run.py 在导入
+    app.config 之前先把这张表里的值塞进 os.environ，config.py 照常从环境变量读，
+    对 ai_proxy.py 完全透明。"""
+
+    __tablename__ = "app_settings"
+
+    key = Column(String, primary_key=True)
+    value = Column(String, nullable=False, default="")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class GeneratedAsset(Base):
     """AI 生成的图片素材（目前只有"参考图生成"的背景图会自动存），私有——只有生成者自己能看到/删除。
     只存 file_name（磁盘上的相对文件名），不存完整 URL，域名/端口变了也不用改数据。"""

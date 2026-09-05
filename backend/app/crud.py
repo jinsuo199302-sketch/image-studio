@@ -152,3 +152,17 @@ def delete_generated_asset(db: Session, asset_id: str):
     db.delete(asset)
     db.commit()
     return True
+
+
+def get_setting(db: Session, key: str, default: str = "") -> str:
+    row = db.query(models.AppSetting).filter(models.AppSetting.key == key).first()
+    return row.value if row else default
+
+
+def set_setting(db: Session, key: str, value: str) -> None:
+    row = db.query(models.AppSetting).filter(models.AppSetting.key == key).first()
+    if row:
+        row.value = value
+    else:
+        db.add(models.AppSetting(key=key, value=value))
+    db.commit()

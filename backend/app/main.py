@@ -293,6 +293,43 @@ def admin_resolve_recharge(
     r.handled_at = datetime.utcnow()
     db.commit()
     return {"email": r.email, **result}
+
+
+class AppSettingsIn(BaseModel):
+    openlux_api_key: str = ""
+    openlux_base_url: str = ""
+
+
+@app.get("/api/admin/settings")
+def admin_get_settings(db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+    """桌面版专用：/admin 页面显示当前 key 配置状态（不回明文）。"""
+    _require_admin(user, db)
+    key = crud.get_setting(db, "openlux_api_key")
+    masked = f"{key[:6]}...{key[-4:]}" if len(key) > 12 else ("(未设置)" if not key else "(过短)")
+    return {
+        "openlux_key_set": bool(key),
+        "openlux_key_masked": masked,
+        "openlux_base_url": crud.get_setting(db, "openlux_base_url"),
+    }
+
+
+@app.post("/api/admin/settings")
+def admin_set_settings(
+    payload: AppSettingsIn, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)
+):
+    """存进 data.db，不是写文件——桌面版这台机器上验证过外部写进 image-studio-data\\ 文件夹的
+    文件，这个 exe 读不到（具体哪层安全软件拦的没查清楚），只有 exe 自己读写的 data.db 稳定可靠。
+    填完要重启程序才生效：run.py 在导入 app.config 之前会把这张表的值塞进 os.environ。"""
+    _require_admin(user, db)
+    key = payload.openlux_api_key.strip()
+    if key:
+        crud.set_setting(db, "openlux_api_key", key)
+    base_url = payload.openlux_base_url.strip()
+    if base_url:
+        crud.set_setting(db, "openlux_base_url", base_url)
+    return {"ok": True, "note": "已保存，重启程序后生效"}
+
+
 # 落在 /api/ 前缀下才会被 nginx 的 /api/ location 代理到这个后端进程，不用额外改 nginx 配置
 app.mount("/api/ai/generated", StaticFiles(directory=GENERATED_ASSETS_DIR), name="generated-assets")
 
@@ -383,7 +420,7 @@ def health():
 
 
 @app.get("/api/diag")
-def diag():
+def diag(db: Session = Depends(get_db)):
     """桌面版排障用：这台机器这个进程实际用的数据目录、.env/settings.env 是否读到、
     key 是否配置。不返回 key 明文,只返回是否非空 + 前后几位。出问题时把这个接口的
     返回内容发过来看。"""
@@ -391,6 +428,7 @@ def diag():
     from app.paths import DATA_DIR, FRONTEND_DIR
 
     key = config.OPENLUX_API_KEY
+    db_key = crud.get_setting(db, "openlux_api_key")
     masked = f"{key[:6]}...{key[-4:]}" if len(key) > 12 else ("(empty)" if not key else "(too short)")
     return {
         "frozen": getattr(__import__("sys"), "frozen", False),
@@ -410,6 +448,8 @@ def diag():
         "openlux_key_masked": masked,
         "openlux_base_url": config.OPENLUX_BASE_URL,
         "dev_unrestricted": config.DEV_UNRESTRICTED,
+        # DB 里存了 key（/admin 页面填的）但这里还是空，说明要重启程序才能生效
+        "db_setting_key_set": bool(db_key),
     }
 
 

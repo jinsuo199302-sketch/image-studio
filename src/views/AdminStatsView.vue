@@ -108,6 +108,42 @@ async function grantMember() {
   }
 }
 
+// 桌面版专用：AI key 存进 data.db 而不是文件——这台机器上验证过外部写进
+// image-studio-data\ 文件夹的文件，exe 自己读不到（具体哪层安全软件拦的没查清楚），
+// 只有 exe 自己读写的 data.db 稳定可靠。填完要重启程序才生效。
+const settingsStatus = ref('')
+const settingsKey = ref('')
+const settingsBaseUrl = ref('')
+const settingsMsg = ref('')
+async function loadSettingsStatus() {
+  try {
+    const d = await fetch('/api/admin/settings', { headers: { Authorization: `Bearer ${authToken()}` } }).then((r) =>
+      r.json(),
+    )
+    settingsStatus.value = d.openlux_key_set ? `当前：${d.openlux_key_masked}` : '当前：未配置'
+  } catch {
+    /* ignore */
+  }
+}
+async function saveSettings() {
+  settingsMsg.value = ''
+  try {
+    const res = await fetch('/api/admin/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
+      body: JSON.stringify({ openlux_api_key: settingsKey.value.trim(), openlux_base_url: settingsBaseUrl.value.trim() }),
+    })
+    const d = await res.json()
+    if (!res.ok) throw new Error(d?.detail || '失败')
+    settingsMsg.value = '已保存——关掉程序重新打开才会生效'
+    settingsKey.value = ''
+    settingsBaseUrl.value = ''
+    await loadSettingsStatus()
+  } catch (e) {
+    settingsMsg.value = e instanceof Error ? e.message : '失败'
+  }
+}
+
 async function load() {
   loading.value = true
   error.value = ''
@@ -129,6 +165,7 @@ async function load() {
 onMounted(() => {
   load()
   loadRecharges()
+  loadSettingsStatus()
 })
 </script>
 
@@ -229,6 +266,19 @@ onMounted(() => {
             </div>
             <p v-if="memMsg" class="mt-2 text-xs text-gray-600">{{ memMsg }}</p>
           </div>
+        </div>
+
+        <div class="mb-4 space-y-3 rounded-lg border border-gray-200 bg-white p-4">
+          <div class="mb-2 text-xs font-medium text-gray-500">
+            AI Key 配置（仅桌面版需要，网页版走服务器 .env 不用管这里）· {{ settingsStatus }}
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <el-input v-model="settingsKey" size="small" placeholder="openlux API Key（sk-开头）" class="!w-64" />
+            <el-input v-model="settingsBaseUrl" size="small" placeholder="Base URL（可选，留空用默认）" class="!w-56" />
+            <el-button size="small" type="primary" @click="saveSettings">保存</el-button>
+          </div>
+          <p v-if="settingsMsg" class="mt-1 text-xs text-gray-600">{{ settingsMsg }}</p>
+          <p class="text-[11px] text-gray-400">保存后要关掉程序重新打开才会生效（不是刷新页面）</p>
         </div>
 
         <div class="overflow-hidden rounded-lg border border-gray-200 bg-white">
