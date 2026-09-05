@@ -48,13 +48,20 @@ WebView2 会静默吞掉网页里 `<a download>` / `blob:` / `data:` 触发的�
 > 账号和历史数据会丢。放 LOCALAPPDATA 后，换新版 exe 数据照样在。
 > 首次启动时如果发现老位置（exe 旁 `image-studio-data\`）有数据，会自动迁一次过来。
 
-要用 AI 功能（生图/OCR/翻译）就在 `%LOCALAPPDATA%\image-studio-data\.env` 里填：
+要用 AI 功能（生图/OCR/翻译）就在 `%LOCALAPPDATA%\image-studio-data\settings.env` 里填：
 
 ```
 OPENLUX_BASE_URL=...
 OPENLUX_API_KEY=...
 DEV_UNRESTRICTED=1
 ```
+
+> **文件名用 `settings.env`，不要用 `.env`**：实测遇到过安全软件拦截未签名 exe 读取
+> 叫 `.env` 的文件（`Path.is_file()` 静默返回 `False`，不报错，看着文件明明在），
+> `config.py` 会依次尝试 `.env` 和 `settings.env` 两个名字，但只有 `settings.env`
+> 能稳定读到。服务器上部署不受影响，一直用的是 `.env` 且工作正常，这个坑只在
+> 桌面版遇到过。排查同类问题用 `GET /api/diag`（同源接口，浏览器打开
+> `http://127.0.0.1:<端口>/api/diag` 或 curl）。
 
 ## 模型
 

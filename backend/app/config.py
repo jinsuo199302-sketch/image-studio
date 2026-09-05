@@ -8,7 +8,14 @@ from dotenv import load_dotenv
 from app.paths import DATA_DIR
 
 BASE_DIR = DATA_DIR
-load_dotenv(BASE_DIR / ".env")
+# 桌面版上实测遇到过：某些安全软件会拦截未签名 exe 读取名字叫 .env 的文件
+# （`.env` 本身就是常见的"窃取密钥"扫描目标，AV/EDR 对它有专门的启发式规则），
+# is_file() 直接静默返回 False，不报错、日志也看不出来。所以两个文件名都试，
+# settings.env 是给桌面版准备的备用名——服务器上一直用 .env，不受影响，不用改。
+for _name in (".env", "settings.env"):
+    _candidate = BASE_DIR / _name
+    if _candidate.is_file():
+        load_dotenv(_candidate)
 
 
 def _load_or_create_jwt_secret() -> str:

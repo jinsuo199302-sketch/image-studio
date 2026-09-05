@@ -384,20 +384,22 @@ def health():
 
 @app.get("/api/diag")
 def diag():
-    """桌面版排障用：这台机器这个进程实际用的数据目录、.env 是否读到、key 是否配置。
-    不返回 key 明文,只返回是否非空 + 前后几位。出问题时把这个接口的返回内容发过来看。"""
+    """桌面版排障用：这台机器这个进程实际用的数据目录、.env/settings.env 是否读到、
+    key 是否配置。不返回 key 明文,只返回是否非空 + 前后几位。出问题时把这个接口的
+    返回内容发过来看。"""
     from app import config
     from app.paths import DATA_DIR, FRONTEND_DIR
 
     key = config.OPENLUX_API_KEY
     masked = f"{key[:6]}...{key[-4:]}" if len(key) > 12 else ("(empty)" if not key else "(too short)")
-    env_file = DATA_DIR / ".env"
     return {
         "frozen": getattr(__import__("sys"), "frozen", False),
         "data_dir": str(DATA_DIR),
         "frontend_dir": str(FRONTEND_DIR),
-        "env_file_path": str(env_file),
-        "env_file_exists": env_file.is_file(),
+        # 某些安全软件会拦截未签名 exe 读取叫 .env 的文件（is_file() 静默返回 False），
+        # 两个名字都报一下，一眼看出是不是踩到了这个坑
+        "dot_env_exists": (DATA_DIR / ".env").is_file(),
+        "settings_env_exists": (DATA_DIR / "settings.env").is_file(),
         "openlux_key_set": bool(key),
         "openlux_key_masked": masked,
         "openlux_base_url": config.OPENLUX_BASE_URL,
