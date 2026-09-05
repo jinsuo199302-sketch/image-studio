@@ -51,7 +51,8 @@ authStore.restoreSession()
           <template #dropdown>
             <el-dropdown-menu>
               <el-dropdown-item disabled>{{ authStore.user?.email }}</el-dropdown-item>
-              <el-dropdown-item divided @click="authStore.logout()">退出登录</el-dropdown-item>
+              <el-dropdown-item divided @click="router.push({ name: 'admin' })">管理后台</el-dropdown-item>
+              <el-dropdown-item @click="authStore.logout()">退出登录</el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
