@@ -400,6 +400,7 @@ def diag():
         # 两个名字都报一下，一眼看出是不是踩到了这个坑
         "dot_env_exists": (DATA_DIR / ".env").is_file(),
         "settings_env_exists": (DATA_DIR / "settings.env").is_file(),
+        "settings_txt_exists": (DATA_DIR / "settings.txt").is_file(),
         "openlux_key_set": bool(key),
         "openlux_key_masked": masked,
         "openlux_base_url": config.OPENLUX_BASE_URL,

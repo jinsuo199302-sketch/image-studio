@@ -8,11 +8,13 @@ from dotenv import load_dotenv
 from app.paths import DATA_DIR
 
 BASE_DIR = DATA_DIR
-# 桌面版上实测遇到过：某些安全软件会拦截未签名 exe 读取名字叫 .env 的文件
-# （`.env` 本身就是常见的"窃取密钥"扫描目标，AV/EDR 对它有专门的启发式规则），
-# is_file() 直接静默返回 False，不报错、日志也看不出来。所以两个文件名都试，
-# settings.env 是给桌面版准备的备用名——服务器上一直用 .env，不受影响，不用改。
-for _name in (".env", "settings.env"):
+# 桌面版上实测遇到过：某些安全软件会拦截未签名 exe 读取 .env 这个后缀的文件
+# （`.env` 本身就是常见的"窃取密钥"扫描目标，AV/EDR 对它有专门的启发式规则）——
+# 一开始以为是精确匹配文件名 ".env"，改名 settings.env 还是被拦，说明规则是按
+# **扩展名** 匹配的，不是完整文件名。所以 settings.txt 换成一个完全不相关的
+# 扩展名。服务器上一直用 .env、不受影响、不用改；这几个名字都试一遍，哪个能
+# 读到用哪个。
+for _name in (".env", "settings.env", "settings.txt"):
     _candidate = BASE_DIR / _name
     if _candidate.is_file():
         load_dotenv(_candidate)
