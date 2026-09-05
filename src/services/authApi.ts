@@ -23,22 +23,27 @@ async function parseErrorOrThrow(res: Response): Promise<never> {
   throw new Error(detail)
 }
 
+async function postAuth(path: string, body: unknown): Promise<Response> {
+  try {
+    return await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+  } catch {
+    // fetch 直接抛（网络层失败）——桌面版最常见是系统代理没放行本地地址
+    throw new Error('连不上本地服务，若开着 VPN / 加速器请把它关掉或重启本软件再试')
+  }
+}
+
 export async function register(email: string, password: string): Promise<AuthResult> {
-  const res = await fetch('/api/auth/register', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  })
+  const res = await postAuth('/api/auth/register', { email, password })
   if (!res.ok) return parseErrorOrThrow(res)
   return res.json()
 }
 
 export async function login(email: string, password: string): Promise<AuthResult> {
-  const res = await fetch('/api/auth/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  })
+  const res = await postAuth('/api/auth/login', { email, password })
   if (!res.ok) return parseErrorOrThrow(res)
   return res.json()
 }
