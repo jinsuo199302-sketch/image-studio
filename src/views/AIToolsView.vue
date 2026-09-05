@@ -22,6 +22,8 @@ const VALID_TABS = [
   'cutout',
   'erase',
   'textreplace',
+  'editimg',
+  'expand',
   'ocr',
   'idphoto',
   'memorial',

@@ -15,6 +15,8 @@ import AIImageWatermarkTab from './ai/AIImageWatermarkTab.vue'
 import AICutoutTab from './ai/AICutoutTab.vue'
 import AIEraseTab from './ai/AIEraseTab.vue'
 import AITextReplaceTab from './ai/AITextReplaceTab.vue'
+import AIEditImageTab from './ai/AIEditImageTab.vue'
+import AIExpandTab from './ai/AIExpandTab.vue'
 import AIOcrTab from './ai/AIOcrTab.vue'
 import AIIdPhotoTab from './ai/AIIdPhotoTab.vue'
 import AIMemorialPhotoTab from './ai/AIMemorialPhotoTab.vue'
@@ -41,6 +43,8 @@ type TabKey =
   | 'cutout'
   | 'erase'
   | 'textreplace'
+  | 'editimg'
+  | 'expand'
   | 'ocr'
   | 'idphoto'
   | 'memorial'
@@ -94,6 +98,8 @@ function useSignatureInPdf(dataUrl: string) {
           { key: 'cutout', label: '抠图' },
           { key: 'erase', label: '消除' },
           { key: 'textreplace', label: '改字' },
+          { key: 'editimg', label: 'AI改图' },
+          { key: 'expand', label: 'AI扩图' },
           { key: 'ocr', label: '提字' },
           { key: 'idphoto', label: '证件照' },
           { key: 'memorial', label: '黑白遗像' },
@@ -138,6 +144,8 @@ function useSignatureInPdf(dataUrl: string) {
       <AICutoutTab v-else-if="activeTab === 'cutout'" />
       <AIEraseTab v-else-if="activeTab === 'erase'" />
       <AITextReplaceTab v-else-if="activeTab === 'textreplace'" />
+      <AIEditImageTab v-else-if="activeTab === 'editimg'" />
+      <AIExpandTab v-else-if="activeTab === 'expand'" />
       <AIOcrTab v-else-if="activeTab === 'ocr'" />
       <AIIdPhotoTab v-else-if="activeTab === 'idphoto'" />
       <AIMemorialPhotoTab v-else-if="activeTab === 'memorial'" />
