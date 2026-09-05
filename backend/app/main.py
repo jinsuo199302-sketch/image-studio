@@ -401,6 +401,11 @@ def diag():
         "dot_env_exists": (DATA_DIR / ".env").is_file(),
         "settings_env_exists": (DATA_DIR / "settings.env").is_file(),
         "settings_txt_exists": (DATA_DIR / "settings.txt").is_file(),
+        # 排查用：一个内容完全无害的探针文件 vs 一个内容像密钥的探针文件，
+        # 对比这两个能不能读到，用来判断到底是按文件名/后缀拦，还是按内容拦
+        "probe_plain_exists": (DATA_DIR / "probe_plain.txt").is_file(),
+        "probe_secret_exists": (DATA_DIR / "probe_secret.txt").is_file(),
+        "listdir": sorted(p.name for p in DATA_DIR.iterdir()) if DATA_DIR.is_dir() else None,
         "openlux_key_set": bool(key),
         "openlux_key_masked": masked,
         "openlux_base_url": config.OPENLUX_BASE_URL,
