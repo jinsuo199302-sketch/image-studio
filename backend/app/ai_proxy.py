@@ -986,26 +986,148 @@ async def _do_handout_layered(db, user, cat: dict, style: dict, border: dict, to
     }
 
 
+_ANALYZE_HANDOUT_PROMPT = """这是一张手抄报/黑板报图片。请拆解它的结构，只返回一个 JSON 对象，
+不要 markdown、不要多余说明，形如：
+{
+  "illustrations": [{"name": "太阳", "box": [ymin,xmin,ymax,xmax]}],
+  "textBoxes": [{"heading": "地球需要我们", "body": "地球是我们唯一的家园，空气、水...", "box": [ymin,xmin,ymax,xmax], "color": "#5aa832"}]
+}
+- illustrations：画面里的图画元素（人物/动物/植物/道具/云朵/装饰图标等），不含文字、不含四周花边、不含整块背景。最多 12 个。
+- textBoxes：带颜色边框的文字方框，heading 是小标题、body 是框里的正文（原样抄写，去掉换行），color 是这个框边框的主色（hex）。没有文字方框就返回空数组。
+- 所有 box 坐标是 0~1000 的整数，(0,0) 在左上角。"""
+
+
+async def _analyze_handout_image(image_b64: str) -> dict:
+    try:
+        res = await _post_openlux(
+            f"{OPENLUX_BASE_URL}/chat/completions",
+            timeout=90,
+            headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
+            json={
+                "model": "gemini-3-flash-preview",
+                "messages": [{"role": "user", "content": [
+                    {"type": "text", "text": _ANALYZE_HANDOUT_PROMPT},
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_b64}"}},
+                ]}],
+            },
+        )
+        if res.status_code >= 400:
+            return {"illustrations": [], "textBoxes": []}
+        raw = res.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+        m = re.search(r"\{[\s\S]*\}", raw)
+        data = json.loads(m.group(0)) if m else {}
+    except Exception:
+        return {"illustrations": [], "textBoxes": []}
+    return {
+        "illustrations": data.get("illustrations") or [],
+        "textBoxes": data.get("textBoxes") or [],
+    }
+
+
+def _box_to_px(box, iw: int, ih: int, pad: int = 0):
+    """gemini 的 [ymin,xmin,ymax,xmax] 0~1000 → 像素 (x0,y0,x1,y1)，带 pad、裁到画布内。"""
+    try:
+        ymin, xmin, ymax, xmax = [max(0.0, min(1000.0, float(v))) for v in box]
+    except (TypeError, ValueError):
+        return None
+    x0 = max(0, int(xmin / 1000 * iw) - pad)
+    y0 = max(0, int(ymin / 1000 * ih) - pad)
+    x1 = min(iw, int(xmax / 1000 * iw) + pad)
+    y1 = min(ih, int(ymax / 1000 * ih) + pad)
+    return (x0, y0, x1, y1) if x1 - x0 > 8 and y1 - y0 > 8 else None
+
+
 async def _do_decompose(db, user, image_bytes: bytes, W: int, H: int, style_key: str):
-    """把用户上传的现成整图（豆包生成的手抄报之类）拆成可拖动图层。
-    底图 = 原图本身（不重画，文字/方框/内容一样不丢），上面叠一层照画风重画的插画贴纸——
-    想挪/换某个插画就拖那个贴纸（挪走会露出下面原图那份，用「AI 消除」抹掉即可）；
-    想改文字用「文字替换」直接在原图上改。"""
-    style = handout_categories.get_style(style_key)
-    dec = await _decompose_to_layers(db, user, image_bytes, W, H, style["prompt"], make_bg=False)
-    elements: list[dict] = [
-        {"type": "image", "x": 0, "y": 0, "width": W, "height": H, "src": f"/api/ai/generated/{dec['fullName']}"}
-    ]
-    elements += dec["elImages"]
+    """把用户上传的现成手抄报图拆成可编辑图层：
+    - 图画元素：直接从原图裁下来 + 抠白底（忠于原图、不重画、不变形），并在底图上抹白
+    - 文字方框：换成"彩色圆角边框 + 可编辑小标题 + 可编辑正文（预填原文）"，边框颜色可改
+    - 底图：原图去掉被裁走的图画元素，花边/标题保留
+    """
+    src_img = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
+    if src_img is None:
+        raise HTTPException(status_code=400, detail="图片打不开，换一张")
+    ih, iw = src_img.shape[:2]
+    b64 = base64.b64encode(image_bytes).decode()
+    analysis = await _analyze_handout_image(b64)
+
+    sx, sy = W / iw, H / ih
+    bg_img = src_img.copy()
+    el_images: list[dict] = []
+
+    for ill in analysis["illustrations"][:12]:
+        px = _box_to_px(ill.get("box") or [], iw, ih, pad=round(min(iw, ih) * 0.008))
+        if not px:
+            continue
+        x0, y0, x1, y1 = px
+        if (x1 - x0) * (y1 - y0) > 0.4 * iw * ih:  # 太大八成是框错了整块
+            continue
+        ok, cbuf = cv2.imencode(".png", src_img[y0:y1, x0:x1])
+        if not ok:
+            continue
+        try:
+            cut = _cutout_white_bg(cbuf.tobytes())
+        except Exception:
+            cut = cbuf.tobytes()
+        a = _persist_asset_bytes(db, user.id, "handout-element", cut)
+        el_images.append({
+            "type": "image",
+            "x": round(x0 * sx), "y": round(y0 * sy),
+            "width": max(30, round((x1 - x0) * sx)), "height": max(30, round((y1 - y0) * sy)),
+            "src": f"/api/ai/generated/{a.file_name}",
+        })
+        cv2.rectangle(bg_img, (x0, y0), (x1, y1), (255, 255, 255), -1)
+
+    ok, bgbuf = cv2.imencode(".png", bg_img)
+    bg_asset = _persist_asset_bytes(db, user.id, "handout-bg", bgbuf.tobytes() if ok else image_bytes)
+    full_asset = _persist_asset_bytes(db, user.id, "handout-full", image_bytes)
+
+    text_els: list[dict] = []
+    for tb in analysis["textBoxes"][:8]:
+        px = _box_to_px(tb.get("box") or [], iw, ih, pad=round(min(iw, ih) * 0.012))
+        if not px:
+            continue
+        x0, y0, x1, y1 = [v for v in px]
+        cx0, cy0 = round(x0 * sx), round(y0 * sy)
+        cw, ch = round((x1 - x0) * sx), round((y1 - y0) * sy)
+        color = str(tb.get("color") or "#2563eb").strip()
+        if not re.match(r"^#[0-9a-fA-F]{6}$", color):
+            color = "#2563eb"
+        heading = str(tb.get("heading") or "").strip()[:16]
+        body = str(tb.get("body") or "").strip()
+        scale = max(0.7, min(2.2, cw / 320))
+        fs_head = round(20 * scale)
+        fs_body = round(15 * scale)
+        pad = round(14 * scale)
+        # 不透明淡色底 + 同色描边，盖住原图那个框
+        text_els.append({"type": "rect", "x": cx0, "y": cy0, "width": cw, "height": ch,
+                         "fill": layout_presets._tint(color, 0.9), "rx": round(16 * scale),
+                         "stroke": color, "strokeWidth": max(2, round(2.4 * scale))})
+        if heading:
+            hw = min(cw - 2 * pad, round(len(heading) * fs_head * 1.2 + fs_head * 1.8))
+            hh = round(fs_head * 1.7)
+            text_els.append({"type": "rect", "x": cx0 + pad, "y": cy0 + pad, "width": hw, "height": hh,
+                             "fill": color, "rx": round(hh / 2)})
+            text_els.append({"type": "text", "x": cx0 + pad, "y": cy0 + pad + round((hh - fs_head) / 2 - 1),
+                             "width": hw, "text": heading, "fontSize": fs_head, "color": "#ffffff",
+                             "fontWeight": "bold", "align": "center"})
+        text_els.append({"type": "text", "x": cx0 + pad, "y": cy0 + pad + (round(fs_head * 1.7) + round(10 * scale) if heading else 0),
+                         "width": cw - 2 * pad, "text": body or "（点这里改文字）", "fontSize": fs_body,
+                         "color": "#374151"})
+
+    elements: list[dict] = [{"type": "image", "x": 0, "y": 0, "width": W, "height": H,
+                             "src": f"/api/ai/generated/{bg_asset.file_name}"}]
+    elements += el_images
+    elements += text_els
+
     return {
         "background": "#ffffff",
         "elements": elements,
         "title": "",
         "sections": [],
         "colors": ["#dc2626", "#2563eb"],
-        "fullSrc": f"/api/ai/generated/{dec['fullName']}",
-        "elementCount": len(dec["elImages"]),
-        "assetId": dec["fullAssetId"],
+        "fullSrc": f"/api/ai/generated/{full_asset.file_name}",
+        "elementCount": len(el_images) + len(analysis["textBoxes"][:8]),
+        "assetId": full_asset.id,
     }
 
 
