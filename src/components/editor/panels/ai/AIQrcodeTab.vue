@@ -35,6 +35,13 @@ const cardName = ref('')
 const cardPhone = ref('')
 const cardOrg = ref('')
 const cardAddress = ref('')
+const cardEmail = ref('')
+const cardNote = ref('')
+
+/** vCard 字段值转义：反斜杠/分号/逗号/换行 */
+function vEsc(s: string): string {
+  return s.trim().replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/[;,]/g, (m) => '\\' + m)
+}
 
 const previewUrl = ref('')
 const generating = ref(false)
@@ -51,13 +58,16 @@ function normalizeUrl(raw: string): string {
 const normalizedUrl = computed(() => normalizeUrl(qrUrl.value))
 const urlLooksValid = computed(() => /^https?:\/\/[^\s]+\.[^\s]+/i.test(normalizedUrl.value))
 
-/** 微信扫一扫不识别纯文本，但识别 vCard——扫完能"保存到通讯录" */
+/** 微信扫一扫不识别纯文本，但识别 vCard——扫完能"保存到通讯录"，NOTE 字段的文字也会显示出来。
+ * 想让微信扫码看到大段文字，把文字放「备注」里就行，不用走服务器、不用备案。 */
 function buildVCard(): string {
   const name = cardName.value.trim()
-  const lines = ['BEGIN:VCARD', 'VERSION:3.0', `N:;${name};;;`, `FN:${name}`]
-  if (cardOrg.value.trim()) lines.push(`ORG:${cardOrg.value.trim()}`)
+  const lines = ['BEGIN:VCARD', 'VERSION:3.0', `N:;${vEsc(name)};;;`, `FN:${vEsc(name)}`]
+  if (cardOrg.value.trim()) lines.push(`ORG:${vEsc(cardOrg.value)}`)
   if (cardPhone.value.trim()) lines.push(`TEL;TYPE=CELL:${cardPhone.value.trim()}`)
-  if (cardAddress.value.trim()) lines.push(`ADR;TYPE=WORK:;;${cardAddress.value.trim()};;;;`)
+  if (cardEmail.value.trim()) lines.push(`EMAIL:${cardEmail.value.trim()}`)
+  if (cardAddress.value.trim()) lines.push(`ADR;TYPE=WORK:;;${vEsc(cardAddress.value)};;;;`)
+  if (cardNote.value.trim()) lines.push(`NOTE:${vEsc(cardNote.value)}`)
   lines.push('END:VCARD')
   return lines.join('\n')
 }
@@ -107,7 +117,7 @@ async function refreshPreview() {
   previewUrl.value = content ? await render(content) : ''
 }
 watch(
-  [mode, qrUrl, qrText, qrColor, qrSize, ecLevel, cardName, cardPhone, cardOrg, cardAddress],
+  [mode, qrUrl, qrText, qrColor, qrSize, ecLevel, cardName, cardPhone, cardOrg, cardAddress, cardEmail, cardNote],
   () => nextTick(refreshPreview),
 )
 onMounted(refreshPreview)
@@ -193,12 +203,13 @@ async function download() {
       </template>
 
       <template v-else>
-        <p class="rounded bg-gray-50 px-2 py-1.5 text-[11px] text-gray-500">
-          生成 vCard 电子名片码，微信扫一扫会弹"保存到通讯录"
+        <p class="rounded bg-green-50 px-2 py-1.5 text-[11px] leading-relaxed text-green-700">
+          微信扫一扫原生支持这种码，能弹"保存到通讯录"。<b>想让微信扫码看到大段文字，
+          把文字粘到下面「备注」里就行</b>——不用走服务器、不用备案。
         </p>
         <div>
           <label class="mb-1 block text-xs font-medium text-gray-600">姓名 *</label>
-          <el-input v-model="cardName" placeholder="张伟" maxlength="20" />
+          <el-input v-model="cardName" placeholder="张伟 / 活动名称 / 店铺名" maxlength="30" />
         </div>
         <div>
           <label class="mb-1 block text-xs font-medium text-gray-600">电话 *</label>
@@ -206,11 +217,26 @@ async function download() {
         </div>
         <div>
           <label class="mb-1 block text-xs font-medium text-gray-600">单位 / 职务</label>
-          <el-input v-model="cardOrg" placeholder="XX公司 · 市场部" maxlength="40" />
+          <el-input v-model="cardOrg" placeholder="XX公司 · 市场部（选填）" maxlength="40" />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-600">邮箱</label>
+          <el-input v-model="cardEmail" placeholder="选填" maxlength="60" />
         </div>
         <div>
           <label class="mb-1 block text-xs font-medium text-gray-600">地址</label>
-          <el-input v-model="cardAddress" placeholder="选填" maxlength="60" />
+          <el-input v-model="cardAddress" placeholder="选填" maxlength="80" />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-600">备注（可放大段文字，微信扫码能看到）</label>
+          <el-input
+            v-model="cardNote"
+            type="textarea"
+            :rows="4"
+            placeholder="活动说明、注意事项、简介… 想让人扫码读的文字都放这里"
+            maxlength="800"
+            show-word-limit
+          />
         </div>
       </template>
 
