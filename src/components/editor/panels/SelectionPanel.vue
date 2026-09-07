@@ -33,7 +33,7 @@ type TextProp =
 type ShadowDetail = { color: string; blur: number; offsetX: number; offsetY: number }
 type EffectPreset = 'none' | 'outline' | 'emboss' | 'neon'
 
-const props = defineProps<{ selection: SelectionInfo; removingBackground?: boolean; regeneratingElement?: boolean }>()
+const props = defineProps<{ selection: SelectionInfo; removingBackground?: boolean; regeneratingElement?: boolean; decomposingImage?: boolean }>()
 const emit = defineEmits<{
   (e: 'close'): void
   (e: 'text-prop', prop: TextProp, value: string | number | boolean): void
@@ -72,6 +72,7 @@ const emit = defineEmits<{
   (e: 'replace-image'): void
   (e: 'regenerate-element', prompt: string): void
   (e: 'edit-image-region'): void
+  (e: 'decompose-image'): void
   (e: 'remove-background'): void
   (e: 'erase-object'): void
   (e: 'text-replace'): void
@@ -564,6 +565,14 @@ function pickWarp(kind: WarpKind) {
           </el-button>
         </div>
         <div class="space-y-1.5">
+          <button
+            class="flex w-full items-center gap-2 rounded border border-violet-200 bg-violet-50/40 px-2 py-2 text-xs text-violet-700 hover:bg-violet-50"
+            :disabled="decomposingImage"
+            @click="emit('decompose-image')"
+          >
+            <el-icon :size="14"><MagicStick /></el-icon>
+            {{ decomposingImage ? '拆解中…（约 3~5 分钟）' : '拆成可编辑元素（AI 把图里的东西一个个拆出来）' }}
+          </button>
           <button
             class="flex w-full items-center gap-2 rounded px-2 py-2 text-xs text-gray-600 hover:bg-gray-100"
             @click="emit('edit-image-region')"

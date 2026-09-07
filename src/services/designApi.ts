@@ -282,19 +282,40 @@ export async function generateHandout(
   if (!layered) {
     return authPostJson<HandoutResult>('/design/handout', body, '手抄报生成失败')
   }
-  // 可拆分版：后端要跑好几分钟 → 下单拿 jobId，轮询到出结果
   const { jobId } = await authPostJson<{ jobId: string }>('/design/handout', body, '手抄报生成失败')
-  const deadline = Date.now() + 8 * 60 * 1000
+  return pollHandoutJob(jobId, '手抄报生成失败')
+}
+
+/** 手抄报/拆解都是异步 job（几分钟），下单后轮询同一个 job 接口到出结果 */
+async function pollHandoutJob(jobId: string, label: string): Promise<HandoutResult> {
+  const deadline = Date.now() + 10 * 60 * 1000
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, 5000))
     const job = await authGetJson<{ status: string; result?: HandoutResult; detail?: string }>(
       `/design/handout/job/${jobId}`,
-      '手抄报生成失败',
+      label,
     )
     if (job.status === 'done' && job.result) return job.result
-    if (job.status === 'error') throw new Error(job.detail || '手抄报生成失败')
+    if (job.status === 'error') throw new Error(job.detail || label)
   }
   throw new Error('生成超时，请稍后重试')
+}
+
+/** 上传一张现成的整图（豆包/别处生成的手抄报），拆成一堆可单独拖动/替换的透明贴纸图层 */
+export async function decomposeImage(
+  src: string,
+  canvasWidth: number,
+  canvasHeight: number,
+  style = 'color',
+): Promise<HandoutResult> {
+  const blob = await (await fetch(src)).blob()
+  const form = new FormData()
+  form.append('image', blob, 'image.png')
+  form.append('canvas_width', String(canvasWidth))
+  form.append('canvas_height', String(canvasHeight))
+  form.append('style', style)
+  const { jobId } = await authPostForm<{ jobId: string }>('/design/decompose', form, '图片拆解失败')
+  return pollHandoutJob(jobId, '图片拆解失败')
 }
 
 /** 可拆分手抄报里替换单个元素：一句提示词 → 一张透明底小图 */

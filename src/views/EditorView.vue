@@ -24,7 +24,7 @@ import AIDesignPanel from '../components/editor/panels/AIDesignPanel.vue'
 import PlaceholderPanel from '../components/editor/panels/PlaceholderPanel.vue'
 import type { Template } from '../data/templates'
 import type { GeneratedDesign } from '../services/designApi'
-import { regenerateElement } from '../services/designApi'
+import { regenerateElement, decomposeImage } from '../services/designApi'
 import { saveFile } from '../utils/saveFile'
 import { useTemplateStore } from '../stores/templates'
 import { useAuthStore } from '../stores/auth'
@@ -70,6 +70,7 @@ const resizeDialogOpen = ref(false)
 const historyDialogOpen = ref(false)
 const removingBackground = ref(false)
 const regeneratingElement = ref(false)
+const decomposingImage = ref(false)
 const adjustDialogOpen = ref(false)
 const eraseDialogOpen = ref(false)
 const textReplaceDialogOpen = ref(false)
@@ -197,6 +198,43 @@ async function onRegenerateElement(prompt: string) {
     regeneratingElement.value = false
   }
 }
+
+async function onDecomposeImage() {
+  const src = selection.value?.src
+  if (decomposingImage.value || selection.value?.type !== 'image' || !src) return
+  try {
+    await ElMessageBox.confirm(
+      '会把这张图里的元素一个个用 AI 拆成透明贴纸图层，然后替换当前画布内容（约 3~5 分钟）。继续吗？',
+      '拆成可编辑元素',
+      { confirmButtonText: '开始拆解', cancelButtonText: '取消', type: 'warning' },
+    )
+  } catch {
+    return
+  }
+  const dims = await new Promise<{ w: number; h: number }>((res, rej) => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => res({ w: img.naturalWidth || 1480, h: img.naturalHeight || 1050 })
+    img.onerror = () => rej(new Error('图片加载失败'))
+    img.src = src
+  }).catch(() => ({ w: 1480, h: 1050 }))
+  decomposingImage.value = true
+  ElMessage.info('已开始拆解，约 3~5 分钟，期间可以先做别的')
+  try {
+    const r = await decomposeImage(src, dims.w, dims.h)
+    if (template.value) {
+      stageRef.value?.resizeCanvas(dims.w, dims.h)
+      template.value.canvasWidth = dims.w
+      template.value.canvasHeight = dims.h
+    }
+    await stageRef.value?.applyGeneratedDesign(r.elements, r.background || '#ffffff')
+    ElMessage.success(`拆出 ${r.elementCount ?? r.elements.length} 个可拖动元素`)
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '拆解失败，请重试')
+  } finally {
+    decomposingImage.value = false
+  }
+}
 </script>
 
 <template>
@@ -256,6 +294,7 @@ async function onRegenerateElement(prompt: string) {
           :selection="selection"
           :removing-background="removingBackground"
           :regenerating-element="regeneratingElement"
+          :decomposing-image="decomposingImage"
           @close="stageRef?.deselectActive()"
           @text-prop="onTextProp"
           @text-shadow="(enabled) => stageRef?.setSelectedTextShadow(enabled)"
@@ -292,6 +331,7 @@ async function onRegenerateElement(prompt: string) {
           @duplicate="stageRef?.duplicateSelected()"
           @replace-image="replaceViaUpload"
           @regenerate-element="onRegenerateElement"
+          @decompose-image="onDecomposeImage"
           @edit-image-region="editImgDialogOpen = true"
           @remove-background="onRemoveBackground"
           @erase-object="eraseDialogOpen = true"

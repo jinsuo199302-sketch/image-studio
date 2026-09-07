@@ -890,33 +890,18 @@ async def _list_handout_elements(image_b64: str, max_n: int = 9) -> list[dict]:
     return out
 
 
-async def _do_handout_layered(db, user, cat: dict, style: dict, border: dict, topic: str, W: int, H: int, with_content: bool = True):
-    """AI 出整张手抄报当参考 → 视觉模型列出里面的元素 → 用 gemini 图像模型「照着画风
-    单独重画」每个元素成透明贴纸（不是从整图裁切，所以每个都干净、不带旁边的东西）→
-    再单独出一张"只有花边纸底"的底图 → 铺成一堆可拖动/可提示词替换的图层。"""
-    topic_desc = topic or cat["label"]
-    clean_sections = await _gen_handout_sections(cat, topic_desc, with_content)
-
-    border_desc = cat["motifs"] if border.get("theme") else border.get("prompt", "")
-    border_clause = f"画面四周画一圈{border_desc}组成的花边（约占边缘 6%）。" if border_desc else ""
-    full_prompt = (
-        f"儿童手抄报整张画面，主题「{topic_desc}」。{style['prompt']}。{cat['palette']}。\n"
-        f"画面里有：{cat['scene']}；另外散布这些装饰元素：{cat['motifs']}。\n"
-        f"{border_clause}"
-        "主体元素集中在画面左侧 60% 和中间，右侧 40% 保持纯白留白。不要画任何文字、横线或方格。"
-    )
-    raw = await _gen_image_bytes(full_prompt, _nearest_image_size(W, H), attempts=2, timeout=170)
-    full_asset = _persist_asset_bytes(db, user.id, "handout-full", raw)
-    full_b64 = base64.b64encode(raw).decode()
-
+async def _decompose_to_layers(db, user, full_bytes: bytes, W: int, H: int, style_hint: str, *, make_bg: bool = True):
+    """把一张整图拆成图层：视觉模型列元素 → gemini 图像模型「照画风单独重画」每个成透明贴纸
+    （不是裁切，所以每个都干净）→ 可选再出一张"只有花边、中间留白"的底图。
+    返回 {elImages, bgSrc, fullAssetId}。"""
+    full_b64 = base64.b64encode(full_bytes).decode()
+    full_asset = _persist_asset_bytes(db, user.id, "handout-full", full_bytes)
     specs = (await _list_handout_elements(full_b64))[:8]
-
-    style_hint = f"{style['prompt']}，{cat['palette']}"
-    sem = asyncio.Semaphore(4)  # openlux 上游对 gemini image 有并发限制，别一次全打过去
+    sem = asyncio.Semaphore(4)  # openlux 上游对 gemini image 有并发限制
 
     async def _make_sticker(spec: dict):
         prompt = (
-            f"参考这张手抄报的画风和配色，单独画一个「{spec['name']}」，{style_hint}，粗黑描边，"
+            f"参考这张图的画风和配色，单独画一个「{spec['name']}」，{style_hint}，粗黑描边，"
             "只有这一个物体、完整居中、占满画面，纯透明背景，不要文字、不要边框、不要其他物体、不要地面阴影。"
         )
         async with sem:
@@ -939,8 +924,10 @@ async def _do_handout_layered(db, user, cat: dict, style: dict, border: dict, to
         }
 
     async def _make_bg():
+        if not make_bg:
+            return None
         prompt = (
-            "参考这张儿童手抄报的画风，只画四周一圈的装饰花边（跟原图同样的元素和配色），"
+            "参考这张图的画风，只画四周一圈的装饰花边（跟原图同样的元素和配色），"
             "画面正中间大片完全留白，不要画任何人物/动物/道具/主体插画。纯白纸底，输出 PNG。"
         )
         async with sem:
@@ -954,20 +941,37 @@ async def _do_handout_layered(db, user, cat: dict, style: dict, border: dict, to
         _make_bg(),
     )
     el_images = [r for r in sticker_results if r]
-
+    bg_src = None
     if bg_bytes:
         bg_asset = _persist_asset_bytes(db, user.id, "handout-bg", bg_bytes)
         bg_src = f"/api/ai/generated/{bg_asset.file_name}"
-        bg_color = "#ffffff"
-    else:
-        bg_src = None  # 兜底：不铺底图，用分类配色的淡底
-        bg_color = layout_presets._tint(cat["colors"][0], 0.92)
+    return {"elImages": el_images, "bgSrc": bg_src, "fullAssetId": full_asset.id,
+            "fullName": full_asset.file_name}
 
+
+async def _do_handout_layered(db, user, cat: dict, style: dict, border: dict, topic: str, W: int, H: int, with_content: bool = True):
+    """AI 出整张手抄报当参考 → 拆成一堆可拖动/可提示词替换的透明贴纸图层 + 标题/文字层。"""
+    topic_desc = topic or cat["label"]
+    clean_sections = await _gen_handout_sections(cat, topic_desc, with_content)
+
+    border_desc = cat["motifs"] if border.get("theme") else border.get("prompt", "")
+    border_clause = f"画面四周画一圈{border_desc}组成的花边（约占边缘 6%）。" if border_desc else ""
+    full_prompt = (
+        f"儿童手抄报整张画面，主题「{topic_desc}」。{style['prompt']}。{cat['palette']}。\n"
+        f"画面里有：{cat['scene']}；另外散布这些装饰元素：{cat['motifs']}。\n"
+        f"{border_clause}"
+        "主体元素集中在画面左侧 60% 和中间，右侧 40% 保持纯白留白。不要画任何文字、横线或方格。"
+    )
+    raw = await _gen_image_bytes(full_prompt, _nearest_image_size(W, H), attempts=2, timeout=170)
+
+    dec = await _decompose_to_layers(db, user, raw, W, H, f"{style['prompt']}，{cat['palette']}", make_bg=True)
+
+    bg_color = "#ffffff" if dec["bgSrc"] else layout_presets._tint(cat["colors"][0], 0.92)
     layout = layout_presets.build_handout(W, H, topic_desc, clean_sections, cat["colors"], with_content=with_content)
     elements: list[dict] = []
-    if bg_src:
-        elements.append({"type": "image", "x": 0, "y": 0, "width": W, "height": H, "src": bg_src})
-    elements += el_images
+    if dec["bgSrc"]:
+        elements.append({"type": "image", "x": 0, "y": 0, "width": W, "height": H, "src": dec["bgSrc"]})
+    elements += dec["elImages"]
     elements += layout["elements"]
 
     return {
@@ -976,10 +980,77 @@ async def _do_handout_layered(db, user, cat: dict, style: dict, border: dict, to
         "title": topic_desc,
         "sections": clean_sections,
         "colors": cat["colors"],
-        "fullSrc": f"/api/ai/generated/{full_asset.file_name}",
-        "elementCount": len(el_images),
-        "assetId": full_asset.id,
+        "fullSrc": f"/api/ai/generated/{dec['fullName']}",
+        "elementCount": len(dec["elImages"]),
+        "assetId": dec["fullAssetId"],
     }
+
+
+async def _do_decompose(db, user, image_bytes: bytes, W: int, H: int, style_key: str):
+    """把用户上传的现成整图（豆包生成的手抄报之类）拆成可拖动图层。不加标题/文字层——
+    文字本来就在图里；用户想改文字用「文字替换」，想改元素用「AI 重新生成这个元素」。"""
+    style = handout_categories.get_style(style_key)
+    dec = await _decompose_to_layers(db, user, image_bytes, W, H, style["prompt"], make_bg=True)
+    elements: list[dict] = []
+    if dec["bgSrc"]:
+        elements.append({"type": "image", "x": 0, "y": 0, "width": W, "height": H, "src": dec["bgSrc"]})
+    elements += dec["elImages"]
+    return {
+        "background": "#ffffff",
+        "elements": elements,
+        "title": "",
+        "sections": [],
+        "colors": ["#dc2626", "#2563eb"],
+        "fullSrc": f"/api/ai/generated/{dec['fullName']}",
+        "elementCount": len(dec["elImages"]),
+        "assetId": dec["fullAssetId"],
+    }
+
+
+async def _run_decompose_job(job_id, user_id, ticket, image_bytes, W, H, style_key):
+    from app.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        user = db.query(models.User).filter(models.User.id == user_id).first()
+        if user is None:
+            raise RuntimeError("用户不存在")
+        result = await _do_decompose(db, user, image_bytes, W, H, style_key)
+        _HANDOUT_JOBS[job_id] = {"status": "done", "result": result, "user_id": user_id}
+    except Exception as e:  # noqa: BLE001
+        try:
+            user = db.query(models.User).filter(models.User.id == user_id).first()
+            if user:
+                billing.refund_ticket(db, user, ticket)
+        except Exception:
+            pass
+        detail = str(e.detail) if isinstance(e, HTTPException) else f"拆解失败：{e}"
+        _HANDOUT_JOBS[job_id] = {"status": "error", "detail": detail, "user_id": user_id}
+    finally:
+        db.close()
+
+
+@router.post("/design/decompose")
+async def design_decompose(
+    image: UploadFile = File(...),
+    canvas_width: int = Form(...),
+    canvas_height: int = Form(...),
+    style: str = Form("color"),
+    user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """上传一张现成的整图（豆包/别处生成的手抄报），拆成可单独拖动/替换的图层。异步，轮询同 handout。"""
+    _require_openlux()
+    image_bytes = await image.read()
+    await _check_not_sensitive_document(image_bytes, image.content_type or "image/png", "图片拆解")
+    ticket = billing.consume(db, user, "手抄报拆分")
+    job_id = uuid.uuid4().hex
+    _HANDOUT_JOBS[job_id] = {"status": "pending", "user_id": user.id}
+    _prune_handout_jobs()
+    asyncio.create_task(
+        _run_decompose_job(job_id, user.id, ticket, image_bytes, canvas_width, canvas_height, style)
+    )
+    return {"jobId": job_id}
 
 
 @router.get("/assets")
