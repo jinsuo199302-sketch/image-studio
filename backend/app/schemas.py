@@ -136,13 +136,14 @@ class ContentResearchRequest(BaseModel):
 
 
 class HandoutRequest(BaseModel):
-    """手抄报/黑板报一键生成——分类预设是"组装"的骨架（见 app/handout_categories.py），
-    topic 是用户可选填的具体角度（比如分类选"安全教育"，topic 填"防溺水"），
-    style 是画风（color/lineart/watercolor/crayon/marker）。canvas_width/height 前端按
-    选定纸张尺寸算好传过来。"""
+    """手抄报一键生成——分类预设是"组装"的骨架（见 app/handout_categories.py）。
+    topic 可选填具体角度；style 是彩色版画风（color/watercolor/crayon/marker，线稿版一律
+    从彩色版提取）；with_content=False 出纯涂色版（只有插画+标题，没有文字板块）。
+    canvas_width/height 前端按选定纸张尺寸算好传过来。"""
     category: str
     topic: str = ""
     style: str = "color"
+    with_content: bool = True
     canvas_width: int
     canvas_height: int
 

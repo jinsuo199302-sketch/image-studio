@@ -38,8 +38,11 @@ def _icon_list(x: int, y: int, items: list[str], color: str, start_num: int = 1)
     return {"type": "group", "x": x, "y": y, "children": [], "componentKind": "icon-list", "componentData": data}
 
 
-def _text(x: int, y: int, width: int, text: str, font_size: int, color: str, weight: str = "normal", align: str = "left") -> dict:
-    return {"type": "text", "x": x, "y": y, "width": width, "text": text, "fontSize": font_size, "color": color, "fontWeight": weight, "align": align}
+def _text(x: int, y: int, width: int, text: str, font_size: int, color: str, weight: str = "normal", align: str = "left", font_family: str | None = None) -> dict:
+    d = {"type": "text", "x": x, "y": y, "width": width, "text": text, "fontSize": font_size, "color": color, "fontWeight": weight, "align": align}
+    if font_family:
+        d["fontFamily"] = font_family
+    return d
 
 
 def build_bullet_list(canvas_width: int, canvas_height: int, title: str, intro: str | None, items: list[str]) -> dict:
@@ -124,16 +127,14 @@ def build_dense_board(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 手抄报专用排版：dense-board 是给党建展板做的（固定像素组件、短语条目、多到 7 栏），
-# 直接拿来铺手抄报会挤成一团——手抄报要的是：大边距（躲开 AI 画的外圈花边）、2 栏、
-# 每块是一张浅色卡片（叠在装饰背景上文字还能看清）、字号跟着画布缩放、整段句子按
-# 实际换行高度预留空间、内容装不下就自动缩字号不溢出。
+# 手抄报排版：照真手抄报的样子——顶部一个又大又粗、带描边和飘带底的艺术标题（站酷快乐体），
+# 左边 ~46% 留给 AI 画的主体插画（人物+场景），右边竖排 3~4 个彩色小标题块 + 内容。
+# 正文是叠在 AI 图上的独立文字层，可编辑；内容装不下自动缩字号。
 # ─────────────────────────────────────────────────────────────────────────────
-_CIRCLED = "①②③④⑤⑥⑦⑧⑨⑩"
+_TITLE_FONT = '"ZCOOL KuaiLe", "Noto Sans SC", sans-serif'
 
 
 def _tint(hex_color: str, ratio: float) -> str:
-    """往白里混，ratio 越大越淡。卡片底色用 0.9，很浅一层。"""
     h = hex_color.lstrip("#")
     try:
         r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
@@ -143,85 +144,86 @@ def _tint(hex_color: str, ratio: float) -> str:
     return f"#{f(r):02x}{f(g):02x}{f(b):02x}"
 
 
-def _handout_pass(canvas_width: int, canvas_height: int, title: str, sections: list[dict], colors: list[str], scale: float, gap_scale: float = 1.0):
+def _handout_sections(right_x: int, right_w: int, top: int, sections: list[dict], colors: list[str], scale: float, gap_scale: float = 1.0):
+    fs_head = round(24 * scale)
+    fs_body = round(17 * scale)
+    head_h = round(fs_head * 1.75)
+    sec_gap = round(22 * scale * gap_scale)
+    body_indent = round(10 * scale)
+    body_w = right_w - body_indent
+
+    els: list[dict] = []
+    y = float(top)
+    for i, sec in enumerate(sections):
+        color = colors[i % 2]
+        heading = str(sec.get("heading", "")).strip()
+        content = "  ".join(str(x).strip() for x in sec.get("items", []) if str(x).strip())
+
+        head_w = min(right_w, round(len(heading) * fs_head * 1.18 + fs_head * 1.6))
+        els.append({"type": "rect", "x": right_x, "y": round(y), "width": head_w, "height": head_h, "fill": color, "rx": round(head_h / 2)})
+        els.append(_text(right_x, round(y + (head_h - fs_head) / 2 - 1 * scale), head_w, heading, fs_head, "#ffffff", weight="bold", align="center"))
+        y += head_h + round(10 * scale)
+
+        els.append(_text(right_x + body_indent, round(y), body_w, content, fs_body, "#374151"))
+        y += estimate_text_height(content, body_w, fs_body) + sec_gap
+
+    return els, y - sec_gap
+
+
+def build_handout(
+    canvas_width: int,
+    canvas_height: int,
+    title: str,
+    sections: list[dict],
+    colors: list[str] | None = None,
+    *,
+    with_content: bool = True,
+) -> dict:
+    """顶部艺术大标题 + 左图右文。with_content=False 时只出标题（纯涂色版用）。"""
+    colors = colors if colors and len(colors) >= 2 else [CIVIC_THEME["red"], CIVIC_THEME["blue"]]
     c0 = colors[0]
-    margin = max(56, round(min(canvas_width, canvas_height) * 0.085))
-    fs_title = round(40 * scale)
-    fs_head = round(19 * scale)
-    fs_body = round(15 * scale)
-    pad = round(16 * scale)
-    gap = round(22 * scale)                       # 结构性间距（横向栏距、标题下方）
-    vgap = round(22 * scale * gap_scale)          # 卡片竖向间距，内容偏短时拉大把版面撑满
-    line_gap = round(7 * scale)
+    W, H = canvas_width, canvas_height
+    margin = max(44, round(min(W, H) * 0.055))
+    scale = max(0.8, min(2.4, W / 1000))
 
     elements: list[dict] = []
 
-    # 标题：圆角色块 + 白字，居中
-    title_h = round(fs_title * 1.7)
-    title_w = min(canvas_width - 2 * margin, round(len(title) * fs_title * 1.25) + fs_title * 2)
-    tx = round((canvas_width - title_w) / 2)
+    # ---- 标题：黄字 + 深色粗描边（paintFirst=stroke 所以字身不缩）+ 投影，压在圆角飘带色块上 ----
+    fs_title = round(72 * scale)
+    banner_h = round(fs_title * 1.5)
+    banner_w = min(W - 2 * margin, round(len(title) * fs_title * 1.15) + fs_title * 2)
+    tx = round((W - banner_w) / 2)
     ty = margin
-    elements.append({"type": "rect", "x": tx, "y": ty, "width": title_w, "height": title_h, "fill": c0, "rx": round(title_h / 2)})
-    elements.append({"type": "text", "x": tx, "y": ty + round((title_h - fs_title) / 2) - round(2 * scale),
-                     "width": title_w, "text": title, "fontSize": fs_title, "fontWeight": "bold", "color": "#ffffff", "align": "center"})
+    elements.append({"type": "rect", "x": tx, "y": ty, "width": banner_w, "height": banner_h, "fill": c0, "rx": round(banner_h * 0.32)})
+    elements.append({
+        "type": "text", "x": tx, "y": ty + round((banner_h - fs_title) / 2) - round(3 * scale),
+        "width": banner_w, "text": title, "fontSize": fs_title, "fontWeight": "bold",
+        "color": "#fde047", "fontFamily": _TITLE_FONT, "align": "center",
+        "stroke": "#7c2d12", "strokeWidth": max(3, round(4.5 * scale)),
+        "shadowColor": "rgba(0,0,0,0.25)", "shadowBlur": round(9 * scale),
+        "shadowOffsetX": round(3 * scale), "shadowOffsetY": round(4 * scale),
+    })
 
-    grid_top = ty + title_h + gap * 2
-    columns = 3 if canvas_width / max(1, canvas_height) >= 1.45 else 2
-    col_w = (canvas_width - 2 * margin - (columns - 1) * gap) // columns
-    col_x = [margin + i * (col_w + gap) for i in range(columns)]
-    col_bottom = [grid_top] * columns
-    text_w = col_w - 2 * pad
-    head_block = fs_head + round(14 * scale)  # 标题文字 + 下划线 + 到正文的间距
+    if not with_content or not sections:
+        return {"background": "#ffffff", "elements": elements}
 
-    for i, sec in enumerate(sections):
-        col = col_bottom.index(min(col_bottom))
-        x, y = col_x[col], col_bottom[col]
-        color = colors[i % 2]
+    # ---- 右侧文字区（左边 46% 留给插画）----
+    body_top = ty + banner_h + round(26 * scale)
+    right_x = round(W * 0.46)
+    right_w = W - margin - right_x
+    avail_h = H - round(H * 0.05) - body_top
 
-        body_h = 0.0
-        for j, item in enumerate(sec["items"]):
-            prefix = _CIRCLED[j] if j < len(_CIRCLED) else f"{j + 1}."
-            body_h += estimate_text_height(f"{prefix} {item}", text_w, fs_body) + line_gap
-        card_h = round(pad + head_block + body_h + pad)
+    # 先按基准字号排；太高就逐档缩字号，明显偏矮就拉大段间距
+    els, bottom = _handout_sections(right_x, right_w, body_top, sections, colors, scale)
+    used = bottom - body_top
+    if used > avail_h:
+        for f in (0.86, 0.74, 0.63):
+            els, bottom = _handout_sections(right_x, right_w, body_top, sections, colors, scale * f)
+            if bottom - body_top <= avail_h:
+                break
+    elif used < avail_h * 0.68 and used > 0:
+        gap_up = min(3.2, (avail_h * 0.9 - used) / max(1, (len(sections) - 1)) / (22 * scale) + 1)
+        els, _ = _handout_sections(right_x, right_w, body_top, sections, colors, scale, gap_scale=gap_up)
 
-        elements.append({"type": "rect", "x": x, "y": y, "width": col_w, "height": card_h, "fill": _tint(color, 0.9), "rx": round(12 * scale)})
-        elements.append({"type": "text", "x": x + pad, "y": y + pad, "width": text_w, "text": sec["heading"],
-                         "fontSize": fs_head, "fontWeight": "bold", "color": color})
-        underline_w = min(text_w, round(len(sec["heading"]) * fs_head + 8 * scale))
-        elements.append({"type": "rect", "x": x + pad, "y": y + pad + fs_head + round(4 * scale),
-                         "width": underline_w, "height": max(2, round(3 * scale)), "fill": color, "rx": max(1, round(2 * scale))})
-
-        iy = y + pad + head_block
-        for j, item in enumerate(sec["items"]):
-            prefix = _CIRCLED[j] if j < len(_CIRCLED) else f"{j + 1}."
-            line = f"{prefix} {item}"
-            elements.append({"type": "text", "x": x + pad, "y": round(iy), "width": text_w, "text": line, "fontSize": fs_body, "color": "#374151"})
-            iy += estimate_text_height(line, text_w, fs_body) + line_gap
-
-        col_bottom[col] = y + card_h + vgap
-
-    return elements, max(col_bottom) - vgap
-
-
-def build_handout(canvas_width: int, canvas_height: int, title: str, sections: list[dict], colors: list[str] | None = None) -> dict:
-    """手抄报排版：标题色块 + 2 栏卡片（浅底、彩色小标题 + 下划线 + 圈码正文），贪心装箱平衡栏高。
-    先按基准字号排一遍，然后自动适配画布高度：太满就缩字号（最多缩到 0.62），太空就把卡片
-    竖向间距拉大 + 字号略放大（最多 1.35 倍）把版面撑到画布高度的 ~88%，不至于上面挤下面空。"""
-    colors = colors if colors and len(colors) >= 2 else [CIVIC_THEME["red"], CIVIC_THEME["blue"]]
-    grid_start = max(56, round(min(canvas_width, canvas_height) * 0.085)) + round(40 * 1.7) + round(88 * 1.0)
-    avail_span = canvas_height - round(canvas_height * 0.06) - grid_start  # 卡片区可用高度
-
-    base = max(0.75, min(1.8, canvas_width / 900))
-    elements, bottom = _handout_pass(canvas_width, canvas_height, title, sections, colors, base)
-    span = bottom - grid_start
-
-    if span > avail_span and span > 0:
-        shrink = max(0.62, avail_span / span)
-        elements, _ = _handout_pass(canvas_width, canvas_height, title, sections, colors, base * shrink)
-    elif span > 0 and span < avail_span * 0.78:
-        target = avail_span * 0.88
-        up = min(1.35, (target / span) ** 0.5)          # 一半靠放大字号
-        gap_up = min(3.0, target / (span * up))          # 剩下靠拉大卡片竖向间距
-        elements, _ = _handout_pass(canvas_width, canvas_height, title, sections, colors, base * up, gap_scale=gap_up)
-
+    elements.extend(els)
     return {"background": "#ffffff", "elements": elements}

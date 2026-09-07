@@ -490,74 +490,98 @@ async def design_handout(
     """手抄报/黑板报一键生成。很多用户（尤其带娃的家长）不会写 prompt，所以不让 AI 自由发挥
     整个结构——先选好分类（app/handout_categories.py，每类自带一套约定俗成的板块标题+配色+
     边框风格），AI 只负责往已经定好的框架里填具体内容，更像"组装"不是"写作文"，出错自由度小。
-    背景图只负责画四周花边装饰，中间大片区域留白——正文内容跟"参考图生成"一样是叠加的独立
-    文字图层，不烧进图片里，改文字/重排版不影响背景，背景不满意也能单独重新生成。"""
+    AI 只画左半边的主体插画（右半 + 顶部留白），正文和艺术大标题是叠加的独立文字图层，
+    不烧进图片里，改文字/重排版不影响插画。同时用 OpenCV 从彩色版提一张黑白线稿版，
+    家长可以照着彩色版给孩子涂色。with_content=False 出纯涂色版（只有插画+标题）。"""
     _require_openlux()
     cat = handout_categories.get_category(payload.category)
     style = handout_categories.get_style(payload.style)
     ticket = billing.consume(db, user, "手抄报生成")
     try:
-        return await _do_handout(db, user, cat, style, payload.topic.strip(), payload.canvas_width, payload.canvas_height)
+        return await _do_handout(
+            db, user, cat, style, payload.topic.strip(),
+            payload.canvas_width, payload.canvas_height, payload.with_content,
+        )
     except Exception:
         billing.refund_ticket(db, user, ticket)
         raise
 
 
-async def _do_handout(db, user, cat: dict, style: dict, topic: str, canvas_width: int, canvas_height: int):
+def _to_lineart(image_bytes: bytes) -> bytes:
+    """从彩色版提取黑白线稿——家长打印出来给孩子照着涂色。用自适应阈值而不是 Canny：
+    Canny 出来是断线的细描边，adaptiveThreshold 出来是连续闭合的粗轮廓，更像儿童填色书。"""
+    arr = np.frombuffer(image_bytes, np.uint8)
+    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    if img is None:
+        raise ValueError("decode failed")
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    gray = cv2.medianBlur(gray, 3)
+    edges = cv2.adaptiveThreshold(
+        gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 9, 5
+    )
+    ok, buf = cv2.imencode(".png", edges)
+    if not ok:
+        raise ValueError("encode failed")
+    return buf.tobytes()
+
+
+async def _do_handout(db, user, cat: dict, style: dict, topic: str, canvas_width: int, canvas_height: int, with_content: bool = True):
     topic_desc = topic or cat["label"]
     headings = cat["headings"]
 
-    content_prompt = (
-        f"你在给中小学生的手抄报写内容，主题是「{topic_desc}」（分类：{cat['label']}）。\n"
-        f"版面已经固定分成这 {len(headings)} 个板块，标题依次是：{'、'.join(headings)}。\n"
-        "只返回一个严格的 JSON 对象，不要 markdown 代码块，不要任何多余说明文字，形如：\n"
-        '{"sections": [{"heading": "认识安全隐患", "items": ["...", "..."]}]}\n'
-        f"要求：sections 数组按上面给定的标题顺序原样输出 {len(headings)} 个，heading 字段必须跟给定标题一字不差；"
-        "每个 heading 下面配 3~5 条 items，每条是一句完整的短句（15~30字），内容要准确、具体、适合中小学生阅读，"
-        "不能是空话套话；涉及安全/科普类知识点必须准确可靠，不能编造错误常识。"
-    )
-    chat_res = await _post_openlux(
-        f"{OPENLUX_BASE_URL}/chat/completions",
-        timeout=60,
-        headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
-        json={
-            "model": "gemini-3-flash-preview",
-            "messages": [{"role": "user", "content": content_prompt}],
-        },
-    )
-    if chat_res.status_code >= 400:
-        raise HTTPException(status_code=502, detail=f"内容生成失败：{chat_res.status_code} {chat_res.text}")
-    raw_content = chat_res.json().get("choices", [{}])[0].get("message", {}).get("content", "")
-    match = re.search(r"\{[\s\S]*\}", raw_content)
-    try:
-        parsed = json.loads(match.group(0) if match else raw_content)
-        sections = parsed["sections"]
-        if not isinstance(sections, list) or not sections:
-            raise ValueError("empty sections")
-    except Exception:
-        raise HTTPException(status_code=502, detail="手抄报内容生成解析失败，请重试")
+    # ── 1. 文字内容（"只涂色"模式跳过，省一次模型调用）──────────────────────────
+    clean_sections: list[dict] = []
+    if with_content:
+        content_prompt = (
+            f"你在给中小学生的手抄报写内容，主题是「{topic_desc}」（分类：{cat['label']}）。\n"
+            f"版面已经固定分成这 {len(headings)} 个板块，标题依次是：{'、'.join(headings)}。\n"
+            "只返回一个严格的 JSON 对象，不要 markdown 代码块，不要任何多余说明文字，形如：\n"
+            '{"sections": [{"heading": "认识安全隐患", "items": ["...", "..."]}]}\n'
+            f"要求：sections 数组按上面给定的标题顺序原样输出 {len(headings)} 个，heading 字段必须跟给定标题一字不差；"
+            "每个 heading 下面配 3~5 条 items，每条是一句完整的短句（15~30字），内容要准确、具体、适合中小学生阅读，"
+            "不能是空话套话；涉及安全/科普类知识点必须准确可靠，不能编造错误常识。"
+        )
+        chat_res = await _post_openlux(
+            f"{OPENLUX_BASE_URL}/chat/completions",
+            timeout=60,
+            headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
+            json={
+                "model": "gemini-3-flash-preview",
+                "messages": [{"role": "user", "content": content_prompt}],
+            },
+        )
+        if chat_res.status_code >= 400:
+            raise HTTPException(status_code=502, detail=f"内容生成失败：{chat_res.status_code} {chat_res.text}")
+        raw_content = chat_res.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+        match = re.search(r"\{[\s\S]*\}", raw_content)
+        try:
+            parsed = json.loads(match.group(0) if match else raw_content)
+            sections = parsed["sections"]
+            if not isinstance(sections, list) or not sections:
+                raise ValueError("empty sections")
+        except Exception:
+            raise HTTPException(status_code=502, detail="手抄报内容生成解析失败，请重试")
 
-    clean_sections = []
-    for i, heading in enumerate(headings):
-        src = sections[i] if i < len(sections) and isinstance(sections[i], dict) else {}
-        items = [str(x).strip() for x in (src.get("items") or []) if str(x).strip()][:6]
-        if not items:
-            continue
-        clean_sections.append({"heading": heading, "items": items})
-    if not clean_sections:
-        raise HTTPException(status_code=502, detail="手抄报内容生成为空，请重试")
+        for i, heading in enumerate(headings):
+            src = sections[i] if i < len(sections) and isinstance(sections[i], dict) else {}
+            items = [str(x).strip() for x in (src.get("items") or []) if str(x).strip()][:6]
+            if not items:
+                continue
+            clean_sections.append({"heading": heading, "items": items})
+        if not clean_sections:
+            raise HTTPException(status_code=502, detail="手抄报内容生成为空，请重试")
 
-    palette = "" if style["gray"] else f"{cat['palette']}，"
+    # ── 2. AI 主体插画：集中在左半边，右半 + 顶部留白给文字层叠加 ────────────────
     bg_prompt = (
-        f"手抄报/黑板报的装饰边框背景，主题「{topic_desc}」。{style['prompt']}。{palette}"
-        f"装饰元素：{cat['motifs']}。"
-        "整个画面中央三分之二的大片区域必须完全留白、纯色或极淡的底纹，不能出现任何图案、人物、文字、边框线条——"
-        "那片区域后面要叠加排版好的文字内容，只在画面最外圈边缘和四个角落做装饰，不要居中构图，不要画标题文字。"
+        f"儿童手抄报的主体插画，主题「{topic_desc}」。{style['prompt']}。{cat['palette']}。\n"
+        f"画面主体：{cat['scene']}。"
+        f"周围点缀：{cat['motifs']}。\n"
+        "构图要求：主体插画和人物全部集中在画面左侧约 45% 的范围内，画面右侧 55% 和顶部 25% 必须是纯白或极淡的底色，"
+        "不能有任何人物、图案、边框线条、文字——那些区域后面要叠加排版好的文字。"
+        "白色背景，不要画标题文字，不要加相框或整圈边框。"
     )
-    # 背景图生成是整条链路里最容易慢/超时的一步（gpt-image-2 + openlux 偶尔 504）。
-    # 内容已经生成好了——就算背景挂了也把内容返回给用户（前端用分类配色的纯色底兜底），
-    # 用户还能"换一张背景"单独重试，不至于整个请求白跑。试 2 次。
-    background_src = None
+    colored_src = None
+    lineart_src = None
     asset_id = None
     for _attempt in range(2):
         try:
@@ -569,33 +593,37 @@ async def _do_handout(db, user, cat: dict, style: dict, topic: str, canvas_width
             )
             if gen_res.status_code >= 400:
                 continue
-            data = (gen_res.json().get("data") or [None])[0]
-            if not data:
+            try:
+                image_bytes = await _extract_openai_image_bytes(gen_res.json(), "手抄报插画")
+            except HTTPException:
                 continue
-            src = data.get("url") or (f"data:image/png;base64,{data['b64_json']}" if data.get("b64_json") else None)
-            if not src:
-                continue
-            asset = await _save_generated_asset(db, user.id, "handout-background", src)
-            asset_id = asset.id
-            # 回本地静态 URL 不回原始 data URI——1.9MB base64 走前端会把代理拖到超时/卡死
-            background_src = f"/api/ai/generated/{asset.file_name}"
+            colored_asset = _persist_asset_bytes(db, user.id, "handout-colored", image_bytes)
+            asset_id = colored_asset.id
+            colored_src = f"/api/ai/generated/{colored_asset.file_name}"
+            # 线稿版：OpenCV 从彩色版提，构图跟彩色版完全一致——家长照着彩色的给孩子涂
+            try:
+                lineart_asset = _persist_asset_bytes(db, user.id, "handout-lineart", _to_lineart(image_bytes))
+                lineart_src = f"/api/ai/generated/{lineart_asset.file_name}"
+            except Exception:
+                pass
             break
         except Exception:
             continue
 
-    # 排版直接在后端算好（手抄报专用 build_handout：大边距躲花边 + 2 栏浅底卡片 + 字号跟
-    # 画布缩放 + 整句按实际换行高度预留空间 + 装不下自动缩字号），前端只管把背景图叠上去。
-    # 黑白线稿画风：正文卡片也跟着走黑灰，不然彩色卡片压在黑白线稿背景上很违和。
-    text_colors = handout_categories._GRAY_COLORS if style["gray"] else cat["colors"]
-    layout = layout_presets.build_handout(canvas_width, canvas_height, topic_desc, clean_sections, text_colors)
+    # ── 3. 排版：顶部艺术大标题 + 右侧文字板块（后端确定性算好，前端叠图上去）────
+    layout = layout_presets.build_handout(
+        canvas_width, canvas_height, topic_desc, clean_sections, cat["colors"], with_content=with_content,
+    )
 
     return {
-        "backgroundSrc": background_src,
+        "coloredSrc": colored_src,
+        "lineartSrc": lineart_src,
+        "backgroundSrc": colored_src,  # 兼容旧前端字段
         "background": layout["background"],
         "elements": layout["elements"],
         "title": topic_desc,
         "sections": clean_sections,
-        "colors": text_colors,
+        "colors": cat["colors"],
         "assetId": asset_id,
     }
 

@@ -205,10 +205,9 @@ export const HANDOUT_SIZES: { key: string; label: string; w: number; h: number }
   { key: '4k', label: '4 开', w: 2600, h: 1840 },
 ]
 
-/** 画风——决定 AI 背景插画的渲染风格，跟后端 STYLES 保持一致 */
+/** 画风——决定 AI 彩色版插画的渲染风格，跟后端 STYLES 保持一致。线稿版一律从彩色版提取 */
 export const HANDOUT_STYLES: { key: string; label: string }[] = [
   { key: 'color', label: '彩色卡通' },
-  { key: 'lineart', label: '黑白线稿' },
   { key: 'watercolor', label: '水彩风格' },
   { key: 'crayon', label: '蜡笔风格' },
   { key: 'marker', label: '马克笔' },
@@ -227,8 +226,13 @@ export const HANDOUT_CATEGORIES: { key: string; label: string; hint: string }[] 
 ]
 
 export interface HandoutResult {
+  /** AI 画的彩色版主体插画（左半边），叠在画布上当背景；失败时为 null */
+  coloredSrc: string | null
+  /** OpenCV 从彩色版提取的黑白线稿版——构图跟彩色版完全一致，家长照着彩色版给孩子涂色 */
+  lineartSrc: string | null
+  /** @deprecated 兼容旧字段，等于 coloredSrc */
   backgroundSrc: string | null
-  /** 后端已经把手抄报版面排好了，前端直接用；elements 里已含标题色块/卡片/正文 */
+  /** 后端已经把手抄报版面排好了，前端直接用；elements 里已含艺术大标题 + 右侧文字板块 */
   background: string
   elements: GeneratedDesign['elements']
   title: string
@@ -238,8 +242,9 @@ export interface HandoutResult {
 }
 
 /**
- * 手抄报一键生成：只传分类 + 可选的具体主题，不用自己写 prompt。后端按分类预设好的板块
- * 标题去生成对应内容，背景图只画四周花边、中间大片留白——正文是独立文字层，不烧进图里。
+ * 手抄报一键生成：只传分类 + 可选的具体主题，不用自己写 prompt。
+ * withContent=false 出纯涂色版（只有插画 + 艺术标题，没有文字板块）。
+ * 后端返回彩色版 + 线稿版两张图，正文和标题是独立文字层，不烧进图里。
  */
 export async function generateHandout(
   category: string,
@@ -247,10 +252,11 @@ export async function generateHandout(
   style: string,
   canvasWidth: number,
   canvasHeight: number,
+  withContent = true,
 ): Promise<HandoutResult> {
   return authPostJson<HandoutResult>(
     '/design/handout',
-    { category, topic, style, canvas_width: canvasWidth, canvas_height: canvasHeight },
+    { category, topic, style, with_content: withContent, canvas_width: canvasWidth, canvas_height: canvasHeight },
     '手抄报生成失败',
   )
 }
