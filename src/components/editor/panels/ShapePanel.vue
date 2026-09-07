@@ -55,16 +55,20 @@ function buildVCard(): string {
 async function generateQrcode() {
   let content = ''
   if (qrMode.value === 'text') {
-    const input = qrText.value.trim()
+    let input = qrText.value.trim()
     if (!input) {
       ElMessage.warning('请输入链接或文本内容')
       return
     }
-    // 内容原样编码——不再"存后端换短链"：桌面版后端是本机 127.0.0.1，换出来的链别的
-    // 设备打不开。纯文字扫出来只显示文本，想直接跳转让用户填完整网址。
+    // 内容原样编码——不"存后端换短链"（桌面版后端是本机 127.0.0.1，换出来的链别的
+    // 设备打不开）。看着像域名就自动补 https://；仍不是网址就提醒（微信扫纯文本不显示）。
+    if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(input) && /^[\w-]+(\.[\w-]+)+([/:?#].*)?$/.test(input)) {
+      input = 'https://' + input
+      qrText.value = input
+    }
     content = input
     if (!/^(https?:\/\/|mailto:|tel:|smsto:|WEIXIN:)/i.test(input)) {
-      ElMessage.info('已按纯文本编码——想让微信扫码直接跳转，请填完整网址（https://…）')
+      ElMessage.warning('微信扫一扫不显示纯文本（会提示"暂不支持"）。要发给别人扫，请填完整网址（https://…）')
     }
   } else {
     if (!cardName.value.trim() || !cardPhone.value.trim()) {
