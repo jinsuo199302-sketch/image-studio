@@ -31,6 +31,7 @@ const VALID_TABS = [
   'stitch',
   'avatarframe',
   'signature',
+  'qrcode',
   'scan',
   'table',
   'compress',

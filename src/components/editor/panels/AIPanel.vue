@@ -24,6 +24,7 @@ import AIColorizeTab from './ai/AIColorizeTab.vue'
 import AIScreenshotStitchTab from './ai/AIScreenshotStitchTab.vue'
 import AIAvatarFrameTab from './ai/AIAvatarFrameTab.vue'
 import AISignatureTab from './ai/AISignatureTab.vue'
+import AIQrcodeTab from './ai/AIQrcodeTab.vue'
 import AIScanTab from './ai/AIScanTab.vue'
 import AITableTab from './ai/AITableTab.vue'
 import AICompressTab from './ai/AICompressTab.vue'
@@ -52,6 +53,7 @@ type TabKey =
   | 'stitch'
   | 'avatarframe'
   | 'signature'
+  | 'qrcode'
   | 'scan'
   | 'table'
   | 'compress'
@@ -107,6 +109,7 @@ function useSignatureInPdf(dataUrl: string) {
           { key: 'stitch', label: '长截图' },
           { key: 'avatarframe', label: '头像框' },
           { key: 'signature', label: '签名' },
+          { key: 'qrcode', label: '二维码' },
           { key: 'scan', label: '扫描件' },
           { key: 'table', label: '表格识别' },
           { key: 'compress', label: '压缩转换' },
@@ -157,6 +160,7 @@ function useSignatureInPdf(dataUrl: string) {
         @insert-image="(url) => emit('insert-image', url)"
         @use-in-pdf="useSignatureInPdf"
       />
+      <AIQrcodeTab v-else-if="activeTab === 'qrcode'" @insert-image="(url) => emit('insert-image', url)" />
       <AIScanTab v-else-if="activeTab === 'scan'" />
       <AITableTab v-else-if="activeTab === 'table'" />
       <AICompressTab v-else />

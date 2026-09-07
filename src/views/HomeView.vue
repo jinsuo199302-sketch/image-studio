@@ -42,6 +42,7 @@ const TOOL_TABS = [
   { key: 'ai-stitch', label: '长截图拼接', desc: '多张截图自动拼成一张', enabled: true, route: '/ai-tools?tab=stitch' },
   { key: 'ai-avatarframe', label: '节日头像框', desc: '套边框，一键出片', enabled: true, route: '/ai-tools?tab=avatarframe' },
   { key: 'ai-signature', label: '手写签名', desc: '生成透明签名图，插入文档', enabled: true, route: '/ai-tools?tab=signature' },
+  { key: 'ai-qrcode', label: '二维码生成', desc: '链接/名片转二维码，大小可调', enabled: true, route: '/ai-tools?tab=qrcode' },
   { key: 'ai-scan', label: '照片转扫描件', desc: '文档照片转清晰 PDF', enabled: true, route: '/ai-tools?tab=scan' },
   { key: 'ai-table', label: '表格转 Excel', desc: '拍表格照片转可编辑表格', enabled: true, route: '/ai-tools?tab=table' },
   { key: 'ai-compress', label: '图片压缩转换', desc: 'JPG/PNG/WebP互转、批量压缩、HEIC转JPG', enabled: true, route: '/ai-tools?tab=compress' },
