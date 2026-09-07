@@ -71,6 +71,7 @@ const emit = defineEmits<{
   (e: 'duplicate'): void
   (e: 'replace-image'): void
   (e: 'regenerate-element', prompt: string): void
+  (e: 'edit-image-region'): void
   (e: 'remove-background'): void
   (e: 'erase-object'): void
   (e: 'text-replace'): void
@@ -565,6 +566,13 @@ function pickWarp(kind: WarpKind) {
         <div class="space-y-1.5">
           <button
             class="flex w-full items-center gap-2 rounded px-2 py-2 text-xs text-gray-600 hover:bg-gray-100"
+            @click="emit('edit-image-region')"
+          >
+            <el-icon :size="14"><MagicStick /></el-icon>
+            AI 局部改图（涂抹某块 + 描述换成什么）
+          </button>
+          <button
+            class="flex w-full items-center gap-2 rounded px-2 py-2 text-xs text-gray-600 hover:bg-gray-100"
             @click="emit('replace-image')"
           >
             <el-icon :size="14"><Picture /></el-icon>
@@ -576,7 +584,7 @@ function pickWarp(kind: WarpKind) {
             @click="emit('remove-background')"
           >
             <el-icon :size="14"><MagicStick /></el-icon>
-            {{ removingBackground ? '抠图中…' : 'AI 抠图' }}
+            {{ removingBackground ? '抠图中…' : 'AI 抠图（去背景）' }}
           </button>
           <button
             class="flex w-full items-center gap-2 rounded px-2 py-2 text-xs text-gray-600 hover:bg-gray-100"
