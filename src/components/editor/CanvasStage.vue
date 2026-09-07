@@ -10,6 +10,7 @@ const props = defineProps<{ template: Template }>()
 const emit = defineEmits<{
   (e: 'selection', payload: SelectionInfo | null): void
   (e: 'history', payload: { canUndo: boolean; canRedo: boolean }): void
+  (e: 'ready'): void
 }>()
 
 export interface SelectionInfo {
@@ -471,6 +472,7 @@ onMounted(async () => {
   await buildFromTemplate(props.template)
   fitCanvas()
   window.addEventListener('resize', fitCanvas)
+  emit('ready')
 })
 
 onBeforeUnmount(() => {

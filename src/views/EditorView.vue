@@ -40,10 +40,35 @@ const currentId = ref(props.id || (route.params.id as string))
 const template = ref<Template | null>(null)
 const templateLoading = ref(true)
 const templateNotFound = ref(false)
+/** id === 'upload' 时：首页上传的图片 data URL，画布就绪后加进去 */
+const pendingUploadSrc = ref('')
 
 async function loadTemplate(id: string) {
   templateLoading.value = true
   templateNotFound.value = false
+  if (id === 'upload') {
+    let w = 1480
+    let h = 1050
+    try {
+      const p = JSON.parse(sessionStorage.getItem('pendingUploadImage') || 'null') as
+        | { src: string; w: number; h: number }
+        | null
+      if (p?.src) {
+        pendingUploadSrc.value = p.src
+        w = Math.round(p.w) || w
+        h = Math.round(p.h) || h
+      }
+    } catch {
+      /* 用默认空白画布 */
+    }
+    template.value = {
+      id: 'upload', name: pendingUploadSrc.value ? '我的图片' : '空白设计',
+      category: '', scene: '', industry: '',
+      canvasWidth: w, canvasHeight: h, background: '#ffffff', thumbnail: '', elements: [],
+    }
+    templateLoading.value = false
+    return
+  }
   const found = await templateStore.fetchOne(id)
   if (found) {
     template.value = found
@@ -51,6 +76,14 @@ async function loadTemplate(id: string) {
     templateNotFound.value = true
   }
   templateLoading.value = false
+}
+
+function onStageReady() {
+  if (!pendingUploadSrc.value) return
+  const src = pendingUploadSrc.value
+  pendingUploadSrc.value = ''
+  sessionStorage.removeItem('pendingUploadImage')
+  stageRef.value?.addImage(src)
 }
 
 watch(currentId, (id) => loadTemplate(id), { immediate: true })
@@ -370,6 +403,7 @@ async function onDecomposeImage() {
           :template="template"
           @selection="selection = $event"
           @history="history = $event"
+          @ready="onStageReady"
         />
       </div>
     </div>
