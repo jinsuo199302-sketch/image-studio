@@ -32,6 +32,7 @@ from app import layout_presets
 from app.schemas import (
     ChatCompletionRequest,
     ContentResearchRequest,
+    DesignElementRequest,
     DesignGenerateRequest,
     DesignLayoutRequest,
     HandoutRequest,
@@ -497,8 +498,14 @@ async def design_handout(
     cat = handout_categories.get_category(payload.category)
     style = handout_categories.get_style(payload.style)
     border = handout_categories.get_border(payload.border)
-    ticket = billing.consume(db, user, "手抄报生成")
+    feature = "手抄报拆分" if payload.layered else "手抄报生成"
+    ticket = billing.consume(db, user, feature)
     try:
+        if payload.layered:
+            return await _do_handout_layered(
+                db, user, cat, style, border, payload.topic.strip(),
+                payload.canvas_width, payload.canvas_height, payload.with_content,
+            )
         return await _do_handout(
             db, user, cat, style, border, payload.topic.strip(),
             payload.canvas_width, payload.canvas_height, payload.with_content,
@@ -526,51 +533,203 @@ def _to_lineart(image_bytes: bytes) -> bytes:
     return buf.tobytes()
 
 
-async def _do_handout(db, user, cat: dict, style: dict, border: dict, topic: str, canvas_width: int, canvas_height: int, with_content: bool = True):
-    topic_desc = topic or cat["label"]
-    headings = cat["headings"]
+# ─────────────────────────────────────────────────────────────────────────────
+# 手抄报「可拆分元素版」：AI 出整张白底手抄报 → 视觉模型框出每个图画元素 →
+# 逐个裁下来、把连着边界的白底 flood-fill 成透明 → 铺成一堆可单独拖动/替换的图层。
+# ─────────────────────────────────────────────────────────────────────────────
+def _cutout_white_bg(image_bytes: bytes, white_thresh: int = 236) -> bytes:
+    """把一张白底小图的背景抠成透明。从四条边界向内 flood-fill 连通的近白色区域——
+    只吃"跟边框连着的背景白"，物体内部的白（眼白/高光）不受影响。"""
+    arr = np.frombuffer(image_bytes, np.uint8)
+    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    if img is None:
+        raise ValueError("decode failed")
+    h, w = img.shape[:2]
+    mask = np.zeros((h + 2, w + 2), np.uint8)
+    tol = max(6, 255 - white_thresh)
+    flags = 8 | cv2.FLOODFILL_MASK_ONLY | (255 << 8)
+    step_x = max(1, w // 60)
+    step_y = max(1, h // 60)
+    seeds = (
+        [(x, 0) for x in range(0, w, step_x)]
+        + [(x, h - 1) for x in range(0, w, step_x)]
+        + [(0, y) for y in range(0, h, step_y)]
+        + [(w - 1, y) for y in range(0, h, step_y)]
+    )
+    for sx, sy in seeds:
+        if mask[sy + 1, sx + 1] == 0 and int(img[sy, sx].min()) >= white_thresh:
+            cv2.floodFill(img, mask, (sx, sy), 0, (tol, tol, tol), (tol, tol, tol), flags)
+    bg = mask[1:-1, 1:-1]
+    alpha = np.where(bg > 0, 0, 255).astype(np.uint8)
+    # 往里收 1px 去白边，再轻羽化
+    alpha = cv2.erode(alpha, np.ones((2, 2), np.uint8), iterations=1)
+    alpha = cv2.GaussianBlur(alpha, (3, 3), 0)
+    b, g, r = cv2.split(img)
+    ok, buf = cv2.imencode(".png", cv2.merge([b, g, r, alpha]))
+    if not ok:
+        raise ValueError("encode failed")
+    return buf.tobytes()
 
-    # ── 1. 文字内容（"只涂色"模式跳过，省一次模型调用）──────────────────────────
-    clean_sections: list[dict] = []
-    if with_content:
-        content_prompt = (
-            f"你在给中小学生的手抄报写内容，主题是「{topic_desc}」（分类：{cat['label']}）。\n"
-            f"版面已经固定分成这 {len(headings)} 个板块，标题依次是：{'、'.join(headings)}。\n"
-            "只返回一个严格的 JSON 对象，不要 markdown 代码块，不要任何多余说明文字，形如：\n"
-            '{"sections": [{"heading": "认识安全隐患", "items": ["...", "..."]}]}\n'
-            f"要求：sections 数组按上面给定的标题顺序原样输出 {len(headings)} 个，heading 字段必须跟给定标题一字不差；"
-            "每个 heading 下面配 3~5 条 items，每条是一句完整的短句（15~30字），内容要准确、具体、适合中小学生阅读，"
-            "不能是空话套话；涉及安全/科普类知识点必须准确可靠，不能编造错误常识。"
-        )
-        chat_res = await _post_openlux(
+
+_SEGMENT_PROMPT = """这是一张儿童手抄报。识别里面所有独立的"图画元素"——人物、动物、植物、
+道具、装饰小图标、飘带、边框角花等。不要框文字、不要框大片空白、不要框整张纸。
+只返回一个 JSON 数组，不要 markdown 代码块、不要多余说明，每项形如：
+{"label": "敬礼的少年", "box": [ymin, xmin, ymax, xmax]}
+坐标是 0~1000 的整数相对值，(0,0) 在左上角。按重要性排序，最多 12 个；
+边长不足整图 6% 的碎图标可以忽略。"""
+
+
+async def _segment_elements(image_bytes: bytes, media_type: str = "image/png", max_n: int = 12) -> list[dict]:
+    """视觉模型框选，返回 [{label, box:[x0,y0,x1,y1] 0~1000}]。失败返回 []（调用方兜底成整图一块）。"""
+    b64 = base64.b64encode(image_bytes).decode()
+    try:
+        res = await _post_openlux(
             f"{OPENLUX_BASE_URL}/chat/completions",
-            timeout=60,
+            timeout=90,
             headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
             json={
                 "model": "gemini-3-flash-preview",
-                "messages": [{"role": "user", "content": content_prompt}],
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": _SEGMENT_PROMPT},
+                            {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{b64}"}},
+                        ],
+                    }
+                ],
             },
         )
-        if chat_res.status_code >= 400:
-            raise HTTPException(status_code=502, detail=f"内容生成失败：{chat_res.status_code} {chat_res.text}")
-        raw_content = chat_res.json().get("choices", [{}])[0].get("message", {}).get("content", "")
-        match = re.search(r"\{[\s\S]*\}", raw_content)
+    except Exception:
+        return []
+    if res.status_code >= 400:
+        return []
+    raw = res.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+    m = re.search(r"\[[\s\S]*\]", raw)
+    if not m:
+        return []
+    try:
+        items = json.loads(m.group(0))
+    except Exception:
+        return []
+    out: list[dict] = []
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        box = it.get("box") or it.get("box_2d") or it.get("bbox")
+        if not box or len(box) != 4:
+            continue
         try:
-            parsed = json.loads(match.group(0) if match else raw_content)
-            sections = parsed["sections"]
-            if not isinstance(sections, list) or not sections:
-                raise ValueError("empty sections")
-        except Exception:
-            raise HTTPException(status_code=502, detail="手抄报内容生成解析失败，请重试")
+            ymin, xmin, ymax, xmax = [max(0.0, min(1000.0, float(v))) for v in box]
+        except (TypeError, ValueError):
+            continue
+        if xmax - xmin < 40 or ymax - ymin < 40:  # 太小，跳过
+            continue
+        out.append({"label": str(it.get("label", "元素"))[:24], "box": [xmin, ymin, xmax, ymax]})
+        if len(out) >= max_n:
+            break
+    return out
 
-        for i, heading in enumerate(headings):
-            src = sections[i] if i < len(sections) and isinstance(sections[i], dict) else {}
-            items = [str(x).strip() for x in (src.get("items") or []) if str(x).strip()][:6]
-            if not items:
+
+async def _gen_image_bytes(prompt: str, size: str, *, attempts: int = 2, timeout: int = 160) -> bytes:
+    """gpt-image-2 生成一张图，返回原始字节；重试 attempts 次都失败抛 502。"""
+    last = ""
+    for _ in range(attempts):
+        try:
+            res = await _post_openlux(
+                f"{OPENLUX_BASE_URL}/images/generations",
+                timeout=timeout,
+                headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
+                json={"model": "gpt-image-2", "prompt": prompt, "n": 1, "size": size},
+            )
+            if res.status_code >= 400:
+                last = f"{res.status_code} {res.text[:200]}"
                 continue
+            return await _extract_openai_image_bytes(res.json(), "图片")
+        except HTTPException as e:
+            last = str(e.detail)
+        except Exception as e:  # noqa: BLE001
+            last = str(e)
+    raise HTTPException(status_code=502, detail=f"图片生成失败：{last}")
+
+
+@router.post("/design/element")
+async def design_element(
+    payload: DesignElementRequest,
+    user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """手抄报可拆分元素版——替换单个元素：一句提示词 → 一张透明底小图。"""
+    _require_openlux()
+    prompt = payload.prompt.strip()
+    if not prompt:
+        raise HTTPException(status_code=400, detail="请描述要生成的元素")
+    style = handout_categories.get_style(payload.style)
+    ticket = billing.consume(db, user, "素材生成")
+    try:
+        gen_prompt = (
+            f"{prompt}。{style['prompt']}。单个物体，完整居中，纯白背景，"
+            "不要文字、不要边框、不要地面阴影、不要多个物体。"
+        )
+        raw = await _gen_image_bytes(gen_prompt, "1024x1024", attempts=2, timeout=120)
+        try:
+            cut = _cutout_white_bg(raw)
+        except Exception:
+            cut = raw
+        asset = _persist_asset_bytes(db, user.id, "handout-element", cut)
+        return {"src": f"/api/ai/generated/{asset.file_name}", "assetId": asset.id}
+    except Exception:
+        billing.refund_ticket(db, user, ticket)
+        raise
+
+
+async def _gen_handout_sections(cat: dict, topic_desc: str, with_content: bool) -> list[dict]:
+    """按分类预设的板块标题让模型填正文，返回 [{heading, items}]；with_content=False 返回 []。"""
+    if not with_content:
+        return []
+    headings = cat["headings"]
+    content_prompt = (
+        f"你在给中小学生的手抄报写内容，主题是「{topic_desc}」（分类：{cat['label']}）。\n"
+        f"版面已经固定分成这 {len(headings)} 个板块，标题依次是：{'、'.join(headings)}。\n"
+        "只返回一个严格的 JSON 对象，不要 markdown 代码块，不要任何多余说明文字，形如：\n"
+        '{"sections": [{"heading": "认识安全隐患", "items": ["...", "..."]}]}\n'
+        f"要求：sections 数组按上面给定的标题顺序原样输出 {len(headings)} 个，heading 字段必须跟给定标题一字不差；"
+        "每个 heading 下面配 3~5 条 items，每条是一句完整的短句（15~30字），内容要准确、具体、适合中小学生阅读，"
+        "不能是空话套话；涉及安全/科普类知识点必须准确可靠，不能编造错误常识。"
+    )
+    chat_res = await _post_openlux(
+        f"{OPENLUX_BASE_URL}/chat/completions",
+        timeout=60,
+        headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
+        json={"model": "gemini-3-flash-preview", "messages": [{"role": "user", "content": content_prompt}]},
+    )
+    if chat_res.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"内容生成失败：{chat_res.status_code} {chat_res.text}")
+    raw_content = chat_res.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+    match = re.search(r"\{[\s\S]*\}", raw_content)
+    try:
+        parsed = json.loads(match.group(0) if match else raw_content)
+        sections = parsed["sections"]
+        if not isinstance(sections, list) or not sections:
+            raise ValueError("empty sections")
+    except Exception:
+        raise HTTPException(status_code=502, detail="手抄报内容生成解析失败，请重试")
+
+    clean_sections: list[dict] = []
+    for i, heading in enumerate(headings):
+        src = sections[i] if i < len(sections) and isinstance(sections[i], dict) else {}
+        items = [str(x).strip() for x in (src.get("items") or []) if str(x).strip()][:6]
+        if items:
             clean_sections.append({"heading": heading, "items": items})
-        if not clean_sections:
-            raise HTTPException(status_code=502, detail="手抄报内容生成为空，请重试")
+    if not clean_sections:
+        raise HTTPException(status_code=502, detail="手抄报内容生成为空，请重试")
+    return clean_sections
+
+
+async def _do_handout(db, user, cat: dict, style: dict, border: dict, topic: str, canvas_width: int, canvas_height: int, with_content: bool = True):
+    topic_desc = topic or cat["label"]
+
+    clean_sections = await _gen_handout_sections(cat, topic_desc, with_content)
 
     # ── 2. AI 主体插画：集中在左半边，右半 + 顶部留白给文字层叠加；四周可加一圈花边 ──
     # 花边风格：theme 档跟着分类的 motifs 走，none 档不画，其余用预设描述
@@ -640,6 +799,86 @@ async def _do_handout(db, user, cat: dict, style: dict, border: dict, topic: str
         "sections": clean_sections,
         "colors": cat["colors"],
         "assetId": asset_id,
+    }
+
+
+async def _do_handout_layered(db, user, cat: dict, style: dict, border: dict, topic: str, W: int, H: int, with_content: bool = True):
+    """AI 出整张白底手抄报 → 视觉模型框选每个图画元素 → 逐个抠成透明小图 →
+    返回一堆可单独拖动/替换的 image 元素 + 一层"挖掉元素后的底图" + 文字层。"""
+    topic_desc = topic or cat["label"]
+    clean_sections = await _gen_handout_sections(cat, topic_desc, with_content)
+
+    border_desc = cat["motifs"] if border.get("theme") else border.get("prompt", "")
+    border_clause = f"画面四周画一圈{border_desc}组成的花边（约占边缘 6%）。" if border_desc else ""
+    full_prompt = (
+        f"儿童手抄报整张画面，主题「{topic_desc}」。{style['prompt']}。{cat['palette']}。\n"
+        f"画面里有：{cat['scene']}；另外散布这些装饰元素：{cat['motifs']}。\n"
+        f"{border_clause}"
+        "重要：把各个图画元素画得分散、独立，像一张贴纸拼盘——每个物体单独成块、周围留出明显白色空隙，"
+        "元素之间不要紧贴、不要重叠、不要互相遮挡；主体人物旁边不要紧挨着大面积的旗帜或建筑。"
+        "所有元素集中在画面左侧 60% 和中间，右侧 40% 和大片背景保持纯白。"
+        "不要画任何文字、不要画横线或方格、不要画整块的场景背景。"
+    )
+    raw = await _gen_image_bytes(full_prompt, _nearest_image_size(W, H), attempts=2, timeout=170)
+    full_asset = _persist_asset_bytes(db, user.id, "handout-full", raw)
+
+    src_img = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
+    ih, iw = src_img.shape[:2]
+    boxes = await _segment_elements(raw, "image/png")
+
+    bg_img = src_img.copy()
+    el_images: list[dict] = []
+    for b in boxes:
+        x0, y0, x1, y1 = b["box"]
+        px0 = max(0, int(x0 / 1000 * iw) - 4)
+        py0 = max(0, int(y0 / 1000 * ih) - 4)
+        px1 = min(iw, int(x1 / 1000 * iw) + 4)
+        py1 = min(ih, int(y1 / 1000 * ih) + 4)
+        if px1 - px0 < 12 or py1 - py0 < 12:
+            continue
+        # 太大的框（占画面 45% 以上）多半是"整块场景"而不是单个元素——留在底图里不抠出来，
+        # 免得抠出来是一坨互相压着的东西
+        if (px1 - px0) * (py1 - py0) > 0.45 * iw * ih:
+            continue
+        crop = src_img[py0:py1, px0:px1]
+        ok, cbuf = cv2.imencode(".png", crop)
+        if not ok:
+            continue
+        try:
+            cut = _cutout_white_bg(cbuf.tobytes())
+        except Exception:
+            cut = cbuf.tobytes()
+        a = _persist_asset_bytes(db, user.id, "handout-element", cut)
+        el_images.append({
+            "type": "image",
+            "x": round(px0 / iw * W),
+            "y": round(py0 / ih * H),
+            "width": round((px1 - px0) / iw * W),
+            "height": round((py1 - py0) / ih * H),
+            "src": f"/api/ai/generated/{a.file_name}",
+        })
+        cv2.rectangle(bg_img, (px0, py0), (px1, py1), (255, 255, 255), -1)
+
+    ok, bgbuf = cv2.imencode(".png", bg_img)
+    bg_asset = _persist_asset_bytes(db, user.id, "handout-bg", bgbuf.tobytes() if ok else raw)
+
+    # 文字层：复用 build_handout（标题 + 右侧板块），底图铺最底下，元素在中间
+    layout = layout_presets.build_handout(W, H, topic_desc, clean_sections, cat["colors"], with_content=with_content)
+    elements: list[dict] = [
+        {"type": "image", "x": 0, "y": 0, "width": W, "height": H, "src": f"/api/ai/generated/{bg_asset.file_name}"}
+    ]
+    elements += el_images
+    elements += layout["elements"]
+
+    return {
+        "background": "#ffffff",
+        "elements": elements,
+        "title": topic_desc,
+        "sections": clean_sections,
+        "colors": cat["colors"],
+        "fullSrc": f"/api/ai/generated/{full_asset.file_name}",
+        "elementCount": len(el_images),
+        "assetId": full_asset.id,
     }
 
 

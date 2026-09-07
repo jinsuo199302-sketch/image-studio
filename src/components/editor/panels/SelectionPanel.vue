@@ -33,7 +33,7 @@ type TextProp =
 type ShadowDetail = { color: string; blur: number; offsetX: number; offsetY: number }
 type EffectPreset = 'none' | 'outline' | 'emboss' | 'neon'
 
-const props = defineProps<{ selection: SelectionInfo; removingBackground?: boolean }>()
+const props = defineProps<{ selection: SelectionInfo; removingBackground?: boolean; regeneratingElement?: boolean }>()
 const emit = defineEmits<{
   (e: 'close'): void
   (e: 'text-prop', prop: TextProp, value: string | number | boolean): void
@@ -70,12 +70,19 @@ const emit = defineEmits<{
   (e: 'send-backward'): void
   (e: 'duplicate'): void
   (e: 'replace-image'): void
+  (e: 'regenerate-element', prompt: string): void
   (e: 'remove-background'): void
   (e: 'erase-object'): void
   (e: 'text-replace'): void
   (e: 'adjust-image'): void
   (e: 'delete'): void
 }>()
+
+const regenPrompt = ref('')
+function submitRegen() {
+  const p = regenPrompt.value.trim()
+  if (p) emit('regenerate-element', p)
+}
 
 const TEXT_COLORS = ['#1f2937', '#dc2626', '#ea580c', '#16a34a', '#2563eb', '#7c3aed', '#ffffff']
 const BG_COLORS = ['#fde047', '#fca5a5', '#93c5fd', '#86efac', '#e9d5ff', '#1f2937']
@@ -535,6 +542,26 @@ function pickWarp(kind: WarpKind) {
       </template>
 
       <template v-else-if="selection.type === 'image'">
+        <div class="mb-2 rounded-lg border border-violet-100 bg-violet-50/60 p-2">
+          <p class="mb-1 text-[11px] font-medium text-violet-700">AI 重新生成这个元素</p>
+          <el-input
+            v-model="regenPrompt"
+            size="small"
+            placeholder="想换成什么？例：红灯笼、一只小猫、一朵向日葵"
+            maxlength="30"
+            @keyup.enter="submitRegen"
+          />
+          <el-button
+            type="primary"
+            size="small"
+            class="mt-1.5 !w-full"
+            :loading="regeneratingElement"
+            :disabled="!regenPrompt.trim()"
+            @click="submitRegen"
+          >
+            {{ regeneratingElement ? '生成中…' : '生成并替换（保留位置大小）' }}
+          </el-button>
+        </div>
         <div class="space-y-1.5">
           <button
             class="flex w-full items-center gap-2 rounded px-2 py-2 text-xs text-gray-600 hover:bg-gray-100"

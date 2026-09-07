@@ -265,6 +265,7 @@ const hoStyle = ref(HANDOUT_STYLES[0].key)
 const hoBorder = ref(HANDOUT_BORDERS[0].key)   // 花边边框，默认「跟随主题」
 const hoTopic = ref('')
 const hoWithContent = ref(true)                // 带文字内容 / 只要画和标题（纯涂色）
+const hoLayered = ref(false)                   // 可拆分元素版（AI 出整图 → 框选 → 拆成一堆可拖动小图）
 const hoApplyMode = ref<'colored' | 'lineart'>('colored')  // 应用到画布用哪张
 const hoGenerating = ref(false)
 const hoError = ref('')
@@ -282,7 +283,10 @@ async function generateHo() {
   hoApplyMode.value = 'colored'
   const { w, h } = hoDims()
   try {
-    const r = await generateHandout(hoCategory.value, hoTopic.value.trim(), hoStyle.value, hoBorder.value, w, h, hoWithContent.value)
+    const r = await generateHandout(
+      hoCategory.value, hoTopic.value.trim(), hoStyle.value, hoBorder.value,
+      w, h, hoWithContent.value, hoLayered.value,
+    )
     hoResult.value = { ...r, w, h }
   } catch (e) {
     hoError.value = e instanceof Error ? e.message : '生成失败'
@@ -320,6 +324,15 @@ function applyHo() {
   const r = hoResult.value
   if (!r) return
   // 版面后端已按 r.w × r.h 排好；应用时让画布也调成这个尺寸（EditorView.onApplyDesign 处理）
+  // 可拆分版：elements 里已经是「底图 + 一堆元素图 + 文字层」，直接用
+  if (r.elementCount !== undefined) {
+    emit('apply-design', {
+      background: r.background || '#ffffff',
+      elements: [...r.elements],
+      canvasSize: { width: r.w, height: r.h },
+    })
+    return
+  }
   const bgSrc = hoApplyMode.value === 'lineart' ? r.lineartSrc : r.coloredSrc
   const elements: GeneratedDesign['elements'] = []
   if (bgSrc) {
@@ -477,58 +490,97 @@ function applyHo() {
           </div>
         </div>
 
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-600">版式</label>
+          <div class="flex gap-1.5">
+            <button
+              class="flex-1 rounded-md border px-2 py-1 text-[11px] transition"
+              :class="!hoLayered ? 'border-violet-500 bg-violet-50 text-violet-600' : 'border-gray-200 text-gray-500'"
+              @click="hoLayered = false"
+            >
+              左图右文
+            </button>
+            <button
+              class="flex-1 rounded-md border px-2 py-1 text-[11px] transition"
+              :class="hoLayered ? 'border-violet-500 bg-violet-50 text-violet-600' : 'border-gray-200 text-gray-500'"
+              @click="hoLayered = true"
+            >
+              可拆分元素
+            </button>
+          </div>
+          <p v-if="hoLayered" class="mt-1 text-[10px] leading-relaxed text-gray-400">
+            AI 出整张图后拆成一个个小图，每个能单独拖、缩、删；选中某个元素还能输提示词让 AI 换一个
+          </p>
+        </div>
+
         <el-button
           type="primary"
           class="!w-full !bg-gradient-to-r !from-violet-500 !to-fuchsia-500 !border-none"
           :loading="hoGenerating"
           @click="generateHo"
         >
-          {{ hoGenerating ? '生成中…（约 20 秒）' : '一键生成手抄报' }}
+          {{ hoGenerating ? (hoLayered ? '生成中…（约 40 秒）' : '生成中…（约 20 秒）') : '一键生成手抄报' }}
         </el-button>
 
         <p v-if="hoError" class="text-xs text-red-500">{{ hoError }}</p>
 
         <div v-if="hoResult" class="space-y-2 rounded-lg border border-gray-200 p-2">
-          <div v-if="hoResult.coloredSrc" class="grid grid-cols-2 gap-1.5">
-            <button
-              class="overflow-hidden rounded border-2 transition"
-              :class="hoApplyMode === 'colored' ? 'border-violet-500' : 'border-transparent'"
-              @click="hoApplyMode = 'colored'"
-            >
-              <img :src="hoResult.coloredSrc" class="w-full object-contain" />
-              <span class="block bg-gray-50 py-0.5 text-center text-[10px] text-gray-500">彩色版</span>
-            </button>
-            <button
-              v-if="hoResult.lineartSrc"
-              class="overflow-hidden rounded border-2 transition"
-              :class="hoApplyMode === 'lineart' ? 'border-violet-500' : 'border-transparent'"
-              @click="hoApplyMode = 'lineart'"
-            >
-              <img :src="hoResult.lineartSrc" class="w-full bg-white object-contain" />
-              <span class="block bg-gray-50 py-0.5 text-center text-[10px] text-gray-500">线稿版（可涂色）</span>
-            </button>
-          </div>
-          <p v-else class="rounded bg-amber-50 px-2 py-1.5 text-[11px] text-amber-700">
-            插画这次没画出来（生成慢/超时），标题和文字已排好，可以先应用、再点下面重试
-          </p>
+          <!-- 可拆分版：整图预览 + 元素数 -->
+          <template v-if="hoResult.elementCount !== undefined">
+            <img v-if="hoResult.fullSrc" :src="hoResult.fullSrc" class="w-full rounded object-contain" />
+            <p class="text-xs text-gray-500">
+              <span class="font-medium text-gray-700">{{ hoResult.title }}</span> ·
+              拆出 {{ hoResult.elementCount }} 个可拖动元素<template v-if="hoResult.sections.length"> + {{ hoResult.sections.length }} 个文字板块</template>
+            </p>
+            <p v-if="hoResult.elementCount === 0" class="rounded bg-amber-50 px-2 py-1.5 text-[11px] text-amber-700">
+              这次没框出元素，整图作底图应用了，可以点下面重试
+            </p>
+            <el-button type="primary" class="!w-full" :loading="hoGenerating" @click="applyHo">应用到画布</el-button>
+            <el-button class="!w-full" text @click="generateHo">换一张重新生成</el-button>
+          </template>
 
-          <div class="text-xs text-gray-500">
-            <span class="font-medium text-gray-700">{{ hoResult.title }}</span>
-            <template v-if="hoResult.sections.length">
-              · 共 {{ hoResult.sections.length }} 个板块：{{ hoResult.sections.map((s) => s.heading).join(' / ') }}
-            </template>
-            <template v-else> · 纯涂色版</template>
-          </div>
+          <template v-else>
+            <div v-if="hoResult.coloredSrc" class="grid grid-cols-2 gap-1.5">
+              <button
+                class="overflow-hidden rounded border-2 transition"
+                :class="hoApplyMode === 'colored' ? 'border-violet-500' : 'border-transparent'"
+                @click="hoApplyMode = 'colored'"
+              >
+                <img :src="hoResult.coloredSrc" class="w-full object-contain" />
+                <span class="block bg-gray-50 py-0.5 text-center text-[10px] text-gray-500">彩色版</span>
+              </button>
+              <button
+                v-if="hoResult.lineartSrc"
+                class="overflow-hidden rounded border-2 transition"
+                :class="hoApplyMode === 'lineart' ? 'border-violet-500' : 'border-transparent'"
+                @click="hoApplyMode = 'lineart'"
+              >
+                <img :src="hoResult.lineartSrc" class="w-full bg-white object-contain" />
+                <span class="block bg-gray-50 py-0.5 text-center text-[10px] text-gray-500">线稿版（可涂色）</span>
+              </button>
+            </div>
+            <p v-else class="rounded bg-amber-50 px-2 py-1.5 text-[11px] text-amber-700">
+              插画这次没画出来（生成慢/超时），标题和文字已排好，可以先应用、再点下面重试
+            </p>
 
-          <div v-if="hoResult.coloredSrc" class="flex gap-1.5">
-            <el-button class="!flex-1" size="small" @click="downloadHo('colored')">下载彩色版</el-button>
-            <el-button v-if="hoResult.lineartSrc" class="!flex-1" size="small" @click="downloadHo('lineart')">下载线稿版</el-button>
-          </div>
+            <div class="text-xs text-gray-500">
+              <span class="font-medium text-gray-700">{{ hoResult.title }}</span>
+              <template v-if="hoResult.sections.length">
+                · 共 {{ hoResult.sections.length }} 个板块：{{ hoResult.sections.map((s) => s.heading).join(' / ') }}
+              </template>
+              <template v-else> · 纯涂色版</template>
+            </div>
 
-          <el-button type="primary" class="!w-full" :loading="hoGenerating" @click="applyHo">
-            应用到画布（{{ hoApplyMode === 'lineart' ? '线稿版' : '彩色版' }}，正文可编辑）
-          </el-button>
-          <el-button class="!w-full" text @click="generateHo">{{ hoResult.coloredSrc ? '换一张重新生成' : '重试生成插画' }}</el-button>
+            <div v-if="hoResult.coloredSrc" class="flex gap-1.5">
+              <el-button class="!flex-1" size="small" @click="downloadHo('colored')">下载彩色版</el-button>
+              <el-button v-if="hoResult.lineartSrc" class="!flex-1" size="small" @click="downloadHo('lineart')">下载线稿版</el-button>
+            </div>
+
+            <el-button type="primary" class="!w-full" :loading="hoGenerating" @click="applyHo">
+              应用到画布（{{ hoApplyMode === 'lineart' ? '线稿版' : '彩色版' }}，正文可编辑）
+            </el-button>
+            <el-button class="!w-full" text @click="generateHo">{{ hoResult.coloredSrc ? '换一张重新生成' : '重试生成插画' }}</el-button>
+          </template>
         </div>
       </div>
     </template>

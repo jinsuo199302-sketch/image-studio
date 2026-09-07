@@ -145,8 +145,17 @@ class HandoutRequest(BaseModel):
     style: str = "color"
     border: str = "theme"
     with_content: bool = True
+    # True：AI 出整张图后用视觉模型框出每个图画元素、逐个抠成透明小图，铺成一堆可单独
+    # 拖动/替换的图层；False：老逻辑（左插画右文字，插画是一整块）
+    layered: bool = False
     canvas_width: int
     canvas_height: int
+
+
+class DesignElementRequest(BaseModel):
+    """手抄报「可拆分元素版」里替换单个元素用：给一句提示词，AI 生成一张透明底的小图。"""
+    prompt: str
+    style: str = "color"
 
 
 class DesignLayoutRequest(BaseModel):

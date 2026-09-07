@@ -239,13 +239,18 @@ export const HANDOUT_CATEGORIES: { key: string; label: string; hint: string }[] 
 ]
 
 export interface HandoutResult {
-  /** AI 画的彩色版主体插画（左半边），叠在画布上当背景；失败时为 null */
+  /** 经典版：AI 画的彩色版主体插画（左半边）；可拆分版为 null */
   coloredSrc: string | null
-  /** OpenCV 从彩色版提取的黑白线稿版——构图跟彩色版完全一致，家长照着彩色版给孩子涂色 */
+  /** 经典版：OpenCV 从彩色版提取的黑白线稿版；可拆分版为 null */
   lineartSrc: string | null
   /** @deprecated 兼容旧字段，等于 coloredSrc */
   backgroundSrc: string | null
-  /** 后端已经把手抄报版面排好了，前端直接用；elements 里已含艺术大标题 + 右侧文字板块 */
+  /** 可拆分版：AI 出的整张手抄报原图（预览用）；经典版无此字段 */
+  fullSrc?: string
+  /** 可拆分版：拆出来的可拖动元素个数 */
+  elementCount?: number
+  /** 后端已经把版面排好了，前端直接用。经典版 elements = 标题+文字板块；
+   *  可拆分版 elements = 底图 + 一堆元素图 + 标题 + 文字板块 */
   background: string
   elements: GeneratedDesign['elements']
   title: string
@@ -256,8 +261,8 @@ export interface HandoutResult {
 
 /**
  * 手抄报一键生成：只传分类 + 可选的具体主题，不用自己写 prompt。
- * withContent=false 出纯涂色版（只有插画 + 艺术标题，没有文字板块）。
- * 后端返回彩色版 + 线稿版两张图，正文和标题是独立文字层，不烧进图里。
+ * withContent=false 出纯涂色版；layered=true 出「可拆分元素版」——AI 出整张图后
+ * 用视觉模型框出每个图画元素、逐个抠成透明小图，铺成一堆可单独拖动/替换的图层。
  */
 export async function generateHandout(
   category: string,
@@ -267,10 +272,24 @@ export async function generateHandout(
   canvasWidth: number,
   canvasHeight: number,
   withContent = true,
+  layered = false,
 ): Promise<HandoutResult> {
   return authPostJson<HandoutResult>(
     '/design/handout',
-    { category, topic, style, border, with_content: withContent, canvas_width: canvasWidth, canvas_height: canvasHeight },
+    {
+      category, topic, style, border,
+      with_content: withContent, layered,
+      canvas_width: canvasWidth, canvas_height: canvasHeight,
+    },
     '手抄报生成失败',
+  )
+}
+
+/** 可拆分手抄报里替换单个元素：一句提示词 → 一张透明底小图 */
+export async function regenerateElement(prompt: string, style = 'color'): Promise<{ src: string; assetId: string }> {
+  return authPostJson<{ src: string; assetId: string }>(
+    '/design/element',
+    { prompt, style },
+    '元素生成失败',
   )
 }

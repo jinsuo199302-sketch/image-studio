@@ -23,6 +23,7 @@ import AIDesignPanel from '../components/editor/panels/AIDesignPanel.vue'
 import PlaceholderPanel from '../components/editor/panels/PlaceholderPanel.vue'
 import type { Template } from '../data/templates'
 import type { GeneratedDesign } from '../services/designApi'
+import { regenerateElement } from '../services/designApi'
 import { saveFile } from '../utils/saveFile'
 import { useTemplateStore } from '../stores/templates'
 import { useAuthStore } from '../stores/auth'
@@ -67,6 +68,7 @@ const saveDialogOpen = ref(false)
 const resizeDialogOpen = ref(false)
 const historyDialogOpen = ref(false)
 const removingBackground = ref(false)
+const regeneratingElement = ref(false)
 const adjustDialogOpen = ref(false)
 const eraseDialogOpen = ref(false)
 const textReplaceDialogOpen = ref(false)
@@ -179,6 +181,20 @@ async function onRemoveBackground() {
     removingBackground.value = false
   }
 }
+
+async function onRegenerateElement(prompt: string) {
+  if (regeneratingElement.value || selection.value?.type !== 'image') return
+  regeneratingElement.value = true
+  try {
+    const { src } = await regenerateElement(prompt)
+    await stageRef.value?.replaceSelectedImage(src)
+    ElMessage.success('已替换')
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '生成失败，请重试')
+  } finally {
+    regeneratingElement.value = false
+  }
+}
 </script>
 
 <template>
@@ -237,6 +253,7 @@ async function onRemoveBackground() {
           v-if="selection"
           :selection="selection"
           :removing-background="removingBackground"
+          :regenerating-element="regeneratingElement"
           @close="stageRef?.deselectActive()"
           @text-prop="onTextProp"
           @text-shadow="(enabled) => stageRef?.setSelectedTextShadow(enabled)"
@@ -272,6 +289,7 @@ async function onRemoveBackground() {
           @send-backward="stageRef?.sendSelectedBackward()"
           @duplicate="stageRef?.duplicateSelected()"
           @replace-image="replaceViaUpload"
+          @regenerate-element="onRegenerateElement"
           @remove-background="onRemoveBackground"
           @erase-object="eraseDialogOpen = true"
           @text-replace="textReplaceDialogOpen = true"
