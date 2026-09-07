@@ -1,7 +1,7 @@
 import type { CanvasElement } from '../data/templates'
 import type { WarpKind } from '../components/editor/CanvasStage.vue'
 import { FONT_OPTIONS } from '../data/fonts'
-import { authPostForm, authPostJson } from './httpClient'
+import { authGetJson, authPostForm, authPostJson } from './httpClient'
 
 /** 参考图生成里标题文字的"手法类别"提示——只对应编辑器已有的特效/变形预设名，
  * 不含任何具体字形/字体信息，是版权边界要求的"学手法不抄表达"在标题上的落地。 */
@@ -274,15 +274,27 @@ export async function generateHandout(
   withContent = true,
   layered = false,
 ): Promise<HandoutResult> {
-  return authPostJson<HandoutResult>(
-    '/design/handout',
-    {
-      category, topic, style, border,
-      with_content: withContent, layered,
-      canvas_width: canvasWidth, canvas_height: canvasHeight,
-    },
-    '手抄报生成失败',
-  )
+  const body = {
+    category, topic, style, border,
+    with_content: withContent, layered,
+    canvas_width: canvasWidth, canvas_height: canvasHeight,
+  }
+  if (!layered) {
+    return authPostJson<HandoutResult>('/design/handout', body, '手抄报生成失败')
+  }
+  // 可拆分版：后端要跑好几分钟 → 下单拿 jobId，轮询到出结果
+  const { jobId } = await authPostJson<{ jobId: string }>('/design/handout', body, '手抄报生成失败')
+  const deadline = Date.now() + 8 * 60 * 1000
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 5000))
+    const job = await authGetJson<{ status: string; result?: HandoutResult; detail?: string }>(
+      `/design/handout/job/${jobId}`,
+      '手抄报生成失败',
+    )
+    if (job.status === 'done' && job.result) return job.result
+    if (job.status === 'error') throw new Error(job.detail || '手抄报生成失败')
+  }
+  throw new Error('生成超时，请稍后重试')
 }
 
 /** 可拆分手抄报里替换单个元素：一句提示词 → 一张透明底小图 */

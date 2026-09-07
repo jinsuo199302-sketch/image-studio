@@ -509,7 +509,8 @@ function applyHo() {
             </button>
           </div>
           <p v-if="hoLayered" class="mt-1 text-[10px] leading-relaxed text-gray-400">
-            AI 出整张图后拆成一个个小图，每个能单独拖、缩、删；选中某个元素还能输提示词让 AI 换一个
+            AI 出整图后照着画风把每个元素单独重画成透明贴纸（不是裁切，所以每个都干净），
+            每个能单独拖、缩、删；选中某个元素还能输提示词让 AI 换一个。生成慢一些、按 3 次计费。
           </p>
         </div>
 
@@ -519,7 +520,7 @@ function applyHo() {
           :loading="hoGenerating"
           @click="generateHo"
         >
-          {{ hoGenerating ? (hoLayered ? '生成中…（约 40 秒）' : '生成中…（约 20 秒）') : '一键生成手抄报' }}
+          {{ hoGenerating ? (hoLayered ? '生成中…（拆元素约 2 分钟）' : '生成中…（约 20 秒）') : '一键生成手抄报' }}
         </el-button>
 
         <p v-if="hoError" class="text-xs text-red-500">{{ hoError }}</p>
