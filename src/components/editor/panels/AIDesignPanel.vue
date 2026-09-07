@@ -285,31 +285,17 @@ function tintBg(hex: string): string {
   return `#${((1 << 24) + (mix(r) << 16) + (mix(g) << 8) + mix(b)).toString(16).slice(1)}`
 }
 
-async function applyHo() {
+function applyHo() {
   const r = hoResult.value
   if (!r) return
   const w = props.canvasWidth
   const h = props.canvasHeight
+  // 版面后端已经排好（build_handout），前端只把背景图叠在最底层
   const elements: GeneratedDesign['elements'] = []
   if (r.backgroundSrc) {
     elements.push({ type: 'image', x: 0, y: 0, width: w, height: h, src: r.backgroundSrc })
   }
-  try {
-    hoGenerating.value = true
-    const board = await generateLayoutPreset(
-      'dense-board',
-      w,
-      h,
-      { title: r.title, sections: r.sections },
-      { includeTitle: true, colors: r.colors },
-    )
-    elements.push(...board.elements)
-  } catch (e) {
-    hoError.value = e instanceof Error ? e.message : '排版失败'
-    hoGenerating.value = false
-    return
-  }
-  hoGenerating.value = false
+  elements.push(...r.elements)
   emit('apply-design', { background: r.backgroundSrc ? '#ffffff' : tintBg(r.colors[0]), elements })
 }
 </script>

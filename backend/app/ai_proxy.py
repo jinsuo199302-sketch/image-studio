@@ -580,8 +580,14 @@ async def _do_handout(db, user, cat: dict, topic: str, canvas_width: int, canvas
         except Exception:
             continue
 
+    # 排版直接在后端算好（手抄报专用 build_handout：大边距躲花边 + 2 栏浅底卡片 + 字号跟
+    # 画布缩放 + 整句按实际换行高度预留空间 + 装不下自动缩字号），前端只管把背景图叠上去。
+    layout = layout_presets.build_handout(canvas_width, canvas_height, topic_desc, clean_sections, cat["colors"])
+
     return {
         "backgroundSrc": background_src,
+        "background": layout["background"],
+        "elements": layout["elements"],
         "title": topic_desc,
         "sections": clean_sections,
         "colors": cat["colors"],

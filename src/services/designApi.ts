@@ -207,6 +207,9 @@ export const HANDOUT_CATEGORIES: { key: string; label: string; hint: string }[] 
 
 export interface HandoutResult {
   backgroundSrc: string | null
+  /** 后端已经把手抄报版面排好了，前端直接用；elements 里已含标题色块/卡片/正文 */
+  background: string
+  elements: GeneratedDesign['elements']
   title: string
   sections: LayoutPresetSection[]
   colors: [string, string]

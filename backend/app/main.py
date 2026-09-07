@@ -37,7 +37,10 @@ app = FastAPI(title="万能画图 模板服务 API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    # 本地任意端口——vite 预览有时不落在 5173（被占就自动换端口），写死单端口会让
+    # 换端口后 crossOrigin 的 <img>（fabric 加载生成的背景图要用）取不到 CORS 头。
+    # 生产是 nginx 同源，走不到这条 CORS。
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
