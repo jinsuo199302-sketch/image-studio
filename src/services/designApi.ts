@@ -15,6 +15,8 @@ export interface GeneratedDesign {
   elements: CanvasElement[]
   /** 仅"参考图生成"tab 会填，其它生成链路不涉及标题手法分类 */
   titleStyle?: TitleStyleHint
+  /** 手抄报按选定纸张尺寸生成——应用前先把画布调到这个尺寸 */
+  canvasSize?: { width: number; height: number }
 }
 
 function delay(ms: number) {
@@ -193,6 +195,25 @@ export async function generateBackgroundFromReference(
   )
 }
 
+/** 纸张尺寸——手抄报默认横版，跟后端 app/handout_categories.py 的 SIZES 保持一致 */
+export const HANDOUT_SIZES: { key: string; label: string; w: number; h: number }[] = [
+  { key: '16k', label: '16 开', w: 1300, h: 920 },
+  { key: 'a4', label: 'A4', w: 1480, h: 1050 },
+  { key: 'b4', label: 'B4', w: 1770, h: 1250 },
+  { key: '8k', label: '8 开', w: 1900, h: 1340 },
+  { key: 'a3', label: 'A3', w: 2100, h: 1480 },
+  { key: '4k', label: '4 开', w: 2600, h: 1840 },
+]
+
+/** 画风——决定 AI 背景插画的渲染风格，跟后端 STYLES 保持一致 */
+export const HANDOUT_STYLES: { key: string; label: string }[] = [
+  { key: 'color', label: '彩色卡通' },
+  { key: 'lineart', label: '黑白线稿' },
+  { key: 'watercolor', label: '水彩风格' },
+  { key: 'crayon', label: '蜡笔风格' },
+  { key: 'marker', label: '马克笔' },
+]
+
 /** 跟后端 app/handout_categories.py 的 key/label/hint 保持一致——挑分类用的，不用另请求一次接口 */
 export const HANDOUT_CATEGORIES: { key: string; label: string; hint: string }[] = [
   { key: 'safety', label: '安全教育', hint: '消防安全 / 交通安全 / 防溺水 / 防触电…' },
@@ -223,12 +244,13 @@ export interface HandoutResult {
 export async function generateHandout(
   category: string,
   topic: string,
+  style: string,
   canvasWidth: number,
   canvasHeight: number,
 ): Promise<HandoutResult> {
   return authPostJson<HandoutResult>(
     '/design/handout',
-    { category, topic, canvas_width: canvasWidth, canvas_height: canvasHeight },
+    { category, topic, style, canvas_width: canvasWidth, canvas_height: canvasHeight },
     '手抄报生成失败',
   )
 }

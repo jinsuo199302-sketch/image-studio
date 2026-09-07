@@ -150,6 +150,11 @@ async function onApplyDesign(design: GeneratedDesign) {
   } catch {
     return
   }
+  if (design.canvasSize && template.value) {
+    stageRef.value?.resizeCanvas(design.canvasSize.width, design.canvasSize.height)
+    template.value.canvasWidth = design.canvasSize.width
+    template.value.canvasHeight = design.canvasSize.height
+  }
   await stageRef.value?.applyGeneratedDesign(design.elements, design.background)
   if (design.titleStyle) {
     // 参考图生成里标题永远是 elements[1]（elements[0] 固定是背景图），见 AIDesignPanel.applyReferenceBackground

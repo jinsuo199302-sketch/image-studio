@@ -494,15 +494,16 @@ async def design_handout(
     文字图层，不烧进图片里，改文字/重排版不影响背景，背景不满意也能单独重新生成。"""
     _require_openlux()
     cat = handout_categories.get_category(payload.category)
+    style = handout_categories.get_style(payload.style)
     ticket = billing.consume(db, user, "手抄报生成")
     try:
-        return await _do_handout(db, user, cat, payload.topic.strip(), payload.canvas_width, payload.canvas_height)
+        return await _do_handout(db, user, cat, style, payload.topic.strip(), payload.canvas_width, payload.canvas_height)
     except Exception:
         billing.refund_ticket(db, user, ticket)
         raise
 
 
-async def _do_handout(db, user, cat: dict, topic: str, canvas_width: int, canvas_height: int):
+async def _do_handout(db, user, cat: dict, style: dict, topic: str, canvas_width: int, canvas_height: int):
     topic_desc = topic or cat["label"]
     headings = cat["headings"]
 
@@ -546,8 +547,10 @@ async def _do_handout(db, user, cat: dict, topic: str, canvas_width: int, canvas
     if not clean_sections:
         raise HTTPException(status_code=502, detail="手抄报内容生成为空，请重试")
 
+    palette = "" if style["gray"] else f"{cat['palette']}，"
     bg_prompt = (
-        f"手抄报/黑板报风格的装饰背景插画，主题「{topic_desc}」。{cat['style']}。"
+        f"手抄报/黑板报的装饰边框背景，主题「{topic_desc}」。{style['prompt']}。{palette}"
+        f"装饰元素：{cat['motifs']}。"
         "整个画面中央三分之二的大片区域必须完全留白、纯色或极淡的底纹，不能出现任何图案、人物、文字、边框线条——"
         "那片区域后面要叠加排版好的文字内容，只在画面最外圈边缘和四个角落做装饰，不要居中构图，不要画标题文字。"
     )
@@ -582,7 +585,9 @@ async def _do_handout(db, user, cat: dict, topic: str, canvas_width: int, canvas
 
     # 排版直接在后端算好（手抄报专用 build_handout：大边距躲花边 + 2 栏浅底卡片 + 字号跟
     # 画布缩放 + 整句按实际换行高度预留空间 + 装不下自动缩字号），前端只管把背景图叠上去。
-    layout = layout_presets.build_handout(canvas_width, canvas_height, topic_desc, clean_sections, cat["colors"])
+    # 黑白线稿画风：正文卡片也跟着走黑灰，不然彩色卡片压在黑白线稿背景上很违和。
+    text_colors = handout_categories._GRAY_COLORS if style["gray"] else cat["colors"]
+    layout = layout_presets.build_handout(canvas_width, canvas_height, topic_desc, clean_sections, text_colors)
 
     return {
         "backgroundSrc": background_src,
@@ -590,7 +595,7 @@ async def _do_handout(db, user, cat: dict, topic: str, canvas_width: int, canvas
         "elements": layout["elements"],
         "title": topic_desc,
         "sections": clean_sections,
-        "colors": cat["colors"],
+        "colors": text_colors,
         "assetId": asset_id,
     }
 

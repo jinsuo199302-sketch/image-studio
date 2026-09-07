@@ -9,6 +9,8 @@ import {
   generateHandout,
   generateLayoutPreset,
   HANDOUT_CATEGORIES,
+  HANDOUT_SIZES,
+  HANDOUT_STYLES,
   type GeneratedDesign,
   type HandoutResult,
   type LayoutPresetSection,
@@ -253,19 +255,29 @@ async function applyReferenceBackground() {
   })
 }
 
-// ---------------- 手抄报一键生成（选分类 + 可选主题 → AI 填内容 + 画装饰背景 → 自动组装） ----------------
+// ---------------- 手抄报一键生成（选分类/尺寸/画风 + 可选主题 → AI 填内容 + 画装饰背景 → 自动组装） ----------------
 const hoCategory = ref(HANDOUT_CATEGORIES[0].key)
+const hoSize = ref(HANDOUT_SIZES[1].key)       // 默认 A4
+const hoLandscape = ref(true)                  // 手抄报默认横版
+const hoStyle = ref(HANDOUT_STYLES[0].key)
 const hoTopic = ref('')
 const hoGenerating = ref(false)
 const hoError = ref('')
-const hoResult = ref<HandoutResult | null>(null)
+const hoResult = ref<(HandoutResult & { w: number; h: number }) | null>(null)
+
+function hoDims() {
+  const s = HANDOUT_SIZES.find((x) => x.key === hoSize.value) ?? HANDOUT_SIZES[1]
+  return hoLandscape.value ? { w: s.w, h: s.h } : { w: s.h, h: s.w }
+}
 
 async function generateHo() {
   hoError.value = ''
   hoGenerating.value = true
   hoResult.value = null
+  const { w, h } = hoDims()
   try {
-    hoResult.value = await generateHandout(hoCategory.value, hoTopic.value.trim(), props.canvasWidth, props.canvasHeight)
+    const r = await generateHandout(hoCategory.value, hoTopic.value.trim(), hoStyle.value, w, h)
+    hoResult.value = { ...r, w, h }
   } catch (e) {
     hoError.value = e instanceof Error ? e.message : '生成失败'
   } finally {
@@ -288,15 +300,17 @@ function tintBg(hex: string): string {
 function applyHo() {
   const r = hoResult.value
   if (!r) return
-  const w = props.canvasWidth
-  const h = props.canvasHeight
-  // 版面后端已经排好（build_handout），前端只把背景图叠在最底层
+  // 版面后端已按 r.w × r.h 排好；应用时让画布也调成这个尺寸（EditorView.onApplyDesign 处理）
   const elements: GeneratedDesign['elements'] = []
   if (r.backgroundSrc) {
-    elements.push({ type: 'image', x: 0, y: 0, width: w, height: h, src: r.backgroundSrc })
+    elements.push({ type: 'image', x: 0, y: 0, width: r.w, height: r.h, src: r.backgroundSrc })
   }
   elements.push(...r.elements)
-  emit('apply-design', { background: r.backgroundSrc ? '#ffffff' : tintBg(r.colors[0]), elements })
+  emit('apply-design', {
+    background: r.backgroundSrc ? '#ffffff' : tintBg(r.colors[0]),
+    elements,
+    canvasSize: { width: r.w, height: r.h },
+  })
 }
 </script>
 
@@ -362,6 +376,43 @@ function applyHo() {
             >
               <div class="font-medium" :class="hoCategory === c.key ? 'text-violet-600' : 'text-gray-700'">{{ c.label }}</div>
               <div class="mt-0.5 text-[10px] text-gray-400">{{ c.hint }}</div>
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-600">纸张尺寸</label>
+          <div class="flex flex-wrap gap-1.5">
+            <button
+              v-for="s in HANDOUT_SIZES"
+              :key="s.key"
+              class="rounded-full border px-2.5 py-0.5 text-[11px] transition"
+              :class="hoSize === s.key ? 'border-violet-500 bg-violet-50 text-violet-600' : 'border-gray-200 text-gray-500'"
+              @click="hoSize = s.key"
+            >
+              {{ s.label }}
+            </button>
+            <button
+              class="rounded-full border px-2.5 py-0.5 text-[11px] transition"
+              :class="'border-gray-200 text-gray-500'"
+              @click="hoLandscape = !hoLandscape"
+            >
+              {{ hoLandscape ? '横版' : '竖版' }}
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-600">画风</label>
+          <div class="flex flex-wrap gap-1.5">
+            <button
+              v-for="st in HANDOUT_STYLES"
+              :key="st.key"
+              class="rounded-full border px-2.5 py-0.5 text-[11px] transition"
+              :class="hoStyle === st.key ? 'border-violet-500 bg-violet-50 text-violet-600' : 'border-gray-200 text-gray-500'"
+              @click="hoStyle = st.key"
+            >
+              {{ st.label }}
             </button>
           </div>
         </div>
