@@ -2,13 +2,14 @@
 import { nextTick, onMounted, ref, watch } from 'vue'
 import QRCode from 'qrcode'
 import { ElMessage } from 'element-plus'
-import { createSnippet } from '../../../../services/snippetApi'
 import { saveFile } from '../../../../utils/saveFile'
 
 /**
- * 二维码生成器。纯前端（qrcode 库），只有"纯文本转短链"会走一次后端存 snippet。
- * 生成透明留白的 PNG，插入画布后是普通图片，拖角手柄就能改大小；这里的"尺寸"滑块
- * 控制的是导出 PNG 的像素分辨率，调大在画布上放大也不糊。
+ * 二维码生成器。纯前端（qrcode 库），内容原样编码——不做"存后端换短链"那套：
+ * 桌面版的后端是本机 127.0.0.1，换出来的短链别的设备根本打不开。
+ * 想让微信「扫一扫」直接跳转，让用户自己填完整网址即可。
+ * 生成透明留白 PNG，插入画布后是普通图片，拖角手柄就能改大小；"尺寸"滑块控制导出
+ * PNG 的像素分辨率，调大在画布上放大也不糊。
  */
 const emit = defineEmits<{ (e: 'insert-image', url: string): void }>()
 
@@ -40,8 +41,13 @@ function buildVCard(): string {
   return lines.join('\n')
 }
 
-/** 拿到要编码进二维码的最终内容；纯文本会先存后端换成短链 */
-async function resolveContent(): Promise<string | null> {
+/** 是否是"手机扫码能直接跳转"的内容（完整网址 / 电话 / 邮件等 scheme） */
+function isActionableUri(s: string): boolean {
+  return /^(https?:\/\/|mailto:|tel:|smsto:|WEIXIN:|upi:\/\/|HTTP)/i.test(s)
+}
+
+/** 拿到要编码进二维码的最终内容——原样返回，不做短链转换 */
+function resolveContent(): string | null {
   if (mode.value === 'card') {
     if (!cardName.value.trim() || !cardPhone.value.trim()) {
       ElMessage.warning('请至少填写姓名和电话')
@@ -54,14 +60,7 @@ async function resolveContent(): Promise<string | null> {
     ElMessage.warning('请输入链接或文本内容')
     return null
   }
-  if (/^(https?:\/\/|mailto:|tel:|WEIXIN:)/i.test(input)) return input
-  try {
-    const snippet = await createSnippet(input)
-    return `${window.location.origin}/s/${snippet.id}`
-  } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '内容保存失败，请重试')
-    return null
-  }
+  return input
 }
 
 async function render(content: string): Promise<string> {
@@ -91,8 +90,11 @@ onMounted(refreshPreview)
 async function build(): Promise<string | null> {
   generating.value = true
   try {
-    const content = await resolveContent()
+    const content = resolveContent()
     if (!content) return null
+    if (mode.value === 'text' && !isActionableUri(content)) {
+      ElMessage.info('已按纯文本编码——微信扫一扫只会显示文字，想直接跳转请填完整网址（https://…）')
+    }
     return await render(content)
   } catch {
     ElMessage.error('二维码生成失败，请检查输入内容')
@@ -116,7 +118,7 @@ async function download() {
   <div class="flex h-full flex-col">
     <div class="p-3 pb-0">
       <el-alert
-        title="生成二维码，插入画布后拖角手柄即可改大小；纯文字会自动转成扫码可读的短链接"
+        title="内容原样编码。想让微信扫一扫能直接打开，请填完整网址（https://…）；纯文字扫出来只显示文本"
         type="info"
         :closable="false"
         show-icon
@@ -146,7 +148,7 @@ async function download() {
             v-model="qrText"
             type="textarea"
             :rows="3"
-            placeholder="https://…&#10;或直接输入一段文字（会转成短链接）"
+            placeholder="https://picflowlab.cn&#10;或公众号链接、表单链接、一段文字…"
           />
         </div>
       </template>

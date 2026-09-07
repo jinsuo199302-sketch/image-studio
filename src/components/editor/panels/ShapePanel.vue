@@ -2,7 +2,6 @@
 import { ref } from 'vue'
 import QRCode from 'qrcode'
 import { ElMessage } from 'element-plus'
-import { createSnippet } from '../../../services/snippetApi'
 
 const emit = defineEmits<{
   (e: 'add', color: string): void
@@ -61,19 +60,11 @@ async function generateQrcode() {
       ElMessage.warning('请输入链接或文本内容')
       return
     }
-    if (/^https?:\/\//i.test(input)) {
-      content = input
-    } else {
-      // 微信扫一扫不展示纯文本，把内容存到后端，二维码里放一个短链接代替
-      generating.value = true
-      try {
-        const snippet = await createSnippet(input)
-        content = `${window.location.origin}/s/${snippet.id}`
-      } catch (e) {
-        ElMessage.error(e instanceof Error ? e.message : '内容保存失败，请重试')
-        generating.value = false
-        return
-      }
+    // 内容原样编码——不再"存后端换短链"：桌面版后端是本机 127.0.0.1，换出来的链别的
+    // 设备打不开。纯文字扫出来只显示文本，想直接跳转让用户填完整网址。
+    content = input
+    if (!/^(https?:\/\/|mailto:|tel:|smsto:|WEIXIN:)/i.test(input)) {
+      ElMessage.info('已按纯文本编码——想让微信扫码直接跳转，请填完整网址（https://…）')
     }
   } else {
     if (!cardName.value.trim() || !cardPhone.value.trim()) {
