@@ -143,6 +143,7 @@ class HandoutRequest(BaseModel):
     category: str
     topic: str = ""
     style: str = "color"
+    border: str = "theme"
     with_content: bool = True
     canvas_width: int
     canvas_height: int

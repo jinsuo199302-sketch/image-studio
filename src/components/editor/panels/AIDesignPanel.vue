@@ -9,6 +9,7 @@ import {
   generateBackgroundFromReference,
   generateHandout,
   generateLayoutPreset,
+  HANDOUT_BORDERS,
   HANDOUT_CATEGORIES,
   HANDOUT_SIZES,
   HANDOUT_STYLES,
@@ -261,6 +262,7 @@ const hoCategory = ref(HANDOUT_CATEGORIES[0].key)
 const hoSize = ref(HANDOUT_SIZES[1].key)       // 默认 A4
 const hoLandscape = ref(true)                  // 手抄报默认横版
 const hoStyle = ref(HANDOUT_STYLES[0].key)
+const hoBorder = ref(HANDOUT_BORDERS[0].key)   // 花边边框，默认「跟随主题」
 const hoTopic = ref('')
 const hoWithContent = ref(true)                // 带文字内容 / 只要画和标题（纯涂色）
 const hoApplyMode = ref<'colored' | 'lineart'>('colored')  // 应用到画布用哪张
@@ -280,7 +282,7 @@ async function generateHo() {
   hoApplyMode.value = 'colored'
   const { w, h } = hoDims()
   try {
-    const r = await generateHandout(hoCategory.value, hoTopic.value.trim(), hoStyle.value, w, h, hoWithContent.value)
+    const r = await generateHandout(hoCategory.value, hoTopic.value.trim(), hoStyle.value, hoBorder.value, w, h, hoWithContent.value)
     hoResult.value = { ...r, w, h }
   } catch (e) {
     hoError.value = e instanceof Error ? e.message : '生成失败'
@@ -431,6 +433,21 @@ function applyHo() {
               @click="hoStyle = st.key"
             >
               {{ st.label }}
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-600">花边边框（AI 在画面四周画一圈装饰）</label>
+          <div class="flex flex-wrap gap-1.5">
+            <button
+              v-for="b in HANDOUT_BORDERS"
+              :key="b.key"
+              class="rounded-full border px-2.5 py-0.5 text-[11px] transition"
+              :class="hoBorder === b.key ? 'border-violet-500 bg-violet-50 text-violet-600' : 'border-gray-200 text-gray-500'"
+              @click="hoBorder = b.key"
+            >
+              {{ b.label }}
             </button>
           </div>
         </div>

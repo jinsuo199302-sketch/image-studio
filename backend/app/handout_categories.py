@@ -99,9 +99,28 @@ STYLES: dict[str, dict] = {
 }
 
 
+# 花边边框——AI 在彩色版画面四周画一圈装饰花边，用户只选风格不写 prompt。
+# theme=True 的那档表示"跟着分类走"，实际 prompt 在 ai_proxy 里用分类的 motifs 拼。
+BORDERS: dict[str, dict] = {
+    "theme": {"label": "跟随主题", "prompt": "", "theme": True},
+    "none": {"label": "不要边框", "prompt": "", "theme": False},
+    "wave": {"label": "波浪圆点", "prompt": "彩色波浪线搭配大小圆点组成的简洁花边", "theme": False},
+    "vine": {"label": "藤蔓花草", "prompt": "缠绕的绿色藤蔓、小花和叶子组成的自然田园花边", "theme": False},
+    "star": {"label": "星星泡泡", "prompt": "大小星星、闪光点和泡泡组成的活泼花边", "theme": False},
+    "cloud": {"label": "云朵彩虹", "prompt": "卡通云朵、彩虹、小雨滴和太阳组成的柔和花边", "theme": False},
+    "geo": {"label": "几何波点", "prompt": "三角形、锯齿、波点和短线条拼成的现代感几何花边", "theme": False},
+    "stationery": {"label": "文具元素", "prompt": "铅笔、尺子、橡皮、回形针、纸飞机等文具排成的一圈花边", "theme": False},
+    "bunting": {"label": "彩旗挂饰", "prompt": "顶部一串三角彩旗，左右和底边用细彩带和小挂饰装饰", "theme": False},
+}
+
+
 def get_category(key: str) -> dict:
     return CATEGORIES.get(key, CATEGORIES["safety"])
 
 
 def get_style(key: str) -> dict:
     return STYLES.get(key, STYLES["color"])
+
+
+def get_border(key: str) -> dict:
+    return BORDERS.get(key, BORDERS["theme"])

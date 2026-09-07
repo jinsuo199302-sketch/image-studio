@@ -145,12 +145,14 @@ def _tint(hex_color: str, ratio: float) -> str:
 
 
 def _handout_sections(right_x: int, right_w: int, top: int, sections: list[dict], colors: list[str], scale: float, gap_scale: float = 1.0):
+    """右侧每个板块 = 一张淡色圆角卡片（同色描边，给文字区一个"边框"）+ 药丸小标题 + 正文。"""
     fs_head = round(24 * scale)
     fs_body = round(17 * scale)
-    head_h = round(fs_head * 1.75)
-    sec_gap = round(22 * scale * gap_scale)
-    body_indent = round(10 * scale)
-    body_w = right_w - body_indent
+    head_h = round(fs_head * 1.7)
+    sec_gap = round(20 * scale * gap_scale)
+    pad = round(15 * scale)
+    head_gap = round(9 * scale)
+    body_w = right_w - 2 * pad
 
     els: list[dict] = []
     y = float(top)
@@ -159,13 +161,22 @@ def _handout_sections(right_x: int, right_w: int, top: int, sections: list[dict]
         heading = str(sec.get("heading", "")).strip()
         content = "  ".join(str(x).strip() for x in sec.get("items", []) if str(x).strip())
 
-        head_w = min(right_w, round(len(heading) * fs_head * 1.18 + fs_head * 1.6))
-        els.append({"type": "rect", "x": right_x, "y": round(y), "width": head_w, "height": head_h, "fill": color, "rx": round(head_h / 2)})
-        els.append(_text(right_x, round(y + (head_h - fs_head) / 2 - 1 * scale), head_w, heading, fs_head, "#ffffff", weight="bold", align="center"))
-        y += head_h + round(10 * scale)
+        body_h = estimate_text_height(content, body_w, fs_body)
+        card_h = pad + head_h + head_gap + body_h + pad
 
-        els.append(_text(right_x + body_indent, round(y), body_w, content, fs_body, "#374151"))
-        y += estimate_text_height(content, body_w, fs_body) + sec_gap
+        els.append({
+            "type": "rect", "x": right_x, "y": round(y), "width": right_w, "height": round(card_h),
+            "fill": _tint(color, 0.9), "rx": round(18 * scale),
+            "stroke": color, "strokeWidth": max(2, round(2.2 * scale)),
+        })
+
+        head_w = min(body_w, round(len(heading) * fs_head * 1.18 + fs_head * 1.7))
+        hx = right_x + pad
+        els.append({"type": "rect", "x": hx, "y": round(y + pad), "width": head_w, "height": head_h, "fill": color, "rx": round(head_h / 2)})
+        els.append(_text(hx, round(y + pad + (head_h - fs_head) / 2 - 1 * scale), head_w, heading, fs_head, "#ffffff", weight="bold", align="center"))
+
+        els.append(_text(right_x + pad, round(y + pad + head_h + head_gap), body_w, content, fs_body, "#374151"))
+        y += card_h + sec_gap
 
     return els, y - sec_gap
 

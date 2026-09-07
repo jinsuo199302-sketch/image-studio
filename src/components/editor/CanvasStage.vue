@@ -259,6 +259,8 @@ async function applyElements(
         fill: el.fill,
         rx: el.rx ?? 0,
         ry: el.rx ?? 0,
+        stroke: el.stroke,
+        strokeWidth: el.stroke ? (el.strokeWidth ?? 1) : 0,
       })
       canvas.add(rect)
     } else if (el.type === 'image') {

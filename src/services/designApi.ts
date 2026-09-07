@@ -213,6 +213,19 @@ export const HANDOUT_STYLES: { key: string; label: string }[] = [
   { key: 'marker', label: '马克笔' },
 ]
 
+/** 花边边框——AI 在画面四周画一圈装饰花边，用户只选风格。跟后端 BORDERS 保持一致 */
+export const HANDOUT_BORDERS: { key: string; label: string }[] = [
+  { key: 'theme', label: '跟随主题' },
+  { key: 'none', label: '不要边框' },
+  { key: 'wave', label: '波浪圆点' },
+  { key: 'vine', label: '藤蔓花草' },
+  { key: 'star', label: '星星泡泡' },
+  { key: 'cloud', label: '云朵彩虹' },
+  { key: 'geo', label: '几何波点' },
+  { key: 'stationery', label: '文具元素' },
+  { key: 'bunting', label: '彩旗挂饰' },
+]
+
 /** 跟后端 app/handout_categories.py 的 key/label/hint 保持一致——挑分类用的，不用另请求一次接口 */
 export const HANDOUT_CATEGORIES: { key: string; label: string; hint: string }[] = [
   { key: 'safety', label: '安全教育', hint: '消防安全 / 交通安全 / 防溺水 / 防触电…' },
@@ -250,13 +263,14 @@ export async function generateHandout(
   category: string,
   topic: string,
   style: string,
+  border: string,
   canvasWidth: number,
   canvasHeight: number,
   withContent = true,
 ): Promise<HandoutResult> {
   return authPostJson<HandoutResult>(
     '/design/handout',
-    { category, topic, style, with_content: withContent, canvas_width: canvasWidth, canvas_height: canvasHeight },
+    { category, topic, style, border, with_content: withContent, canvas_width: canvasWidth, canvas_height: canvasHeight },
     '手抄报生成失败',
   )
 }

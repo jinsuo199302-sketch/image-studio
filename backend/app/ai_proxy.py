@@ -496,10 +496,11 @@ async def design_handout(
     _require_openlux()
     cat = handout_categories.get_category(payload.category)
     style = handout_categories.get_style(payload.style)
+    border = handout_categories.get_border(payload.border)
     ticket = billing.consume(db, user, "手抄报生成")
     try:
         return await _do_handout(
-            db, user, cat, style, payload.topic.strip(),
+            db, user, cat, style, border, payload.topic.strip(),
             payload.canvas_width, payload.canvas_height, payload.with_content,
         )
     except Exception:
@@ -525,7 +526,7 @@ def _to_lineart(image_bytes: bytes) -> bytes:
     return buf.tobytes()
 
 
-async def _do_handout(db, user, cat: dict, style: dict, topic: str, canvas_width: int, canvas_height: int, with_content: bool = True):
+async def _do_handout(db, user, cat: dict, style: dict, border: dict, topic: str, canvas_width: int, canvas_height: int, with_content: bool = True):
     topic_desc = topic or cat["label"]
     headings = cat["headings"]
 
@@ -571,14 +572,28 @@ async def _do_handout(db, user, cat: dict, style: dict, topic: str, canvas_width
         if not clean_sections:
             raise HTTPException(status_code=502, detail="手抄报内容生成为空，请重试")
 
-    # ── 2. AI 主体插画：集中在左半边，右半 + 顶部留白给文字层叠加 ────────────────
+    # ── 2. AI 主体插画：集中在左半边，右半 + 顶部留白给文字层叠加；四周可加一圈花边 ──
+    # 花边风格：theme 档跟着分类的 motifs 走，none 档不画，其余用预设描述
+    if border.get("theme"):
+        border_desc = f"{cat['motifs']}"
+    else:
+        border_desc = border.get("prompt", "")
+    if border_desc:
+        border_clause = (
+            f"画面最外圈画一圈{border_desc}组成的装饰花边，花边宽度约占画布边缘 6%~8%，四个角可以更热闹一些；"
+            "花边以内、尤其右侧和顶部，保持纯白留白，不要让花边侵入中间区域。"
+        )
+    else:
+        border_clause = "不要加相框或整圈边框。"
+
     bg_prompt = (
         f"儿童手抄报的主体插画，主题「{topic_desc}」。{style['prompt']}。{cat['palette']}。\n"
         f"画面主体：{cat['scene']}。"
-        f"周围点缀：{cat['motifs']}。\n"
+        f"周围点缀：{cat['motifs']}，元素要丰富、错落有致。\n"
         "构图要求：主体插画和人物全部集中在画面左侧约 45% 的范围内，画面右侧 55% 和顶部 25% 必须是纯白或极淡的底色，"
-        "不能有任何人物、图案、边框线条、文字——那些区域后面要叠加排版好的文字。"
-        "白色背景，不要画标题文字，不要加相框或整圈边框。"
+        "不能有任何人物、图案、文字——那些区域后面要叠加排版好的文字。"
+        f"{border_clause}"
+        "白色背景，不要画标题文字。"
     )
     colored_src = None
     lineart_src = None

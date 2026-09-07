@@ -39,6 +39,8 @@ export type CanvasElement =
       height: number
       fill: string
       rx?: number
+      stroke?: string
+      strokeWidth?: number
     }
   | {
       type: 'group'
