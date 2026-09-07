@@ -6,8 +6,11 @@ import { useDesignStore } from '../../../stores/design'
 import AssetGeneratorPanel from './AssetGeneratorPanel.vue'
 import {
   generateBackgroundFromReference,
+  generateHandout,
   generateLayoutPreset,
+  HANDOUT_CATEGORIES,
   type GeneratedDesign,
+  type HandoutResult,
   type LayoutPresetSection,
   type TitleStyleHint,
 } from '../../../services/designApi'
@@ -18,7 +21,7 @@ const emit = defineEmits<{ (e: 'apply-design', design: GeneratedDesign): void; (
 const authStore = useAuthStore()
 const store = useDesignStore()
 
-const activeTab = ref<'brief' | 'preset' | 'reference' | 'asset'>('brief')
+const activeTab = ref<'handout' | 'brief' | 'preset' | 'reference' | 'asset'>('handout')
 
 // ---------------- 创意简报模式（原有功能，AI 自己编内容+排版） ----------------
 const prompt = ref('')
@@ -249,34 +252,101 @@ async function applyReferenceBackground() {
     titleStyle: refTitle.value.trim() ? refTitleStyle.value : undefined,
   })
 }
+
+// ---------------- 手抄报一键生成（选分类 + 可选主题 → AI 填内容 + 画装饰背景 → 自动组装） ----------------
+const hoCategory = ref(HANDOUT_CATEGORIES[0].key)
+const hoTopic = ref('')
+const hoGenerating = ref(false)
+const hoError = ref('')
+const hoResult = ref<HandoutResult | null>(null)
+
+async function generateHo() {
+  hoError.value = ''
+  hoGenerating.value = true
+  hoResult.value = null
+  try {
+    hoResult.value = await generateHandout(hoCategory.value, hoTopic.value.trim(), props.canvasWidth, props.canvasHeight)
+  } catch (e) {
+    hoError.value = e instanceof Error ? e.message : '生成失败'
+  } finally {
+    hoGenerating.value = false
+  }
+}
+
+/** colors[0] 兑成一层很淡的底色，背景图没生成出来时用它兜底，不至于纯白 */
+function tintBg(hex: string): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim())
+  if (!m) return '#fdfbf7'
+  const n = parseInt(m[1], 16)
+  const r = (n >> 16) & 255
+  const g = (n >> 8) & 255
+  const b = n & 255
+  const mix = (c: number) => Math.round(c + (255 - c) * 0.92)
+  return `#${((1 << 24) + (mix(r) << 16) + (mix(g) << 8) + mix(b)).toString(16).slice(1)}`
+}
+
+async function applyHo() {
+  const r = hoResult.value
+  if (!r) return
+  const w = props.canvasWidth
+  const h = props.canvasHeight
+  const elements: GeneratedDesign['elements'] = []
+  if (r.backgroundSrc) {
+    elements.push({ type: 'image', x: 0, y: 0, width: w, height: h, src: r.backgroundSrc })
+  }
+  try {
+    hoGenerating.value = true
+    const board = await generateLayoutPreset(
+      'dense-board',
+      w,
+      h,
+      { title: r.title, sections: r.sections },
+      { includeTitle: true, colors: r.colors },
+    )
+    elements.push(...board.elements)
+  } catch (e) {
+    hoError.value = e instanceof Error ? e.message : '排版失败'
+    hoGenerating.value = false
+    return
+  }
+  hoGenerating.value = false
+  emit('apply-design', { background: r.backgroundSrc ? '#ffffff' : tintBg(r.colors[0]), elements })
+}
 </script>
 
 <template>
   <div class="flex h-full flex-col">
-    <div class="flex border-b border-gray-100 px-3 pt-2">
+    <div class="flex overflow-x-auto border-b border-gray-100 px-3 pt-2">
       <button
-        class="border-b-2 px-3 py-2 text-xs font-medium transition"
+        class="shrink-0 border-b-2 px-3 py-2 text-xs font-medium transition"
+        :class="activeTab === 'handout' ? 'border-violet-500 text-violet-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+        @click="activeTab = 'handout'"
+      >
+        手抄报
+      </button>
+      <button
+        class="shrink-0 border-b-2 px-3 py-2 text-xs font-medium transition"
         :class="activeTab === 'brief' ? 'border-violet-500 text-violet-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
         @click="activeTab = 'brief'"
       >
         创意简报
       </button>
       <button
-        class="border-b-2 px-3 py-2 text-xs font-medium transition"
+        class="shrink-0 border-b-2 px-3 py-2 text-xs font-medium transition"
         :class="activeTab === 'preset' ? 'border-violet-500 text-violet-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
         @click="activeTab = 'preset'"
       >
         参数化排版
       </button>
       <button
-        class="border-b-2 px-3 py-2 text-xs font-medium transition"
+        class="shrink-0 border-b-2 px-3 py-2 text-xs font-medium transition"
         :class="activeTab === 'reference' ? 'border-violet-500 text-violet-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
         @click="activeTab = 'reference'"
       >
         参考图生成
       </button>
       <button
-        class="border-b-2 px-3 py-2 text-xs font-medium transition"
+        class="shrink-0 border-b-2 px-3 py-2 text-xs font-medium transition"
         :class="activeTab === 'asset' ? 'border-violet-500 text-violet-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
         @click="activeTab = 'asset'"
       >
@@ -284,8 +354,65 @@ async function applyReferenceBackground() {
       </button>
     </div>
 
+    <!-- ============ 手抄报：选分类 +（可选）主题，AI 填内容 + 画装饰背景，一键组装 ============ -->
+    <template v-if="activeTab === 'handout'">
+      <div class="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
+        <el-alert
+          :title="authStore.isAuthenticated ? '选个分类就能生成，正文是独立文字层、随时能改' : '演示模式：登录后使用真实生成'"
+          :type="authStore.isAuthenticated ? 'success' : 'info'"
+          :closable="false"
+          show-icon
+        />
+
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-600">选一个主题分类</label>
+          <div class="grid grid-cols-2 gap-1.5">
+            <button
+              v-for="c in HANDOUT_CATEGORIES"
+              :key="c.key"
+              class="rounded-md border px-2 py-1.5 text-left text-xs transition"
+              :class="hoCategory === c.key ? 'border-violet-500 bg-violet-50' : 'border-gray-200 hover:border-violet-300'"
+              @click="hoCategory = c.key"
+            >
+              <div class="font-medium" :class="hoCategory === c.key ? 'text-violet-600' : 'text-gray-700'">{{ c.label }}</div>
+              <div class="mt-0.5 text-[10px] text-gray-400">{{ c.hint }}</div>
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-600">具体主题（可选，不填就出这个分类的通用版）</label>
+          <el-input v-model="hoTopic" size="small" placeholder="例：防溺水、垃圾分类、我的中秋节…" maxlength="20" />
+        </div>
+
+        <el-button
+          type="primary"
+          class="!w-full !bg-gradient-to-r !from-violet-500 !to-fuchsia-500 !border-none"
+          :loading="hoGenerating"
+          @click="generateHo"
+        >
+          {{ hoGenerating ? '生成中…（约 20 秒）' : '一键生成手抄报' }}
+        </el-button>
+
+        <p v-if="hoError" class="text-xs text-red-500">{{ hoError }}</p>
+
+        <div v-if="hoResult" class="space-y-2 rounded-lg border border-gray-200 p-2">
+          <img v-if="hoResult.backgroundSrc" :src="hoResult.backgroundSrc" class="w-full rounded object-contain" />
+          <p v-else class="rounded bg-amber-50 px-2 py-1.5 text-[11px] text-amber-700">
+            背景图这次没画出来（生成慢/超时），内容已生成好，可以先应用、再点下面重试背景
+          </p>
+          <div class="text-xs text-gray-500">
+            <span class="font-medium text-gray-700">{{ hoResult.title }}</span> · 共
+            {{ hoResult.sections.length }} 个板块：{{ hoResult.sections.map((s) => s.heading).join(' / ') }}
+          </div>
+          <el-button type="primary" class="!w-full" :loading="hoGenerating" @click="applyHo">应用到画布（正文可编辑）</el-button>
+          <el-button class="!w-full" text @click="generateHo">{{ hoResult.backgroundSrc ? '换一张背景重新生成' : '重试生成背景' }}</el-button>
+        </div>
+      </div>
+    </template>
+
     <!-- ============ 创意简报：一句话描述，AI 自己编内容+挑组件+排版 ============ -->
-    <template v-if="activeTab === 'brief'">
+    <template v-else-if="activeTab === 'brief'">
       <div class="space-y-3 p-3">
         <el-alert
           :title="authStore.isAuthenticated ? '已登录，使用真实设计生成接口' : '演示模式：生成示例版式，登录后自动切换'"

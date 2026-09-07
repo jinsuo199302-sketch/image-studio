@@ -135,6 +135,15 @@ class ContentResearchRequest(BaseModel):
     topic: str
 
 
+class HandoutRequest(BaseModel):
+    """手抄报/黑板报一键生成——分类预设是"组装"的骨架（见 app/handout_categories.py），
+    topic 是用户可选填的具体角度（比如分类选"安全教育"，topic 填"防溺水"）。"""
+    category: str
+    topic: str = ""
+    canvas_width: int
+    canvas_height: int
+
+
 class DesignLayoutRequest(BaseModel):
     """跟 DesignGenerateRequest 是两码事——这个是用户已经写好正文的场景，AI 只负责排版/选组件，
     不负责编内容。prompt 类接口（"设计一版海报，主题是..."）走的还是 DesignGenerateRequest。"""
@@ -164,3 +173,5 @@ class LayoutPresetRequest(BaseModel):
     # 供"参考图生成"复用 dense-board 的分区栏格算法时用：跳过内置标题、自定标题下方留白起点
     include_title: bool = True
     top_offset: Optional[int] = None
+    # dense-board 的两色配色，不传用默认党建红蓝；"手抄报一键生成"按分类传自己的配色
+    colors: Optional[List[str]] = None

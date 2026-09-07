@@ -153,8 +153,9 @@ export async function generateLayoutPreset(
   canvasWidth: number,
   canvasHeight: number,
   params: { title: string; intro?: string; items?: string[]; sections?: LayoutPresetSection[] },
-  /** 供"参考图生成"复用 dense-board 分区栏格算法时用：跳过内置标题，栏格从 topOffset 开始铺 */
-  denseBoardOptions?: { includeTitle?: boolean; topOffset?: number },
+  /** 供"参考图生成"/"手抄报"复用 dense-board 分区栏格算法时用：跳过内置标题、栏格从 topOffset
+   * 开始铺、按分类换配色 */
+  denseBoardOptions?: { includeTitle?: boolean; topOffset?: number; colors?: [string, string] },
 ): Promise<GeneratedDesign> {
   return authPostJson<GeneratedDesign>(
     '/design/layout-preset',
@@ -168,6 +169,7 @@ export async function generateLayoutPreset(
       sections: params.sections,
       include_title: denseBoardOptions?.includeTitle ?? true,
       top_offset: denseBoardOptions?.topOffset,
+      colors: denseBoardOptions?.colors,
     },
     '排版生成失败',
   )
@@ -188,5 +190,42 @@ export async function generateBackgroundFromReference(
     '/design/reference-to-background',
     form,
     '参考图背景生成失败',
+  )
+}
+
+/** 跟后端 app/handout_categories.py 的 key/label/hint 保持一致——挑分类用的，不用另请求一次接口 */
+export const HANDOUT_CATEGORIES: { key: string; label: string; hint: string }[] = [
+  { key: 'safety', label: '安全教育', hint: '消防安全 / 交通安全 / 防溺水 / 防触电…' },
+  { key: 'eco', label: '环保低碳', hint: '垃圾分类 / 节约用水 / 保护地球…' },
+  { key: 'reading', label: '读书阅读', hint: '读书月 / 好书推荐 / 阅读感悟…' },
+  { key: 'festival', label: '传统节日', hint: '春节 / 端午 / 中秋 / 国庆…' },
+  { key: 'etiquette', label: '文明礼仪', hint: '校园礼仪 / 文明用语 / 待人接物…' },
+  { key: 'science', label: '科技科普', hint: '科学小知识 / 动手实验 / 科学家故事…' },
+  { key: 'mental-health', label: '心理健康', hint: '认识情绪 / 缓解压力 / 与人相处…' },
+  { key: 'patriotic', label: '爱国教育', hint: '我爱祖国 / 国庆节 / 红色故事…' },
+]
+
+export interface HandoutResult {
+  backgroundSrc: string | null
+  title: string
+  sections: LayoutPresetSection[]
+  colors: [string, string]
+  assetId: string | null
+}
+
+/**
+ * 手抄报一键生成：只传分类 + 可选的具体主题，不用自己写 prompt。后端按分类预设好的板块
+ * 标题去生成对应内容，背景图只画四周花边、中间大片留白——正文是独立文字层，不烧进图里。
+ */
+export async function generateHandout(
+  category: string,
+  topic: string,
+  canvasWidth: number,
+  canvasHeight: number,
+): Promise<HandoutResult> {
+  return authPostJson<HandoutResult>(
+    '/design/handout',
+    { category, topic, canvas_width: canvasWidth, canvas_height: canvasHeight },
+    '手抄报生成失败',
   )
 }

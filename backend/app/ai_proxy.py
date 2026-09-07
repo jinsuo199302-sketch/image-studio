@@ -34,10 +34,12 @@ from app.schemas import (
     ContentResearchRequest,
     DesignGenerateRequest,
     DesignLayoutRequest,
+    HandoutRequest,
     LayoutPresetRequest,
     ImageGenerationRequest,
     VideoGenerateRequest,
 )
+from app import handout_categories
 
 router = APIRouter(prefix="/api/ai", tags=["ai-proxy"])
 
@@ -477,6 +479,114 @@ async def _do_reference_to_background(db, user, media_type: str, b64_in: str):
         pass  # 自动保存失败不能拖累主流程——用户还是要拿到刚生成的背景图，大不了这次没存进素材库
 
     return {"backgroundSrc": src, "styleDescription": style_description, "titleStyle": title_style, "assetId": asset_id}
+
+
+@router.post("/design/handout")
+async def design_handout(
+    payload: HandoutRequest,
+    user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """手抄报/黑板报一键生成。很多用户（尤其带娃的家长）不会写 prompt，所以不让 AI 自由发挥
+    整个结构——先选好分类（app/handout_categories.py，每类自带一套约定俗成的板块标题+配色+
+    边框风格），AI 只负责往已经定好的框架里填具体内容，更像"组装"不是"写作文"，出错自由度小。
+    背景图只负责画四周花边装饰，中间大片区域留白——正文内容跟"参考图生成"一样是叠加的独立
+    文字图层，不烧进图片里，改文字/重排版不影响背景，背景不满意也能单独重新生成。"""
+    _require_openlux()
+    cat = handout_categories.get_category(payload.category)
+    ticket = billing.consume(db, user, "手抄报生成")
+    try:
+        return await _do_handout(db, user, cat, payload.topic.strip(), payload.canvas_width, payload.canvas_height)
+    except Exception:
+        billing.refund_ticket(db, user, ticket)
+        raise
+
+
+async def _do_handout(db, user, cat: dict, topic: str, canvas_width: int, canvas_height: int):
+    topic_desc = topic or cat["label"]
+    headings = cat["headings"]
+
+    content_prompt = (
+        f"你在给中小学生的手抄报写内容，主题是「{topic_desc}」（分类：{cat['label']}）。\n"
+        f"版面已经固定分成这 {len(headings)} 个板块，标题依次是：{'、'.join(headings)}。\n"
+        "只返回一个严格的 JSON 对象，不要 markdown 代码块，不要任何多余说明文字，形如：\n"
+        '{"sections": [{"heading": "认识安全隐患", "items": ["...", "..."]}]}\n'
+        f"要求：sections 数组按上面给定的标题顺序原样输出 {len(headings)} 个，heading 字段必须跟给定标题一字不差；"
+        "每个 heading 下面配 3~5 条 items，每条是一句完整的短句（15~30字），内容要准确、具体、适合中小学生阅读，"
+        "不能是空话套话；涉及安全/科普类知识点必须准确可靠，不能编造错误常识。"
+    )
+    chat_res = await _post_openlux(
+        f"{OPENLUX_BASE_URL}/chat/completions",
+        timeout=60,
+        headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
+        json={
+            "model": "gemini-3-flash-preview",
+            "messages": [{"role": "user", "content": content_prompt}],
+        },
+    )
+    if chat_res.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"内容生成失败：{chat_res.status_code} {chat_res.text}")
+    raw_content = chat_res.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+    match = re.search(r"\{[\s\S]*\}", raw_content)
+    try:
+        parsed = json.loads(match.group(0) if match else raw_content)
+        sections = parsed["sections"]
+        if not isinstance(sections, list) or not sections:
+            raise ValueError("empty sections")
+    except Exception:
+        raise HTTPException(status_code=502, detail="手抄报内容生成解析失败，请重试")
+
+    clean_sections = []
+    for i, heading in enumerate(headings):
+        src = sections[i] if i < len(sections) and isinstance(sections[i], dict) else {}
+        items = [str(x).strip() for x in (src.get("items") or []) if str(x).strip()][:6]
+        if not items:
+            continue
+        clean_sections.append({"heading": heading, "items": items})
+    if not clean_sections:
+        raise HTTPException(status_code=502, detail="手抄报内容生成为空，请重试")
+
+    bg_prompt = (
+        f"手抄报/黑板报风格的装饰背景插画，主题「{topic_desc}」。{cat['style']}。"
+        "整个画面中央三分之二的大片区域必须完全留白、纯色或极淡的底纹，不能出现任何图案、人物、文字、边框线条——"
+        "那片区域后面要叠加排版好的文字内容，只在画面最外圈边缘和四个角落做装饰，不要居中构图，不要画标题文字。"
+    )
+    # 背景图生成是整条链路里最容易慢/超时的一步（gpt-image-2 + openlux 偶尔 504）。
+    # 内容已经生成好了——就算背景挂了也把内容返回给用户（前端用分类配色的纯色底兜底），
+    # 用户还能"换一张背景"单独重试，不至于整个请求白跑。试 2 次。
+    background_src = None
+    asset_id = None
+    for _attempt in range(2):
+        try:
+            gen_res = await _post_openlux(
+                f"{OPENLUX_BASE_URL}/images/generations",
+                timeout=150,
+                headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
+                json={"model": "gpt-image-2", "prompt": bg_prompt, "n": 1, "size": _nearest_image_size(canvas_width, canvas_height)},
+            )
+            if gen_res.status_code >= 400:
+                continue
+            data = (gen_res.json().get("data") or [None])[0]
+            if not data:
+                continue
+            src = data.get("url") or (f"data:image/png;base64,{data['b64_json']}" if data.get("b64_json") else None)
+            if not src:
+                continue
+            asset = await _save_generated_asset(db, user.id, "handout-background", src)
+            asset_id = asset.id
+            # 回本地静态 URL 不回原始 data URI——1.9MB base64 走前端会把代理拖到超时/卡死
+            background_src = f"/api/ai/generated/{asset.file_name}"
+            break
+        except Exception:
+            continue
+
+    return {
+        "backgroundSrc": background_src,
+        "title": topic_desc,
+        "sections": clean_sections,
+        "colors": cat["colors"],
+        "assetId": asset_id,
+    }
 
 
 @router.get("/assets")
@@ -1339,6 +1449,7 @@ async def design_layout_preset(
             sections,
             include_title=payload.include_title,
             top_offset=payload.top_offset,
+            colors=payload.colors,
         )
     else:
         raise HTTPException(status_code=400, detail=f"未知的 structure：{payload.structure}")

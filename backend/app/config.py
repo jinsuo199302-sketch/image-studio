@@ -98,11 +98,13 @@ METERED_FEATURES: dict[str, int] = {
     "AI生图": 1,
     "参考图生成": 2,
     "素材生成": 2,
+    "手抄报生成": 2,
 }
 DAILY_FREE_QUOTA: dict[str, int] = {
     "AI生图": 5,
     "参考图生成": 1,
     "素材生成": 1,
+    "手抄报生成": 1,
 }
 AD_REWARD_AMOUNT = int(os.environ.get("AD_REWARD_AMOUNT", "3"))      # 看一次广告加几次免费额度
 MAX_AD_REWARDS_PER_DAY = int(os.environ.get("MAX_AD_REWARDS_PER_DAY", "5"))

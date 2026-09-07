@@ -85,6 +85,7 @@ def build_dense_board(
     *,
     include_title: bool = True,
     top_offset: int | None = None,
+    colors: list[str] | None = None,
 ) -> dict:
     """sections: [{"heading": str, "items": list[str]}, ...]。
     栏数按"平均每栏放 2 个分区"倒推，夹在 [3,7] 之间——太窄放不下 icon-list 固定的 212px 宽度，
@@ -92,9 +93,10 @@ def build_dense_board(
     分区条目数差异大的时候，顺序平均分会让某几栏明显比别的高一截，贪心装箱能自然把总高度拉平。
 
     include_title=False + top_offset：给"参考图生成"复用——那边标题已经是套了 titleStyle 手法
-    分类的独立元素，不需要这里再画一个标题占位，栏格直接从调用方算好的 top_offset 开始铺。"""
-    theme = CIVIC_THEME
-    colors = [theme["red"], theme["blue"]]
+    分类的独立元素，不需要这里再画一个标题占位，栏格直接从调用方算好的 top_offset 开始铺。
+    colors：不传就用默认的党建红蓝；"手抄报一键生成"按分类传自己的两色配色（见
+    app/handout_categories.py），不想所有分类都是同一套红蓝。"""
+    colors = colors if colors and len(colors) >= 2 else [CIVIC_THEME["red"], CIVIC_THEME["blue"]]
     n = len(sections)
     columns = max(3, min(7, math.ceil(n / 2))) if n > 0 else 3
     col_width = (canvas_width - 2 * MARGIN - (columns - 1) * GAP) // columns
@@ -106,7 +108,7 @@ def build_dense_board(
 
     elements: list[dict] = []
     if include_title:
-        elements.append(_text(0, 40, canvas_width, title, 40, theme["red"], weight="bold", align="center"))
+        elements.append(_text(0, 40, canvas_width, title, 40, colors[0], weight="bold", align="center"))
 
     for i, sec in enumerate(sections):
         target_col = col_heights.index(min(col_heights))
