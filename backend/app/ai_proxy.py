@@ -987,13 +987,15 @@ async def _do_handout_layered(db, user, cat: dict, style: dict, border: dict, to
 
 
 async def _do_decompose(db, user, image_bytes: bytes, W: int, H: int, style_key: str):
-    """把用户上传的现成整图（豆包生成的手抄报之类）拆成可拖动图层。不加标题/文字层——
-    文字本来就在图里；用户想改文字用「文字替换」，想改元素用「AI 重新生成这个元素」。"""
+    """把用户上传的现成整图（豆包生成的手抄报之类）拆成可拖动图层。
+    底图 = 原图本身（不重画，文字/方框/内容一样不丢），上面叠一层照画风重画的插画贴纸——
+    想挪/换某个插画就拖那个贴纸（挪走会露出下面原图那份，用「AI 消除」抹掉即可）；
+    想改文字用「文字替换」直接在原图上改。"""
     style = handout_categories.get_style(style_key)
-    dec = await _decompose_to_layers(db, user, image_bytes, W, H, style["prompt"], make_bg=True)
-    elements: list[dict] = []
-    if dec["bgSrc"]:
-        elements.append({"type": "image", "x": 0, "y": 0, "width": W, "height": H, "src": dec["bgSrc"]})
+    dec = await _decompose_to_layers(db, user, image_bytes, W, H, style["prompt"], make_bg=False)
+    elements: list[dict] = [
+        {"type": "image", "x": 0, "y": 0, "width": W, "height": H, "src": f"/api/ai/generated/{dec['fullName']}"}
+    ]
     elements += dec["elImages"]
     return {
         "background": "#ffffff",
