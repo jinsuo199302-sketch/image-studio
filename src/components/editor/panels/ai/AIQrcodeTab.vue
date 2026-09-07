@@ -2,30 +2,31 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import QRCode from 'qrcode'
 import { ElMessage } from 'element-plus'
+import { createSnippetLink } from '../../../../services/snippetApi'
 import { saveFile } from '../../../../utils/saveFile'
 
 /**
- * 二维码生成器。纯前端（qrcode 库），内容原样编码——不做"存后端换短链"那套：
- * 桌面版后端是本机 127.0.0.1，换出来的短链别的设备打不开。
+ * 二维码生成器。
  *
- * 关键坑：微信「扫一扫」只认网址，扫到纯文本会直接显示"微信暂不支持展示二维码中的
- * 文本内容"。所以默认就是「网址」模式，逼用户填链接；纯文本单独一个模式并挂红字警告。
- *
- * 生成透明留白 PNG，插入画布后是普通图片，拖角手柄就能改大小；"尺寸"滑块控制导出
- * PNG 的像素分辨率，调大在画布上放大也不糊。
+ * 关键事实：微信「扫一扫」只能打开网址，不支持纯文本、vCard 名片、WiFi 码——
+ * 扫到这些一律提示"微信暂不支持展示二维码中的文本内容"。所以：
+ * - 「网址」模式：直接编码链接，微信扫直接跳
+ * - 「扫码看文字」模式：把文字存到 picflowlab.cn 变成一个网页，二维码指向那个网页，
+ *   微信扫能打开看到（未备案域名会先弹一次"继续访问"）
+ * - 「电子名片」模式：vCard，只有手机相机 / 支付宝扫能存通讯录，微信不认
  */
 const emit = defineEmits<{ (e: 'insert-image', url: string): void }>()
 
-type Mode = 'url' | 'text' | 'card'
+type Mode = 'url' | 'page' | 'card'
 const mode = ref<Mode>('url')
 const MODES: { key: Mode; label: string }[] = [
   { key: 'url', label: '网址链接' },
-  { key: 'text', label: '纯文本' },
+  { key: 'page', label: '扫码看文字' },
   { key: 'card', label: '电子名片' },
 ]
 
 const qrUrl = ref('')
-const qrText = ref('')
+const pageText = ref('')
 const qrColor = ref('#1f2937')
 const qrSize = ref(480)
 const ecLevel = ref<'M' | 'H'>('M')
@@ -45,6 +46,9 @@ function vEsc(s: string): string {
 
 const previewUrl = ref('')
 const generating = ref(false)
+/** 「扫码看文字」上次生成的线上链接——内容没变就不重复上传 */
+const pageLink = ref('')
+const pageLinkFor = ref('')
 
 /** 域名/网址补全：填 "picflowlab.cn/abc" 自动补成 "https://picflowlab.cn/abc" */
 function normalizeUrl(raw: string): string {
@@ -58,8 +62,6 @@ function normalizeUrl(raw: string): string {
 const normalizedUrl = computed(() => normalizeUrl(qrUrl.value))
 const urlLooksValid = computed(() => /^https?:\/\/[^\s]+\.[^\s]+/i.test(normalizedUrl.value))
 
-/** 微信扫一扫不识别纯文本，但识别 vCard——扫完能"保存到通讯录"，NOTE 字段的文字也会显示出来。
- * 想让微信扫码看到大段文字，把文字放「备注」里就行，不用走服务器、不用备案。 */
 function buildVCard(): string {
   const name = cardName.value.trim()
   const lines = ['BEGIN:VCARD', 'VERSION:3.0', `N:;${vEsc(name)};;;`, `FN:${vEsc(name)}`]
@@ -69,11 +71,38 @@ function buildVCard(): string {
   if (cardAddress.value.trim()) lines.push(`ADR;TYPE=WORK:;;${vEsc(cardAddress.value)};;;;`)
   if (cardNote.value.trim()) lines.push(`NOTE:${vEsc(cardNote.value)}`)
   lines.push('END:VCARD')
-  return lines.join('\n')
+  return lines.join('\r\n')
 }
 
-/** 当前要编码进二维码的内容；不合法返回 null 并提示 */
-function resolveContent(): string | null {
+async function render(content: string): Promise<string> {
+  return QRCode.toDataURL(content, {
+    width: qrSize.value,
+    margin: 4,
+    errorCorrectionLevel: ecLevel.value,
+    color: { dark: qrColor.value, light: '#ffffff' },
+  })
+}
+
+/** 预览：card / url 本地即时渲染；page 模式预览用占位（真链接生成时才上传） */
+async function refreshPreview() {
+  let content = ''
+  if (mode.value === 'card') {
+    if (cardName.value.trim() && cardPhone.value.trim()) content = buildVCard()
+  } else if (mode.value === 'url') {
+    content = normalizedUrl.value
+  } else {
+    content = pageLink.value && pageLinkFor.value === pageText.value.trim() ? pageLink.value : ''
+  }
+  previewUrl.value = content ? await render(content) : ''
+}
+watch(
+  [mode, qrUrl, pageText, pageLink, qrColor, qrSize, ecLevel, cardName, cardPhone, cardOrg, cardAddress, cardEmail, cardNote],
+  () => nextTick(refreshPreview),
+)
+onMounted(refreshPreview)
+
+/** 返回最终要编码进二维码的字符串；page 模式会先上传拿线上链接 */
+async function resolveContent(): Promise<string | null> {
   if (mode.value === 'card') {
     if (!cardName.value.trim() || !cardPhone.value.trim()) {
       ElMessage.warning('请至少填写姓名和电话')
@@ -88,44 +117,28 @@ function resolveContent(): string | null {
     }
     return normalizedUrl.value
   }
-  const t = qrText.value.trim()
+  // page
+  const t = pageText.value.trim()
   if (!t) {
-    ElMessage.warning('请输入文本内容')
+    ElMessage.warning('请输入要展示的文字')
     return null
   }
-  return t
-}
-
-async function render(content: string): Promise<string> {
-  return QRCode.toDataURL(content, {
-    width: qrSize.value,
-    margin: 4,
-    errorCorrectionLevel: ecLevel.value,
-    color: { dark: qrColor.value, light: '#ffffff' },
-  })
-}
-
-async function refreshPreview() {
-  let content = ''
-  if (mode.value === 'card') {
-    if (cardName.value.trim() && cardPhone.value.trim()) content = buildVCard()
-  } else if (mode.value === 'url') {
-    content = normalizedUrl.value
-  } else {
-    content = qrText.value.trim()
+  if (pageLink.value && pageLinkFor.value === t) return pageLink.value
+  try {
+    const link = await createSnippetLink(t)
+    pageLink.value = link
+    pageLinkFor.value = t
+    return link
+  } catch {
+    ElMessage.error('生成网页链接失败，请检查网络后重试')
+    return null
   }
-  previewUrl.value = content ? await render(content) : ''
 }
-watch(
-  [mode, qrUrl, qrText, qrColor, qrSize, ecLevel, cardName, cardPhone, cardOrg, cardAddress, cardEmail, cardNote],
-  () => nextTick(refreshPreview),
-)
-onMounted(refreshPreview)
 
 async function build(): Promise<string | null> {
   generating.value = true
   try {
-    const content = resolveContent()
+    const content = await resolveContent()
     if (!content) return null
     return await render(content)
   } catch {
@@ -150,7 +163,7 @@ async function download() {
   <div class="flex h-full flex-col">
     <div class="p-3 pb-0">
       <el-alert
-        title="微信「扫一扫」只能打开网址。要让别人扫码跳转，请用「网址链接」填完整链接（公众号文章、报名表单、网站等）"
+        title="微信「扫一扫」只能打开网址。发给别人扫的码，用「网址链接」或「扫码看文字」"
         type="info"
         :closable="false"
         show-icon
@@ -175,41 +188,46 @@ async function download() {
           <label class="mb-1 block text-xs font-medium text-gray-600">网址</label>
           <el-input v-model="qrUrl" placeholder="picflowlab.cn 或 https://mp.weixin.qq.com/s/..." />
           <p v-if="qrUrl.trim() && !urlLooksValid" class="mt-1 text-[11px] text-amber-600">
-            这看起来不像网址，确认一下；纯文字请切到「纯文本」模式
+            这看起来不像网址；想让人扫码看文字，请切到「扫码看文字」
           </p>
           <p v-else-if="normalizedUrl && normalizedUrl !== qrUrl.trim()" class="mt-1 text-[11px] text-gray-400">
             将编码为：{{ normalizedUrl }}
           </p>
         </div>
+        <p class="text-[11px] leading-relaxed text-gray-400">
+          微信里最稳的是公众号文章链接（mp.weixin.qq.com）、腾讯问卷/腾讯文档链接、已备案的网站。
+        </p>
       </template>
 
-      <template v-else-if="mode === 'text'">
-        <div
-          class="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] leading-relaxed text-amber-700"
-        >
-          ⚠️ 微信「扫一扫」不显示纯文本，会提示"暂不支持展示二维码中的文本内容"。
-          纯文本只有支付宝、系统相机、专门的扫码 App 能看到。<br />
-          要发给别人扫，请改用「网址链接」。
+      <template v-else-if="mode === 'page'">
+        <div class="rounded-md border border-blue-100 bg-blue-50 px-2.5 py-2 text-[11px] leading-relaxed text-blue-700">
+          文字会存到 picflowlab.cn 变成一个网页，二维码指向它，微信扫一扫能打开查看。<br />
+          需要联网生成；该域名若未备案，微信会先弹一次"继续访问"再进。
         </div>
         <div>
-          <label class="mb-1 block text-xs font-medium text-gray-600">文本内容</label>
+          <label class="mb-1 block text-xs font-medium text-gray-600">要展示的文字</label>
           <el-input
-            v-model="qrText"
+            v-model="pageText"
             type="textarea"
-            :rows="4"
-            placeholder="任意文字、WIFI:S:名称;T:WPA;P:密码;; 等"
+            :rows="5"
+            maxlength="2000"
+            show-word-limit
+            placeholder="活动说明、注意事项、简介… 扫码的人会看到这段文字"
           />
+          <p v-if="pageLink && pageLinkFor === pageText.trim()" class="mt-1 break-all text-[11px] text-gray-400">
+            链接：{{ pageLink }}
+          </p>
         </div>
       </template>
 
       <template v-else>
-        <p class="rounded bg-green-50 px-2 py-1.5 text-[11px] leading-relaxed text-green-700">
-          微信扫一扫原生支持这种码，能弹"保存到通讯录"。<b>想让微信扫码看到大段文字，
-          把文字粘到下面「备注」里就行</b>——不用走服务器、不用备案。
-        </p>
+        <div class="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] leading-relaxed text-amber-700">
+          ⚠️ 名片码用<b>手机相机 / 支付宝</b>扫，能一键存通讯录。<b>微信「扫一扫」不支持名片</b>，
+          会当成文本提示"暂不支持展示"。要发微信群，请用「扫码看文字」。
+        </div>
         <div>
           <label class="mb-1 block text-xs font-medium text-gray-600">姓名 *</label>
-          <el-input v-model="cardName" placeholder="张伟 / 活动名称 / 店铺名" maxlength="30" />
+          <el-input v-model="cardName" placeholder="张伟" maxlength="30" />
         </div>
         <div>
           <label class="mb-1 block text-xs font-medium text-gray-600">电话 *</label>
@@ -228,15 +246,8 @@ async function download() {
           <el-input v-model="cardAddress" placeholder="选填" maxlength="80" />
         </div>
         <div>
-          <label class="mb-1 block text-xs font-medium text-gray-600">备注（可放大段文字，微信扫码能看到）</label>
-          <el-input
-            v-model="cardNote"
-            type="textarea"
-            :rows="4"
-            placeholder="活动说明、注意事项、简介… 想让人扫码读的文字都放这里"
-            maxlength="800"
-            show-word-limit
-          />
+          <label class="mb-1 block text-xs font-medium text-gray-600">备注</label>
+          <el-input v-model="cardNote" type="textarea" :rows="3" maxlength="800" show-word-limit placeholder="选填" />
         </div>
       </template>
 
@@ -283,6 +294,9 @@ async function download() {
       >
         <img :src="previewUrl" class="mx-auto max-h-44 object-contain" />
       </div>
+      <p v-else-if="mode === 'page' && pageText.trim()" class="text-center text-[11px] text-gray-400">
+        点下面按钮生成（会先上传文字换取链接）
+      </p>
     </div>
 
     <div class="space-y-2 border-t border-gray-100 p-3">

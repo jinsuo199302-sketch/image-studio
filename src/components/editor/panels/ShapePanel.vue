@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import QRCode from 'qrcode'
 import { ElMessage } from 'element-plus'
+import { createSnippetLink } from '../../../services/snippetApi'
 
 const emit = defineEmits<{
   (e: 'add', color: string): void
@@ -60,15 +61,22 @@ async function generateQrcode() {
       ElMessage.warning('请输入链接或文本内容')
       return
     }
-    // 内容原样编码——不"存后端换短链"（桌面版后端是本机 127.0.0.1，换出来的链别的
-    // 设备打不开）。看着像域名就自动补 https://；仍不是网址就提醒（微信扫纯文本不显示）。
     if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(input) && /^[\w-]+(\.[\w-]+)+([/:?#].*)?$/.test(input)) {
       input = 'https://' + input
       qrText.value = input
     }
-    content = input
-    if (!/^(https?:\/\/|mailto:|tel:|smsto:|WEIXIN:)/i.test(input)) {
-      ElMessage.warning('微信扫一扫不显示纯文本（会提示"暂不支持"）。要发给别人扫，请填完整网址（https://…）')
+    if (/^(https?:\/\/|mailto:|tel:|smsto:|WEIXIN:)/i.test(input)) {
+      content = input
+    } else {
+      // 纯文字：微信扫不出来。存到线上换成网页链接，二维码指向那个网页，微信才能打开看到。
+      generating.value = true
+      try {
+        content = await createSnippetLink(input)
+      } catch {
+        ElMessage.error('生成网页链接失败，请检查网络后重试')
+        generating.value = false
+        return
+      }
     }
   } else {
     if (!cardName.value.trim() || !cardPhone.value.trim()) {
