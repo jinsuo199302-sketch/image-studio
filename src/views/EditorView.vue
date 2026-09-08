@@ -2,7 +2,7 @@
 import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, RefreshLeft, RefreshRight, Download, Collection, Crop, Clock } from '@element-plus/icons-vue'
+import { ArrowLeft, RefreshLeft, RefreshRight, Download, Collection, Crop, Clock, ZoomIn, ZoomOut } from '@element-plus/icons-vue'
 import AppHeader from '../components/AppHeader.vue'
 import CanvasStage, { type SelectionInfo } from '../components/editor/CanvasStage.vue'
 import LeftIconRail, { type RailKey } from '../components/editor/LeftIconRail.vue'
@@ -108,6 +108,7 @@ const activePanel = ref<RailKey>('template')
 const stageRef = ref<InstanceType<typeof CanvasStage>>()
 const selection = ref<SelectionInfo | null>(null)
 const history = ref({ canUndo: false, canRedo: false })
+const zoom = ref(100)
 const saveDialogOpen = ref(false)
 const resizeDialogOpen = ref(false)
 const historyDialogOpen = ref(false)
@@ -294,6 +295,17 @@ async function onDecomposeImage() {
       <div class="flex items-center gap-2">
         <el-button text :icon="RefreshLeft" :disabled="!history.canUndo" @click="stageRef?.undo()" />
         <el-button text :icon="RefreshRight" :disabled="!history.canRedo" @click="stageRef?.redo()" />
+        <div class="mx-1 flex items-center gap-0.5 rounded-md border border-gray-200 px-1">
+          <el-button text :icon="ZoomOut" :disabled="!template" title="缩小" @click="stageRef?.zoomOut()" />
+          <button
+            class="min-w-[3rem] rounded px-1 py-0.5 text-xs text-gray-600 tabular-nums hover:bg-gray-100"
+            title="点击回到适应窗口"
+            @click="stageRef?.zoomFit()"
+          >
+            {{ zoom }}%
+          </button>
+          <el-button text :icon="ZoomIn" :disabled="!template" title="放大" @click="stageRef?.zoomIn()" />
+        </div>
         <el-button :icon="Crop" :disabled="!template" @click="resizeDialogOpen = true">尺寸调整</el-button>
         <el-button :icon="Clock" @click="historyDialogOpen = true">历史记录</el-button>
         <el-button :icon="Collection" :disabled="!template" @click="saveDialogOpen = true">
@@ -416,6 +428,7 @@ async function onDecomposeImage() {
           :template="template"
           @selection="selection = $event"
           @history="history = $event"
+          @zoom="zoom = $event"
           @ready="onStageReady"
         />
       </div>

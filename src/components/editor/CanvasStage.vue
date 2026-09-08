@@ -11,6 +11,7 @@ const emit = defineEmits<{
   (e: 'selection', payload: SelectionInfo | null): void
   (e: 'history', payload: { canUndo: boolean; canRedo: boolean }): void
   (e: 'ready'): void
+  (e: 'zoom', percent: number): void
 }>()
 
 export interface SelectionInfo {
@@ -317,18 +318,47 @@ async function applyGeneratedDesign(elements: CanvasElement[], background: strin
   await applyElements(elements, background, canvasSize.width, canvasSize.height, { resetHistory: false })
 }
 
-function fitCanvas() {
-  if (!canvas || !wrapperEl.value) return
-  const padding = 48
-  const availW = wrapperEl.value.clientWidth - padding
-  const availH = wrapperEl.value.clientHeight - padding
-  scale = Math.min(availW / canvasSize.width, availH / canvasSize.height, 1)
+/** 用户在"适应窗口"基础上再手动缩放的倍率；1 = 刚好适应 */
+let fitScale = 1
+const userZoom = ref(1)
+
+function applyView() {
+  if (!canvas) return
+  scale = Math.min(4, Math.max(0.05, fitScale * userZoom.value))
   canvas.setDimensions({
     width: canvasSize.width * scale,
     height: canvasSize.height * scale,
   })
   canvas.setZoom(scale)
   canvas.renderAll()
+  emit('zoom', Math.round(scale * 100))
+}
+
+function fitCanvas() {
+  if (!canvas || !wrapperEl.value) return
+  const padding = 48
+  const availW = wrapperEl.value.clientWidth - padding
+  const availH = wrapperEl.value.clientHeight - padding
+  // 面板还没布局出来（宽高为 0）时不要算出负的缩放，保留上次的值等下一次
+  if (availW <= 0 || availH <= 0) return
+  fitScale = Math.min(availW / canvasSize.width, availH / canvasSize.height, 1)
+  applyView()
+}
+
+function setUserZoom(z: number) {
+  userZoom.value = Math.min(4, Math.max(0.2, z))
+  applyView()
+}
+function zoomIn() {
+  setUserZoom(userZoom.value * 1.25)
+}
+function zoomOut() {
+  setUserZoom(userZoom.value / 1.25)
+}
+/** 回到"适应窗口" */
+function zoomFit() {
+  userZoom.value = 1
+  fitCanvas()
 }
 
 function resizeCanvas(width: number, height: number) {
@@ -2255,13 +2285,17 @@ defineExpose({
   redo,
   exportPNG,
   serialize,
+  zoomIn,
+  zoomOut,
+  zoomFit,
 })
 </script>
 
 <template>
-  <div ref="wrapperEl" class="flex h-full w-full items-center justify-center overflow-hidden">
-    <div class="relative rounded-sm shadow-lg">
-      <canvas ref="canvasEl" />
+  <div ref="wrapperEl" class="h-full w-full overflow-auto">
+    <div class="flex min-h-full min-w-full items-center justify-center p-6">
+      <div class="relative shrink-0 rounded-sm shadow-lg">
+        <canvas ref="canvasEl" />
       <input
         v-if="inlineEdit.visible"
         ref="inlineEditInput"
@@ -2278,6 +2312,7 @@ defineExpose({
         @keyup.esc="cancelInlineEdit"
         @blur="commitInlineEdit"
       />
+      </div>
     </div>
   </div>
 </template>
