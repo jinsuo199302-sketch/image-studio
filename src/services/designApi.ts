@@ -320,6 +320,17 @@ export async function decomposeImage(
   return pollHandoutJob(jobId, '图片拆解失败')
 }
 
+/**
+ * 任意彩色图 → 干净黑白线稿（AI 版，效果接近豆包）。返回的是黑线白底图，
+ * 调用方再按需要把黑线压成任意深浅铺到透明底上。计费「AI线稿」1 次。
+ */
+export async function aiLineArt(src: string): Promise<{ src: string; assetId: string }> {
+  const blob = await (await fetch(src)).blob()
+  const form = new FormData()
+  form.append('image', blob, 'image.png')
+  return authPostForm<{ src: string; assetId: string }>('/design/lineart', form, '线稿生成失败')
+}
+
 /** 可拆分手抄报里替换单个元素：一句提示词 → 一张透明底小图 */
 export async function regenerateElement(prompt: string, style = 'color'): Promise<{ src: string; assetId: string }> {
   return authPostJson<{ src: string; assetId: string }>(

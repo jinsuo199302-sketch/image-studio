@@ -741,6 +741,39 @@ async def design_element(
         raise
 
 
+_LINEART_PROMPT = (
+    "把这张图转换成干净的黑白线稿涂色页。要求："
+    "只保留清晰、连贯、粗细均匀的纯黑色描边线条；"
+    "去掉所有颜色、灰阶、阴影、纹理和网点底纹；"
+    "同一条轮廓只画一条线，不要出现描边两侧各一条的双线；"
+    "图中的文字也要转成清晰、笔画完整、可正常阅读的黑色线条，不要糊成一团；"
+    "纯白色背景；构图、每个元素的位置和大小跟原图保持一致，不要新增或删减内容。"
+)
+
+
+@router.post("/design/lineart")
+async def design_lineart(
+    image: UploadFile = File(...),
+    user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """任意彩色图 → 干净黑白线稿（AI 版，效果接近豆包）。本地 canvas 那版是自适应阈值，
+    对蜡笔/水彩纹理和文字处理不好；这里用 gemini 图像模型重画成线稿。前端再按「深浅」
+    把黑线压成任意浅度铺到透明底上。"""
+    _require_openlux()
+    image_bytes = await image.read()
+    await _check_not_sensitive_document(image_bytes, image.content_type or "image/png", "转线稿")
+    ticket = billing.consume(db, user, "AI线稿")
+    try:
+        b64 = base64.b64encode(image_bytes).decode()
+        raw = await _gemini_image(_LINEART_PROMPT, ref_b64=b64, attempts=3, timeout=120)
+        asset = _persist_asset_bytes(db, user.id, "lineart", raw)
+        return {"src": f"/api/ai/generated/{asset.file_name}", "assetId": asset.id}
+    except Exception:
+        billing.refund_ticket(db, user, ticket)
+        raise
+
+
 async def _gen_handout_sections(cat: dict, topic_desc: str, with_content: bool, custom: str = "") -> list[dict]:
     """按分类预设的板块标题让模型填正文，返回 [{heading, items}]；with_content=False 返回 []。"""
     if not with_content:
