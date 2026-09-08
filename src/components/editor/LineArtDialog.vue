@@ -12,6 +12,7 @@ const emit = defineEmits<{
 const thickness = ref(2)
 const depth = ref(2)
 const color = ref('#6b7280')
+const lineStyle = ref<'solid' | 'dashed'>('solid')
 const previewUrl = ref('')
 const busy = ref(false)
 const loadError = ref('')
@@ -58,6 +59,7 @@ function render() {
         thickness: thickness.value,
         depth: depth.value,
         color: color.value,
+        lineStyle: lineStyle.value,
       })
     } catch {
       loadError.value = '转换失败，换张图试试'
@@ -68,15 +70,16 @@ function render() {
 }
 
 watch(() => props.modelValue, (open) => { if (open) loadSource() })
-watch([thickness, depth, color], scheduleRender)
+watch([thickness, depth, color, lineStyle], scheduleRender)
 
 function apply() {
   if (!previewUrl.value) {
     ElMessage.warning('还没有生成结果')
     return
   }
-  emit('result', previewUrl.value)
+  const url = previewUrl.value
   emit('update:modelValue', false)
+  emit('result', url)
 }
 </script>
 
@@ -106,6 +109,23 @@ function apply() {
           <span class="w-12 shrink-0 text-xs text-gray-500">深浅</span>
           <el-slider v-model="depth" :min="1" :max="5" :step="1" show-stops :show-tooltip="false" class="!flex-1" />
           <span class="w-4 text-xs text-gray-400">{{ depth }}</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="w-12 shrink-0 text-xs text-gray-500">线型</span>
+          <button
+            class="rounded-md border px-3 py-1 text-[11px] transition"
+            :class="lineStyle === 'solid' ? 'border-violet-500 bg-violet-50 text-violet-600' : 'border-gray-200 text-gray-500'"
+            @click="lineStyle = 'solid'"
+          >
+            实线
+          </button>
+          <button
+            class="rounded-md border px-3 py-1 text-[11px] transition"
+            :class="lineStyle === 'dashed' ? 'border-violet-500 bg-violet-50 text-violet-600' : 'border-gray-200 text-gray-500'"
+            @click="lineStyle = 'dashed'"
+          >
+            虚线
+          </button>
         </div>
         <div class="flex items-center gap-2">
           <span class="w-12 shrink-0 text-xs text-gray-500">颜色</span>

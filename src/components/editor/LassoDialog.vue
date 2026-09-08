@@ -33,12 +33,14 @@ let dragIdx = -1
 
 const processing = ref(false)
 const loadError = ref('')
+const regenPrompt = ref('')
 const GRAB = 9
 
 async function loadImage() {
   loadError.value = ''
   points.value = []
   closed.value = false
+  regenPrompt.value = ''
   if (!props.imageSrc) return
   const img = new Image()
   img.crossOrigin = 'anonymous'
@@ -210,8 +212,9 @@ function doCutout() {
   tracePathNatural(c)
   c.clip()
   c.drawImage(sourceImg!, 0, 0)
-  emit('cutout', out.toDataURL('image/png'))
+  const url = out.toDataURL('image/png')
   emit('update:modelValue', false)
+  emit('cutout', url)
 }
 
 /**
@@ -274,14 +277,14 @@ function doLocalFill() {
   c.stroke()
   c.restore()
 
-  emit('result', out.toDataURL('image/png'))
+  const url = out.toDataURL('image/png')
   emit('update:modelValue', false)
+  emit('result', url)
   ElMessage.success('已用周围背景色盖掉')
 }
 
-/** 复杂纹理背景才用：多边形转 mask 交给 AI inpaint */
-async function doAiErase() {
-  if (!guardClosed()) return
+/** 多边形 → inpaint mask（圈内透明=要重绘，圈外黑=保持） */
+function buildPolygonMask(): string {
   const mask = document.createElement('canvas')
   mask.width = naturalW
   mask.height = naturalH
@@ -291,22 +294,40 @@ async function doAiErase() {
   c.globalCompositeOperation = 'destination-out'
   tracePathNatural(c)
   c.fill()
+  return mask.toDataURL('image/png')
+}
+
+async function runInpaint(prompt: string, okMsg: string) {
   processing.value = true
   try {
-    const result = await eraseObject(
-      authStore.isAuthenticated,
-      props.imageSrc,
-      mask.toDataURL('image/png'),
-      '自然地用周围背景填充圈选区域，不要出现新增物体，保持光影和纹理一致',
-    )
-    emit('result', result)
+    const result = await eraseObject(authStore.isAuthenticated, props.imageSrc, buildPolygonMask(), prompt)
     emit('update:modelValue', false)
-    ElMessage.success(authStore.isAuthenticated ? 'AI 处理完成' : '演示模式：未登录，返回的是原图')
+    emit('result', result)
+    ElMessage.success(authStore.isAuthenticated ? okMsg : '演示模式：未登录，返回的是原图')
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '处理失败，请重试')
   } finally {
     processing.value = false
   }
+}
+
+/** 复杂纹理背景才用：多边形转 mask 交给 AI inpaint 补背景 */
+function doAiErase() {
+  if (!guardClosed()) return
+  runInpaint(
+    '自然地用周围背景填充圈选区域，不要出现新增物体，保持光影和纹理一致',
+    'AI 处理完成',
+  )
+}
+
+/** 圈住的素材 AI 重画：只重绘圈内，大小位置由 mask 决定、天然不变 */
+function doAiRegen() {
+  if (!guardClosed()) return
+  const t = regenPrompt.value.trim()
+  const prompt = t
+    ? `在圈选区域画：${t}。画风、线条、颜色、光影和画面其它部分完全一致；大小和位置不变；只改这一块，圈外一点都不要动。`
+    : '把圈选区域里的图案按原来的样子重新画一遍，更精细、线条更干净；画风和位置大小保持不变；只动这一块，圈外一点都不要动。'
+  runInpaint(prompt, '已按提示重画这块')
 }
 </script>
 
@@ -339,6 +360,26 @@ async function doAiErase() {
         <el-button size="small" :disabled="!points.length" @click="reset">重来</el-button>
         <el-button size="small" :disabled="closed || points.length < 3" @click="closePath">闭合</el-button>
         <span class="ml-auto text-[11px] text-gray-400">{{ points.length }} 个点{{ closed ? ' · 已闭合' : '' }}</span>
+      </div>
+
+      <div v-if="closed" class="mt-3 rounded-lg border border-violet-100 bg-violet-50/60 p-2">
+        <p class="mb-1 text-[11px] font-medium text-violet-700">AI 重画这块（大小位置不变，只改圈内）</p>
+        <el-input
+          v-model="regenPrompt"
+          size="small"
+          placeholder="想换成什么？留空=按原样重画得更精细。例：换成一朵向日葵"
+          maxlength="40"
+          @keyup.enter="doAiRegen"
+        />
+        <el-button
+          type="primary"
+          size="small"
+          class="mt-1.5 !w-full"
+          :loading="processing"
+          @click="doAiRegen"
+        >
+          AI 重画这块
+        </el-button>
       </div>
 
       <div class="mt-3 rounded-lg bg-gray-50 p-2 text-[11px] leading-relaxed text-gray-500">

@@ -13,6 +13,8 @@ export interface LineArtOptions {
   depth: number
   /** 线条颜色，默认灰 */
   color?: string
+  /** 线型：实线（默认）/ 虚线（叠一层斜向断点，像手绘的断续线） */
+  lineStyle?: 'solid' | 'dashed'
 }
 
 function toGray(data: Uint8ClampedArray, w: number, h: number): Float32Array {
@@ -130,14 +132,26 @@ export function imageToLineArt(img: HTMLImageElement, opts: LineArtOptions): str
 
   const finalAlpha = thickness >= 4 ? dilateAlpha(alpha, w, h) : alpha
 
+  // 虚线：叠一层斜向的周期性断点，让连续边缘变成断续的短划
+  const dashed = opts.lineStyle === 'dashed'
+  const period = 7 + thickness * 3 // 划+空一个周期的像素数，随粗细放大
+  const onFrac = 0.55
+
   const [cr, cg, cb] = hexToRgb(opts.color || '#6b7280')
   const out = sctx.createImageData(w, h)
   const od = out.data
-  for (let i = 0, p = 0; i < finalAlpha.length; i++, p += 4) {
-    od[p] = cr
-    od[p + 1] = cg
-    od[p + 2] = cb
-    od[p + 3] = Math.round(finalAlpha[i] * 255)
+  for (let y = 0, i = 0, p = 0; y < h; y++) {
+    for (let x = 0; x < w; x++, i++, p += 4) {
+      let a = finalAlpha[i]
+      if (dashed && a > 0) {
+        const phase = ((x + y) % period) / period
+        if (phase >= onFrac) a = 0
+      }
+      od[p] = cr
+      od[p + 1] = cg
+      od[p + 2] = cb
+      od[p + 3] = Math.round(a * 255)
+    }
   }
   sctx.putImageData(out, 0, 0)
   return src.toDataURL('image/png')
