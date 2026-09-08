@@ -72,7 +72,6 @@ const emit = defineEmits<{
   (e: 'replace-image'): void
   (e: 'image-crop', insets: { top: number; right: number; bottom: number; left: number }): void
   (e: 'regenerate-element', prompt: string): void
-  (e: 'edit-image-region'): void
   (e: 'decompose-image'): void
   (e: 'remove-background'): void
   (e: 'erase-object'): void
@@ -610,14 +609,7 @@ function pickWarp(kind: WarpKind) {
             @click="emit('lasso-select')"
           >
             <el-icon :size="14"><EditPen /></el-icon>
-            圈选处理（钢笔）— 抠出/去掉某一块
-          </button>
-          <button
-            class="flex w-full items-center gap-2 rounded px-2 py-2 text-xs text-gray-600 hover:bg-gray-100"
-            @click="emit('edit-image-region')"
-          >
-            <el-icon :size="14"><MagicStick /></el-icon>
-            AI 局部改图（涂抹某块 + 描述换成什么）
+            圈选处理（钢笔）— 抠出 / 去掉 / 重画某一块
           </button>
           <button
             class="flex w-full items-center gap-2 rounded px-2 py-2 text-xs text-gray-600 hover:bg-gray-100"

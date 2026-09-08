@@ -48,7 +48,7 @@ const NAV = [
 const uploadInput = ref<HTMLInputElement>()
 
 /** 上传一张现成的图（豆包生成的手抄报之类）→ 新建一个跟图同尺寸的画布，把图放上去，
- * 进编辑器后就能用「拆成可编辑元素」「AI 局部改图」「文字替换」等工具改它 */
+ * 进编辑器后就能用「拆成可编辑元素」「圈选处理（钢笔）」「文字替换」等工具改它 */
 async function onUploadPick(e: Event) {
   const raw = (e.target as HTMLInputElement).files?.[0]
   ;(e.target as HTMLInputElement).value = ''

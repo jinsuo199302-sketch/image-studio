@@ -13,7 +13,6 @@ import HistoryDialog from '../components/editor/HistoryDialog.vue'
 import ImageAdjustDialog from '../components/editor/ImageAdjustDialog.vue'
 import EraseDialog from '../components/editor/EraseDialog.vue'
 import TextReplaceDialog from '../components/editor/TextReplaceDialog.vue'
-import AIEditImageDialog from '../components/editor/AIEditImageDialog.vue'
 import LineArtDialog from '../components/editor/LineArtDialog.vue'
 import LassoDialog from '../components/editor/LassoDialog.vue'
 import TemplateSwitchPanel from '../components/editor/panels/TemplateSwitchPanel.vue'
@@ -118,7 +117,6 @@ const decomposingImage = ref(false)
 const adjustDialogOpen = ref(false)
 const eraseDialogOpen = ref(false)
 const textReplaceDialogOpen = ref(false)
-const editImgDialogOpen = ref(false)
 const lineArtDialogOpen = ref(false)
 const lassoDialogOpen = ref(false)
 
@@ -379,7 +377,6 @@ async function onDecomposeImage() {
           @image-crop="(insets) => stageRef?.cropSelectedImage(insets)"
           @regenerate-element="onRegenerateElement"
           @decompose-image="onDecomposeImage"
-          @edit-image-region="editImgDialogOpen = true"
           @remove-background="onRemoveBackground"
           @erase-object="eraseDialogOpen = true"
           @text-replace="textReplaceDialogOpen = true"
@@ -449,11 +446,6 @@ async function onDecomposeImage() {
     />
     <TextReplaceDialog
       v-model="textReplaceDialogOpen"
-      :image-src="selection?.src ?? ''"
-      @result="(url) => stageRef?.replaceSelectedImage(url)"
-    />
-    <AIEditImageDialog
-      v-model="editImgDialogOpen"
       :image-src="selection?.src ?? ''"
       @result="(url) => stageRef?.replaceSelectedImage(url)"
     />

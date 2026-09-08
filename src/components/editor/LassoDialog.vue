@@ -362,12 +362,12 @@ function doAiRegen() {
         <span class="ml-auto text-[11px] text-gray-400">{{ points.length }} 个点{{ closed ? ' · 已闭合' : '' }}</span>
       </div>
 
-      <div v-if="closed" class="mt-3 rounded-lg border border-violet-100 bg-violet-50/60 p-2">
+      <div class="mt-3 rounded-lg border border-violet-100 bg-violet-50/60 p-2">
         <p class="mb-1 text-[11px] font-medium text-violet-700">AI 重画这块（大小位置不变，只改圈内）</p>
         <el-input
           v-model="regenPrompt"
           size="small"
-          placeholder="想换成什么？留空=按原样重画得更精细。例：换成一朵向日葵"
+          placeholder="想换成什么？留空 = 按原样重画得更精细。例：换成一朵向日葵"
           maxlength="40"
           @keyup.enter="doAiRegen"
         />
@@ -375,23 +375,23 @@ function doAiRegen() {
           type="primary"
           size="small"
           class="mt-1.5 !w-full"
+          :disabled="!closed"
           :loading="processing"
           @click="doAiRegen"
         >
-          AI 重画这块
+          {{ closed ? 'AI 重画这块' : '先圈好一块再点' }}
         </el-button>
+        <p v-if="!authStore.isAuthenticated" class="mt-1 text-[10px] text-gray-400">
+          未登录是演示模式，会返回原图
+        </p>
       </div>
 
       <div class="mt-3 rounded-lg bg-gray-50 p-2 text-[11px] leading-relaxed text-gray-500">
         <p><b class="text-gray-700">抠出这块</b>：精确按轮廓从原图裁出来，作为新的可拖动元素加到画布（原图保留）。</p>
         <p class="mt-1">
           <b class="text-gray-700">去掉这块</b>：取圈线周围的背景色，把圈中内容（多余文字、杂物…）盖掉。
-          浅色/纯色背景最管用，瞬间完成、不花额度。
-        </p>
-        <p class="mt-1 text-gray-400">
-          背景是复杂纹理/图案，盖不干净时改用
-          <el-button link type="primary" size="small" :loading="processing" @click="doAiErase">AI 补背景</el-button>
-          <span v-if="!authStore.isAuthenticated">（未登录是演示模式，会返回原图）</span>
+          浅色/纯色背景最管用，瞬间完成、不花额度；背景是复杂纹理盖不干净时改用
+          <el-button link type="primary" size="small" :disabled="!closed" :loading="processing" @click="doAiErase">AI 补背景</el-button>。
         </p>
       </div>
     </template>
