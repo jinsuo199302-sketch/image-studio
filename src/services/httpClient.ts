@@ -46,6 +46,17 @@ export async function authDeleteJson<T>(path: string, label: string): Promise<T>
   return res.json()
 }
 
+/** POST JSON，响应是二进制文件（下载）。 */
+export async function authPostJsonBlob(path: string, body: unknown, label: string): Promise<Blob> {
+  const res = await fetch(`/api/ai${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) return parseErrorOrThrow(res, label)
+  return res.blob()
+}
+
 export async function authPostForm<T>(path: string, form: FormData, label: string): Promise<T> {
   const res = await fetch(`/api/ai${path}`, {
     method: 'POST',

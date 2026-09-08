@@ -155,6 +155,21 @@ class HandoutRequest(BaseModel):
     canvas_height: int
 
 
+class DeckRequest(BaseModel):
+    """AI 生成 PPT：主题 + 章节数 + 主题风格。"""
+    topic: str
+    sections: int = 4
+    theme: str = "red"
+    extra: str = ""
+
+
+class DeckPptxRequest(BaseModel):
+    """已生成的幻灯片数据 → PPTX。slides 是 /design/deck 直接返回的那个数组。"""
+    slides: list[dict]
+    theme: str = "red"
+    title: str = "演示文稿"
+
+
 class DesignElementRequest(BaseModel):
     """手抄报「可拆分元素版」里替换单个元素用：给一句提示词，AI 生成一张透明底的小图。"""
     prompt: str

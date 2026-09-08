@@ -1,7 +1,7 @@
 import type { CanvasElement } from '../data/templates'
 import type { WarpKind } from '../components/editor/CanvasStage.vue'
 import { FONT_OPTIONS } from '../data/fonts'
-import { authGetJson, authPostForm, authPostJson } from './httpClient'
+import { authGetJson, authPostForm, authPostJson, authPostJsonBlob } from './httpClient'
 
 /** 参考图生成里标题文字的"手法类别"提示——只对应编辑器已有的特效/变形预设名，
  * 不含任何具体字形/字体信息，是版权边界要求的"学手法不抄表达"在标题上的落地。 */
@@ -329,6 +329,33 @@ export async function aiLineArt(src: string): Promise<{ src: string; assetId: st
   const form = new FormData()
   form.append('image', blob, 'image.png')
   return authPostForm<{ src: string; assetId: string }>('/design/lineart', form, '线稿生成失败')
+}
+
+export interface DeckSlide {
+  background: string
+  elements: Record<string, unknown>[]
+  w: number
+  h: number
+}
+export interface DeckResult {
+  title: string
+  theme: string
+  slides: DeckSlide[]
+}
+
+/** AI 生成 PPT（一期）：主题 → 一套幻灯片（每页 elements + 背景）。计费「AIPPT」。 */
+export async function generateDeck(
+  topic: string,
+  sections: number,
+  theme: string,
+  extra = '',
+): Promise<DeckResult> {
+  return authPostJson<DeckResult>('/design/deck', { topic, sections, theme, extra }, 'PPT 生成失败')
+}
+
+/** 已生成的幻灯片数据 → 下载 PPTX（不重新扣次数） */
+export async function deckToPptx(slides: DeckSlide[], theme: string, title: string): Promise<Blob> {
+  return authPostJsonBlob('/design/deck/pptx', { slides, theme, title }, 'PPTX 导出失败')
 }
 
 /** 可拆分手抄报里替换单个元素：一句提示词 → 一张透明底小图 */

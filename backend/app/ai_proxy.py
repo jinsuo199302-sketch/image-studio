@@ -28,10 +28,12 @@ from app.config import (
 from app.database import get_db
 from app.design_tokens import COMPONENT_SIZE
 from app.text_metrics import chars_per_line, estimate_text_height, estimate_text_lines
-from app import layout_presets
+from app import deck_gen, layout_presets
 from app.schemas import (
     ChatCompletionRequest,
     ContentResearchRequest,
+    DeckPptxRequest,
+    DeckRequest,
     DesignElementRequest,
     DesignGenerateRequest,
     DesignLayoutRequest,
@@ -772,6 +774,76 @@ async def design_lineart(
     except Exception:
         billing.refund_ticket(db, user, ticket)
         raise
+
+
+async def _gen_deck_outline(topic: str, sections: int, extra: str = "") -> dict:
+    """主题 → PPT 大纲 JSON（title/subtitle/sections[heading, slides[title,intro,bullets]]）。"""
+    extra_line = f"用户补充要求：{extra}。\n" if extra else ""
+    prompt = (
+        f"为主题「{topic}」写一份 PPT（幻灯片）大纲。\n"
+        f"{extra_line}"
+        "只返回一个严格的 JSON 对象，不要 markdown 代码块、不要多余说明，形如：\n"
+        '{"title":"演示标题","subtitle":"一句副标题","sections":[{"heading":"章节标题",'
+        '"slides":[{"title":"这一页的小标题","intro":"1~2句导语，可为空字符串","bullets":["要点一","要点二"]}]}]}\n'
+        f"要求：sections 生成 {sections} 个；每个 section 下 2~3 个 slides；每个 slide 配 3~5 条 bullets，"
+        "每条 20~45 字，具体、准确、书面语，不要空话套话；title/heading 精炼；涉及事实或数据要可靠。"
+    )
+    res = await _post_openlux(
+        f"{OPENLUX_BASE_URL}/chat/completions",
+        timeout=90,
+        headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
+        json={"model": "gemini-3-flash-preview", "messages": [{"role": "user", "content": prompt}]},
+    )
+    if res.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"大纲生成失败：{res.status_code} {res.text[:160]}")
+    raw = res.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+    m = re.search(r"\{[\s\S]*\}", raw)
+    try:
+        data = json.loads(m.group(0) if m else raw)
+        assert isinstance(data.get("sections"), list) and data["sections"]
+    except Exception:
+        raise HTTPException(status_code=502, detail="大纲解析失败，请重试")
+    return data
+
+
+@router.post("/design/deck")
+async def design_deck(
+    payload: DeckRequest,
+    user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """AI 生成 PPT（一期）：主题 → 大纲 → 排成一套幻灯片（每页 elements 数组 + 背景）。
+    前端画缩略图预览、可下载 PPTX。计费「AIPPT」。"""
+    _require_openlux()
+    topic = payload.topic.strip()
+    if not topic:
+        raise HTTPException(status_code=400, detail="请填写 PPT 主题")
+    await _moderate_text(topic + " " + payload.extra.strip())
+    n = min(6, max(2, payload.sections))
+    ticket = billing.consume(db, user, "AIPPT")
+    try:
+        outline = await _gen_deck_outline(topic, n, payload.extra.strip()[:300])
+        slides = deck_gen.build_deck(outline, payload.theme)
+        return {"title": (outline.get("title") or topic), "theme": payload.theme, "slides": slides}
+    except Exception:
+        billing.refund_ticket(db, user, ticket)
+        raise
+
+
+@router.post("/design/deck/pptx")
+async def design_deck_pptx(
+    payload: DeckPptxRequest,
+    _user: models.User = Depends(auth.get_current_user),
+):
+    """已生成好的幻灯片数据 → PPTX 文件下载。不重新扣次数（生成时已扣）。"""
+    from fastapi.responses import StreamingResponse
+
+    data = deck_gen.deck_to_pptx(payload.slides, payload.theme, payload.title or "演示文稿")
+    return StreamingResponse(
+        io.BytesIO(data),
+        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        headers={"Content-Disposition": 'attachment; filename="deck.pptx"'},
+    )
 
 
 async def _gen_handout_sections(cat: dict, topic_desc: str, with_content: bool, custom: str = "") -> list[dict]:

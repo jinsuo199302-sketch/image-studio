@@ -1,14 +1,19 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { UploadFilled, Close, ArrowUp, ArrowDown } from '@element-plus/icons-vue'
 import { textToPptx, imagesToPptx } from '../../../../services/pdfApi'
+import { generateDeck, deckToPptx, type DeckResult } from '../../../../services/designApi'
+import { preloadSlideImages, type SlideData } from '../../../../utils/slideRender'
 import { prepareUpload } from '../../../../utils/prepImage'
 import { saveFile } from '../../../../utils/saveFile'
+import { useAuthStore } from '../../../../stores/auth'
+import SlidePreview from '../../SlidePreview.vue'
 
-type Mode = 'text' | 'image'
-const mode = ref<Mode>('text')
+type Mode = 'ai' | 'text' | 'image'
+const mode = ref<Mode>('ai')
 const busy = ref(false)
+const authStore = useAuthStore()
 
 function saveBlob(blob: Blob, name: string) {
   return saveFile(name, blob)
@@ -25,9 +30,56 @@ async function run(fn: () => Promise<Blob>, name: string) {
   }
 }
 
+// ── AI 生成 ──────────────────────────────────────────────
+const THEMES = [
+  { key: 'red', label: '党政红金' },
+  { key: 'blue', label: '商务蓝' },
+  { key: 'green', label: '清新绿' },
+]
+const topic = ref('')
+const sections = ref(4)
+const theme = ref('red')
+const extra = ref('')
+const deck = ref<DeckResult | null>(null)
+const generating = ref(false)
+
+async function genDeck() {
+  const t = topic.value.trim()
+  if (!t) {
+    ElMessage.warning('先填 PPT 主题')
+    return
+  }
+  generating.value = true
+  deck.value = null
+  try {
+    const r = await generateDeck(t, sections.value, theme.value, extra.value.trim())
+    await preloadSlideImages(r.slides as unknown as SlideData[])
+    deck.value = r
+    await nextTick()
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '生成失败，请重试')
+  } finally {
+    generating.value = false
+  }
+}
+
+async function downloadDeck() {
+  if (!deck.value) return
+  busy.value = true
+  try {
+    const blob = await deckToPptx(deck.value.slides, deck.value.theme, deck.value.title)
+    await saveFile(`${deck.value.title || '演示文稿'}.pptx`, blob)
+    ElMessage.success('PPTX 已导出')
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '导出失败')
+  } finally {
+    busy.value = false
+  }
+}
+
+// ── 文字/图片转 PPT（原有）───────────────────────────────
 const text = ref('')
 const title = ref('')
-
 const imgs = ref<{ file: File; url: string }[]>([])
 const imgInput = ref<HTMLInputElement>()
 async function pickImgs(e: Event) {
@@ -55,29 +107,85 @@ function rmImg(i: number) {
 
 <template>
   <div class="flex h-full flex-col">
-    <div class="p-3 pb-0">
-      <el-alert
-        title="把大纲文字或一组图片做成 PPT。本地生成，不调模型。（PPT 转 PDF 暂未支持）"
-        type="info"
-        :closable="false"
-        show-icon
-      />
-    </div>
-
     <div class="flex gap-1.5 px-3 pt-3">
       <button
-        v-for="m in (['text', 'image'] as const)"
+        v-for="m in (['ai', 'text', 'image'] as const)"
         :key="m"
         class="flex-1 rounded-full border px-2.5 py-1 text-xs transition"
         :class="mode === m ? 'border-violet-500 bg-violet-50 text-violet-600' : 'border-gray-200 text-gray-500'"
         @click="mode = m"
       >
-        {{ m === 'text' ? '文字转PPT' : '图片转PPT' }}
+        {{ m === 'ai' ? 'AI 生成' : m === 'text' ? '文字转PPT' : '图片转PPT' }}
       </button>
     </div>
 
     <div class="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
-      <template v-if="mode === 'text'">
+      <!-- ============ AI 生成 ============ -->
+      <template v-if="mode === 'ai'">
+        <el-alert
+          :title="authStore.isAuthenticated ? '填主题 → AI 排一套幻灯片，可下载 PPTX 在 PowerPoint 里改' : '演示模式：登录后使用'"
+          :type="authStore.isAuthenticated ? 'success' : 'info'"
+          :closable="false"
+          show-icon
+        />
+        <el-input v-model="topic" size="small" placeholder="PPT 主题，例：中小学消防安全教育" maxlength="40" />
+        <div class="flex items-center gap-3">
+          <span class="shrink-0 text-xs text-gray-500">章节数</span>
+          <el-slider v-model="sections" :min="2" :max="6" :step="1" show-stops :show-tooltip="false" class="!flex-1" />
+          <span class="w-4 text-xs text-gray-400">{{ sections }}</span>
+        </div>
+        <div>
+          <p class="mb-1 text-xs text-gray-500">主题风格</p>
+          <div class="flex gap-1.5">
+            <button
+              v-for="th in THEMES"
+              :key="th.key"
+              class="flex-1 rounded-md border px-2 py-1 text-[11px] transition"
+              :class="theme === th.key ? 'border-violet-500 bg-violet-50 text-violet-600' : 'border-gray-200 text-gray-500'"
+              @click="theme = th.key"
+            >
+              {{ th.label }}
+            </button>
+          </div>
+        </div>
+        <el-input
+          v-model="extra"
+          type="textarea"
+          :rows="2"
+          size="small"
+          maxlength="200"
+          placeholder="补充要求（可选）：例 面向小学生、突出案例、语气正式"
+        />
+        <el-button
+          type="primary"
+          class="!w-full !bg-violet-500 !border-none"
+          :loading="generating"
+          :disabled="!topic.trim()"
+          @click="genDeck"
+        >
+          {{ generating ? 'AI 排版中…（约 20~40 秒）' : '生成 PPT' }}
+        </el-button>
+
+        <template v-if="deck">
+          <div class="flex items-center justify-between pt-1">
+            <span class="text-xs font-medium text-gray-600">{{ deck.title }} · {{ deck.slides.length }} 页</span>
+            <el-button size="small" type="primary" plain :loading="busy" @click="downloadDeck">下载 PPTX</el-button>
+          </div>
+          <div class="space-y-2">
+            <div v-for="(s, i) in deck.slides" :key="i" class="relative">
+              <span class="absolute left-1 top-1 z-10 rounded bg-black/45 px-1 text-[10px] text-white">{{ i + 1 }}</span>
+              <SlidePreview :slide="s as unknown as SlideData" :width="360" />
+            </div>
+          </div>
+          <p class="text-[11px] text-gray-400">
+            装饰目前是代码画的简版；下载的 PPTX 是原生形状，文字/配色/排版都能在 PowerPoint 里改。
+          </p>
+        </template>
+      </template>
+
+      <!-- ============ 文字转 PPT ============ -->
+      <template v-else-if="mode === 'text'">
+        <el-alert title="把大纲文字做成 PPT。本地生成，不调模型。" type="info" :closable="false" show-icon />
         <el-input v-model="title" size="small" placeholder="演示标题（可选）" />
         <el-input
           v-model="text"
@@ -98,7 +206,9 @@ function rmImg(i: number) {
         </el-button>
       </template>
 
+      <!-- ============ 图片转 PPT ============ -->
       <template v-else>
+        <el-alert title="每张图片一页。本地生成。" type="info" :closable="false" show-icon />
         <input ref="imgInput" type="file" accept="image/*" multiple class="hidden" @change="pickImgs" />
         <div
           class="flex h-24 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-gray-300 text-gray-400 transition hover:border-violet-400 hover:text-violet-500"
