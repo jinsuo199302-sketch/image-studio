@@ -9,11 +9,15 @@ const emit = defineEmits<{
   (e: 'update:modelValue', v: boolean): void
   /** 精确抠出圈中的那块——透明底 PNG，作为新元素加到画布 */
   (e: 'cutout', dataUrl: string): void
-  /** 去掉圈中的那块——AI inpaint 后的整图，替换当前图 */
+  /** 去掉圈中的那块——处理后的整图，替换当前图 */
   (e: 'result', dataUrl: string): void
 }>()
 
 const authStore = useAuthStore()
+
+/** 钢笔笔尖光标（尖端对准 hotspot 2,2） */
+const PEN_CURSOR =
+  "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22'><path d='M2 2 L11 5 L5 11 Z' fill='%23111827' stroke='%23ffffff' stroke-width='1.2'/><path d='M10.5 5.5 L17 12' stroke='%23111827' stroke-width='2.4' stroke-linecap='round'/><path d='M10.5 5.5 L17 12' stroke='%23ffffff' stroke-width='0.8' stroke-linecap='round'/></svg>\") 2 2, crosshair"
 
 const canvasEl = ref<HTMLCanvasElement>()
 let ctx: CanvasRenderingContext2D | null = null
@@ -105,6 +109,7 @@ function onUp() {
 function undoPoint() {
   if (closed.value) {
     closed.value = false
+    redraw()
     return
   }
   points.value.pop()
@@ -124,6 +129,31 @@ function closePath() {
   }
   closed.value = true
   redraw()
+}
+
+/** PS 钢笔风格的锚点：白色小方块 + 深色描边；起点用实心菱形标出来 */
+function drawAnchor(c: CanvasRenderingContext2D, p: Pt, isStart: boolean) {
+  c.save()
+  c.translate(p.x, p.y)
+  if (isStart && !closed.value) {
+    c.rotate(Math.PI / 4)
+    c.fillStyle = '#7c3aed'
+    c.strokeStyle = '#fff'
+    c.lineWidth = 1.5
+    c.beginPath()
+    c.rect(-4, -4, 8, 8)
+    c.fill()
+    c.stroke()
+  } else {
+    c.fillStyle = '#fff'
+    c.strokeStyle = '#7c3aed'
+    c.lineWidth = 1.5
+    c.beginPath()
+    c.rect(-3.5, -3.5, 7, 7)
+    c.fill()
+    c.stroke()
+  }
+  c.restore()
 }
 
 function redraw() {
@@ -148,15 +178,7 @@ function redraw() {
   }
   ctx.restore()
 
-  points.value.forEach((p, i) => {
-    ctx!.beginPath()
-    ctx!.arc(p.x, p.y, i === 0 && !closed.value ? 5 : 3.5, 0, Math.PI * 2)
-    ctx!.fillStyle = i === 0 && !closed.value ? '#f59e0b' : '#7c3aed'
-    ctx!.fill()
-    ctx!.strokeStyle = '#fff'
-    ctx!.lineWidth = 1.5
-    ctx!.stroke()
-  })
+  points.value.forEach((p, i) => drawAnchor(ctx!, p, i === 0))
 }
 
 /** 把显示坐标的多边形路径按自然分辨率画到给定 ctx */
@@ -171,28 +193,95 @@ function tracePathNatural(c: CanvasRenderingContext2D) {
   c.closePath()
 }
 
-function doCutout() {
+function guardClosed(): boolean {
   if (!closed.value || points.value.length < 3) {
-    ElMessage.warning('先圈好一块（点回起点或按"闭合"）')
-    return
+    ElMessage.warning('先圈好一块（点回起点或按「闭合」）')
+    return false
   }
-  if (!sourceImg) return
+  return !!sourceImg
+}
+
+function doCutout() {
+  if (!guardClosed()) return
   const out = document.createElement('canvas')
   out.width = naturalW
   out.height = naturalH
   const c = out.getContext('2d')!
   tracePathNatural(c)
   c.clip()
-  c.drawImage(sourceImg, 0, 0)
+  c.drawImage(sourceImg!, 0, 0)
   emit('cutout', out.toDataURL('image/png'))
   emit('update:modelValue', false)
 }
 
-async function doErase() {
-  if (!closed.value || points.value.length < 3) {
-    ElMessage.warning('先圈好一块（点回起点或按"闭合"）')
+/**
+ * 本地"涂背景"去掉圈中内容：取圈线外侧一圈像素的平均色，把圈内填成这个色，边缘羽化。
+ * 对"浅色/纯色背景上的多余文字"最管用（手抄报最常见），瞬间完成、不花额度。
+ */
+function doLocalFill() {
+  if (!guardClosed()) return
+  const out = document.createElement('canvas')
+  out.width = naturalW
+  out.height = naturalH
+  const c = out.getContext('2d')!
+  c.drawImage(sourceImg!, 0, 0)
+
+  // 外侧一圈的 mask：粗描边多边形 → 再挖掉内部 → 只剩圈外的带
+  const band = Math.max(14, Math.round(Math.min(naturalW, naturalH) * 0.025))
+  const rm = document.createElement('canvas')
+  rm.width = naturalW
+  rm.height = naturalH
+  const rc = rm.getContext('2d')!
+  rc.strokeStyle = '#fff'
+  rc.lineWidth = band * 2
+  rc.lineJoin = 'round'
+  tracePathNatural(rc)
+  rc.stroke()
+  rc.globalCompositeOperation = 'destination-out'
+  tracePathNatural(rc)
+  rc.fill()
+
+  const ring = rc.getImageData(0, 0, naturalW, naturalH).data
+  const src = c.getImageData(0, 0, naturalW, naturalH).data
+  let r = 0, g = 0, b = 0, n = 0
+  for (let i = 0; i < ring.length; i += 4) {
+    if (ring[i + 3] > 128) {
+      r += src[i]
+      g += src[i + 1]
+      b += src[i + 2]
+      n++
+    }
+  }
+  if (!n) {
+    ElMessage.error('取不到周围背景色，换个圈法或用「AI 补背景」')
     return
   }
+  const avg = `rgb(${Math.round(r / n)},${Math.round(g / n)},${Math.round(b / n)})`
+
+  // 硬填 + 一圈羽化描边，让边界过渡自然
+  c.save()
+  tracePathNatural(c)
+  c.clip()
+  c.fillStyle = avg
+  c.fillRect(0, 0, naturalW, naturalH)
+  c.restore()
+  c.save()
+  c.filter = 'blur(3px)'
+  c.strokeStyle = avg
+  c.lineWidth = 8
+  c.lineJoin = 'round'
+  tracePathNatural(c)
+  c.stroke()
+  c.restore()
+
+  emit('result', out.toDataURL('image/png'))
+  emit('update:modelValue', false)
+  ElMessage.success('已用周围背景色盖掉')
+}
+
+/** 复杂纹理背景才用：多边形转 mask 交给 AI inpaint */
+async function doAiErase() {
+  if (!guardClosed()) return
   const mask = document.createElement('canvas')
   mask.width = naturalW
   mask.height = naturalH
@@ -212,7 +301,7 @@ async function doErase() {
     )
     emit('result', result)
     emit('update:modelValue', false)
-    ElMessage.success('处理完成')
+    ElMessage.success(authStore.isAuthenticated ? 'AI 处理完成' : '演示模式：未登录，返回的是原图')
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '处理失败，请重试')
   } finally {
@@ -236,7 +325,8 @@ async function doErase() {
       <div class="flex justify-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50 p-2">
         <canvas
           ref="canvasEl"
-          class="max-w-full cursor-crosshair touch-none"
+          class="max-w-full touch-none"
+          :style="{ cursor: PEN_CURSOR }"
           @pointerdown="onDown"
           @pointermove="onMove"
           @pointerup="onUp"
@@ -251,12 +341,16 @@ async function doErase() {
         <span class="ml-auto text-[11px] text-gray-400">{{ points.length }} 个点{{ closed ? ' · 已闭合' : '' }}</span>
       </div>
 
-      <div class="mt-3 rounded-lg bg-gray-50 p-2 text-[11px] text-gray-500">
-        <p><b class="text-gray-700">抠出这块</b>：精确按轮廓从原图裁出来，作为新的可拖动元素加到画布（原图保留）。不花 AI 额度。</p>
+      <div class="mt-3 rounded-lg bg-gray-50 p-2 text-[11px] leading-relaxed text-gray-500">
+        <p><b class="text-gray-700">抠出这块</b>：精确按轮廓从原图裁出来，作为新的可拖动元素加到画布（原图保留）。</p>
         <p class="mt-1">
-          <b class="text-gray-700">去掉这块</b>：把圈中的东西（多余文字、杂物…）用 AI 按背景补掉，替换当前图。{{
-            authStore.isAuthenticated ? '' : '（未登录为演示模式，返回原图）'
-          }}
+          <b class="text-gray-700">去掉这块</b>：取圈线周围的背景色，把圈中内容（多余文字、杂物…）盖掉。
+          浅色/纯色背景最管用，瞬间完成、不花额度。
+        </p>
+        <p class="mt-1 text-gray-400">
+          背景是复杂纹理/图案，盖不干净时改用
+          <el-button link type="primary" size="small" :loading="processing" @click="doAiErase">AI 补背景</el-button>
+          <span v-if="!authStore.isAuthenticated">（未登录是演示模式，会返回原图）</span>
         </p>
       </div>
     </template>
@@ -264,9 +358,7 @@ async function doErase() {
     <template #footer>
       <el-button @click="emit('update:modelValue', false)">取消</el-button>
       <el-button :disabled="!closed || processing" @click="doCutout">抠出这块</el-button>
-      <el-button type="primary" :loading="processing" :disabled="!closed" @click="doErase">
-        {{ processing ? '处理中…' : '去掉这块' }}
-      </el-button>
+      <el-button type="primary" :disabled="!closed || processing" @click="doLocalFill">去掉这块</el-button>
     </template>
   </el-dialog>
 </template>
