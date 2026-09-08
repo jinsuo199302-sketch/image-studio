@@ -35,6 +35,7 @@ interface AdminUser {
   created_at: string
 }
 const users = ref<AdminUser[]>([])
+const usersTotal = ref(0)
 const userQuery = ref('')
 async function loadUsers() {
   try {
@@ -42,6 +43,7 @@ async function loadUsers() {
       headers: { Authorization: `Bearer ${authToken()}` },
     }).then((r) => r.json())
     users.value = d.list || []
+    usersTotal.value = d.total ?? users.value.length
   } catch {
     /* ignore */
   }
@@ -285,7 +287,7 @@ onMounted(() => {
         <div class="mb-4 space-y-3 rounded-lg border border-gray-200 bg-white p-4">
           <div>
             <div class="mb-2 flex items-center justify-between text-xs font-medium text-gray-500">
-              <span>用户列表（照着点加次数，不用手打邮箱）</span>
+              <span>用户列表 · 共 {{ usersTotal }} 人（照着点加次数，不用手打邮箱）</span>
               <el-input
                 v-model="userQuery"
                 size="small"

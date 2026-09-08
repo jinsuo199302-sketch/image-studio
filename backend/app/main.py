@@ -189,22 +189,25 @@ def admin_users(
 ):
     """用户列表——/admin 里直接照着点"加次数"，不用手打邮箱（打错了才会"没有这个邮箱的用户"）。"""
     _require_admin(user, db)
-    query = db.query(models.User).order_by(models.User.created_at.desc())
+    total = db.query(models.User).count()
+    query = db.query(models.User)
     kw = q.strip().lower()
     if kw:
         query = query.filter(models.User.email.ilike(f"%{kw}%"))
-    rows = query.limit(200).all()
+    rows = query.order_by(models.User.id).limit(500).all()
+    rows.sort(key=lambda u: u.created_at or datetime.min, reverse=True)
     return {
+        "total": total,
         "list": [
             {
                 "email": u.email,
                 "credits": u.credits,
                 "is_member": bool(u.is_member),
                 "membership_until": u.membership_until.isoformat() if u.membership_until else None,
-                "created_at": u.created_at.isoformat(),
+                "created_at": u.created_at.isoformat() if u.created_at else None,
             }
             for u in rows
-        ]
+        ],
     }
 
 
