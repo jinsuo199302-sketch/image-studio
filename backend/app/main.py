@@ -181,6 +181,33 @@ def billing_logs(db: Session = Depends(get_db), user: models.User = Depends(get_
     }
 
 
+@app.get("/api/admin/users")
+def admin_users(
+    q: str = "",
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """用户列表——/admin 里直接照着点"加次数"，不用手打邮箱（打错了才会"没有这个邮箱的用户"）。"""
+    _require_admin(user, db)
+    query = db.query(models.User).order_by(models.User.created_at.desc())
+    kw = q.strip().lower()
+    if kw:
+        query = query.filter(models.User.email.ilike(f"%{kw}%"))
+    rows = query.limit(200).all()
+    return {
+        "list": [
+            {
+                "email": u.email,
+                "credits": u.credits,
+                "is_member": bool(u.is_member),
+                "membership_until": u.membership_until.isoformat() if u.membership_until else None,
+                "created_at": u.created_at.isoformat(),
+            }
+            for u in rows
+        ]
+    }
+
+
 class GrantCreditsIn(BaseModel):
     email: str
     amount: int

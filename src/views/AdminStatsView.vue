@@ -26,6 +26,42 @@ const grantEmail = ref('')
 const grantAmount = ref(10)
 const grantNote = ref('')
 const grantMsg = ref('')
+
+interface AdminUser {
+  email: string
+  credits: number
+  is_member: boolean
+  membership_until: string | null
+  created_at: string
+}
+const users = ref<AdminUser[]>([])
+const userQuery = ref('')
+async function loadUsers() {
+  try {
+    const d = await fetch(`/api/admin/users?q=${encodeURIComponent(userQuery.value.trim())}`, {
+      headers: { Authorization: `Bearer ${authToken()}` },
+    }).then((r) => r.json())
+    users.value = d.list || []
+  } catch {
+    /* ignore */
+  }
+}
+async function quickGrant(email: string, amount: number) {
+  const n = amount ?? Number(window.prompt(`给 ${email} 加几次？`, '100'))
+  if (!n) return
+  try {
+    const res = await fetch('/api/admin/grant-credits', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
+      body: JSON.stringify({ email, amount: n, note: '管理员手动加' }),
+    })
+    const d = await res.json()
+    if (!res.ok) throw new Error(d?.detail || '失败')
+    await loadUsers()
+  } catch (e) {
+    window.alert(e instanceof Error ? e.message : '失败')
+  }
+}
 async function grant() {
   grantMsg.value = ''
   try {
@@ -166,6 +202,7 @@ onMounted(() => {
   load()
   loadRecharges()
   loadSettingsStatus()
+  loadUsers()
 })
 </script>
 
@@ -247,7 +284,35 @@ onMounted(() => {
 
         <div class="mb-4 space-y-3 rounded-lg border border-gray-200 bg-white p-4">
           <div>
-            <div class="mb-2 text-xs font-medium text-gray-500">收到充值付款 → 手动加次数</div>
+            <div class="mb-2 flex items-center justify-between text-xs font-medium text-gray-500">
+              <span>用户列表（照着点加次数，不用手打邮箱）</span>
+              <el-input
+                v-model="userQuery"
+                size="small"
+                placeholder="搜邮箱"
+                class="!w-40"
+                clearable
+                @input="loadUsers"
+              />
+            </div>
+            <div class="max-h-64 overflow-y-auto rounded border border-gray-100">
+              <div
+                v-for="u in users"
+                :key="u.email"
+                class="flex items-center justify-between gap-2 border-b border-gray-50 px-2 py-1.5 text-xs last:border-0"
+              >
+                <span class="truncate font-medium text-gray-700">{{ u.email }}</span>
+                <span class="shrink-0 text-gray-400">{{ u.credits }} 次{{ u.is_member ? ' · 会员' : '' }}</span>
+                <div class="flex shrink-0 gap-1">
+                  <button class="rounded border border-violet-300 px-1.5 py-0.5 text-violet-600 hover:bg-violet-50" @click="quickGrant(u.email, 100)">+100</button>
+                  <button class="rounded border border-gray-300 px-1.5 py-0.5 text-gray-500 hover:bg-gray-50" @click="quickGrant(u.email, 0)">自定义</button>
+                </div>
+              </div>
+              <p v-if="!users.length" class="px-2 py-3 text-center text-xs text-gray-400">没有用户</p>
+            </div>
+          </div>
+          <div class="border-t border-gray-100 pt-3">
+            <div class="mb-2 text-xs font-medium text-gray-500">收到充值付款 → 手动加次数（也可上面直接点）</div>
             <div class="flex flex-wrap items-center gap-2">
               <el-input v-model="grantEmail" size="small" placeholder="用户邮箱" class="!w-48" />
               <el-input-number v-model="grantAmount" size="small" :step="5" class="!w-28" />

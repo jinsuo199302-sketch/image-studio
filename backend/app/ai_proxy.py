@@ -114,16 +114,22 @@ async def _post_openlux(url: str, timeout: float, max_retries: int = 2, **kwargs
     """统一处理超时异常 + 429（"上游负载已饱和"，官方原话是临时性的、稍后重试即可）自动退避重试，
     避免每个转发接口都重复写这段逻辑。detail 里不带中文前缀——前端 authPostJson 自己会按各自场景拼
     "生成接口请求失败"/"消除接口请求失败"这类 label，后端再拼一遍会导致文案重复两遍。"""
+    net_err: Exception | None = None
     for attempt in range(max_retries + 1):
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
                 res = await client.post(url, **kwargs)
         except httpx.HTTPError as exc:
+            # 网络抖动/超时也重试一次（openlux 偶发；不重试的话用户端一次 504 就卡死）
+            net_err = exc
+            if attempt < max_retries:
+                await asyncio.sleep(1)
+                continue
             raise HTTPException(status_code=504, detail=f"请求超时或网络异常，请重试：{exc}")
         if res.status_code != 429 or attempt == max_retries:
             return res
         await asyncio.sleep(3 * (attempt + 1))
-    return res  # 理论上循环内已经 return，这行只是让类型检查满意
+    raise HTTPException(status_code=504, detail=f"请求超时或网络异常，请重试：{net_err}")
 
 
 # 生图/写作/AI消除三个"用户自由输入直达生成能力"的入口专用合规检查——design/generate、
@@ -195,11 +201,25 @@ async def _check_not_sensitive_document(image_bytes: bytes, media_type: str, fea
     if DEV_UNRESTRICTED:
         print(f"[DEV_UNRESTRICTED] 跳过敏感文件检查：{feature_label}", file=sys.stderr, flush=True)
         return
-    b64 = base64.b64encode(image_bytes).decode()
+    # 分类器只需看清"这是不是证件/票据"，缩到 768px 转 JPEG——原图直传大手抄报能到几 MB，
+    # base64 塞进 JSON body 上传慢，弱网下 30s 超时 → 504，每个带图的工具全挂
+    check_bytes, check_type = image_bytes, media_type
+    try:
+        im = PILImage.open(io.BytesIO(image_bytes))
+        im = im.convert("RGB")
+        if max(im.size) > 768:
+            r = 768 / max(im.size)
+            im = im.resize((max(1, round(im.width * r)), max(1, round(im.height * r))), PILImage.LANCZOS)
+        _b = io.BytesIO()
+        im.save(_b, "JPEG", quality=78)
+        check_bytes, check_type = _b.getvalue(), "image/jpeg"
+    except Exception:
+        pass
+    b64 = base64.b64encode(check_bytes).decode()
     try:
         res = await _post_openlux(
             f"{OPENLUX_BASE_URL}/chat/completions",
-            timeout=30,
+            timeout=45,
             headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
             json={
                 "model": "gemini-3-flash-preview",
@@ -208,7 +228,7 @@ async def _check_not_sensitive_document(image_bytes: bytes, media_type: str, fea
                         "role": "user",
                         "content": [
                             {"type": "text", "text": _SENSITIVE_DOCUMENT_IMAGE_CHECK_INSTRUCTION},
-                            {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{b64}"}},
+                            {"type": "image_url", "image_url": {"url": f"data:{check_type};base64,{b64}"}},
                         ],
                     }
                 ],
@@ -1227,7 +1247,7 @@ def _run_bg_removal_subprocess(image_bytes: bytes, edge: str = "soft") -> subpro
         worker_argv("bg_removal", edge),
         input=image_bytes,
         capture_output=True,
-        timeout=170,
+        timeout=240,  # 首次要下 ~178MB 模型，慢一点；之后走缓存几秒钟
     )
 
 
