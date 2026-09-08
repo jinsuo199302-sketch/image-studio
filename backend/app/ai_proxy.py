@@ -519,6 +519,9 @@ async def design_handout(
     style = handout_categories.get_style(payload.style)
     border = handout_categories.get_border(payload.border)
     topic = payload.topic.strip()
+    custom = payload.custom_prompt.strip()[:500]
+    if custom:
+        await _moderate_text(custom)
     W, H, wc = payload.canvas_width, payload.canvas_height, payload.with_content
 
     if payload.layered:
@@ -528,13 +531,13 @@ async def design_handout(
         _HANDOUT_JOBS[job_id] = {"status": "pending", "user_id": user.id}
         _prune_handout_jobs()
         asyncio.create_task(
-            _run_handout_layered_job(job_id, user.id, ticket, cat, style, border, topic, W, H, wc)
+            _run_handout_layered_job(job_id, user.id, ticket, cat, style, border, topic, W, H, wc, custom)
         )
         return {"jobId": job_id}
 
     ticket = billing.consume(db, user, "手抄报生成")
     try:
-        return await _do_handout(db, user, cat, style, border, topic, W, H, wc)
+        return await _do_handout(db, user, cat, style, border, topic, W, H, wc, custom)
     except Exception:
         billing.refund_ticket(db, user, ticket)
         raise
@@ -552,7 +555,7 @@ def _prune_handout_jobs(keep: int = 40) -> None:
         _HANDOUT_JOBS.pop(k, None)
 
 
-async def _run_handout_layered_job(job_id, user_id, ticket, cat, style, border, topic, W, H, wc):
+async def _run_handout_layered_job(job_id, user_id, ticket, cat, style, border, topic, W, H, wc, custom=""):
     """后台跑「可拆分手抄报」，结果塞进 _HANDOUT_JOBS。自带 db session（不能用请求的）。"""
     from app.database import SessionLocal
 
@@ -561,7 +564,7 @@ async def _run_handout_layered_job(job_id, user_id, ticket, cat, style, border, 
         user = db.query(models.User).filter(models.User.id == user_id).first()
         if user is None:
             raise RuntimeError("用户不存在")
-        result = await _do_handout_layered(db, user, cat, style, border, topic, W, H, wc)
+        result = await _do_handout_layered(db, user, cat, style, border, topic, W, H, wc, custom)
         _HANDOUT_JOBS[job_id] = {"status": "done", "result": result, "user_id": user_id}
     except HTTPException as e:
         try:
@@ -738,13 +741,15 @@ async def design_element(
         raise
 
 
-async def _gen_handout_sections(cat: dict, topic_desc: str, with_content: bool) -> list[dict]:
+async def _gen_handout_sections(cat: dict, topic_desc: str, with_content: bool, custom: str = "") -> list[dict]:
     """按分类预设的板块标题让模型填正文，返回 [{heading, items}]；with_content=False 返回 []。"""
     if not with_content:
         return []
     headings = cat["headings"]
+    custom_line = f"用户补充要求：{custom}（在保持板块标题和条数不变的前提下尽量体现）。\n" if custom else ""
     content_prompt = (
         f"你在给中小学生的手抄报写内容，主题是「{topic_desc}」（分类：{cat['label']}）。\n"
+        f"{custom_line}"
         f"版面已经固定分成这 {len(headings)} 个板块，标题依次是：{'、'.join(headings)}。\n"
         "只返回一个严格的 JSON 对象，不要 markdown 代码块，不要任何多余说明文字，形如：\n"
         '{"sections": [{"heading": "认识安全隐患", "items": ["...", "..."]}]}\n'
@@ -781,10 +786,10 @@ async def _gen_handout_sections(cat: dict, topic_desc: str, with_content: bool) 
     return clean_sections
 
 
-async def _do_handout(db, user, cat: dict, style: dict, border: dict, topic: str, canvas_width: int, canvas_height: int, with_content: bool = True):
+async def _do_handout(db, user, cat: dict, style: dict, border: dict, topic: str, canvas_width: int, canvas_height: int, with_content: bool = True, custom: str = ""):
     topic_desc = topic or cat["label"]
 
-    clean_sections = await _gen_handout_sections(cat, topic_desc, with_content)
+    clean_sections = await _gen_handout_sections(cat, topic_desc, with_content, custom)
 
     # ── 2. AI 主体插画：集中在左半边，右半 + 顶部留白给文字层叠加；四周可加一圈花边 ──
     # 花边风格：theme 档跟着分类的 motifs 走，none 档不画，其余用预设描述
@@ -808,6 +813,7 @@ async def _do_handout(db, user, cat: dict, style: dict, border: dict, topic: str
         "不能有任何人物、图案、文字——那些区域后面要叠加排版好的文字。"
         f"{border_clause}"
         "白色背景，不要画标题文字。"
+        + (f"\n用户额外要求（在不破坏上面构图/留白规则的前提下尽量满足）：{custom}" if custom else "")
     )
     colored_src = None
     lineart_src = None
@@ -969,10 +975,10 @@ async def _decompose_to_layers(db, user, full_bytes: bytes, W: int, H: int, styl
             "fullName": full_asset.file_name}
 
 
-async def _do_handout_layered(db, user, cat: dict, style: dict, border: dict, topic: str, W: int, H: int, with_content: bool = True):
+async def _do_handout_layered(db, user, cat: dict, style: dict, border: dict, topic: str, W: int, H: int, with_content: bool = True, custom: str = ""):
     """AI 出整张手抄报当参考 → 拆成一堆可拖动/可提示词替换的透明贴纸图层 + 标题/文字层。"""
     topic_desc = topic or cat["label"]
-    clean_sections = await _gen_handout_sections(cat, topic_desc, with_content)
+    clean_sections = await _gen_handout_sections(cat, topic_desc, with_content, custom)
 
     border_desc = cat["motifs"] if border.get("theme") else border.get("prompt", "")
     border_clause = f"画面四周画一圈{border_desc}组成的花边（约占边缘 6%）。" if border_desc else ""
@@ -981,6 +987,7 @@ async def _do_handout_layered(db, user, cat: dict, style: dict, border: dict, to
         f"画面里有：{cat['scene']}；另外散布这些装饰元素：{cat['motifs']}。\n"
         f"{border_clause}"
         "主体元素集中在画面左侧 60% 和中间，右侧 40% 保持纯白留白。不要画任何文字、横线或方格。"
+        + (f"\n用户额外要求（不要画文字，其余尽量满足）：{custom}" if custom else "")
     )
     raw = await _gen_image_bytes(full_prompt, _nearest_image_size(W, H), attempts=2, timeout=170)
 

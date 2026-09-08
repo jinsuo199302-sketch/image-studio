@@ -142,6 +142,9 @@ class HandoutRequest(BaseModel):
     canvas_width/height 前端按选定纸张尺寸算好传过来。"""
     category: str
     topic: str = ""
+    # 用户自己补充的要求（"要包含XX知识点""插画里画一只熊猫""语气再活泼点"…）——
+    # 拼进内容生成和插画 prompt，作为预设骨架之外的微调。过 _moderate_text。
+    custom_prompt: str = ""
     style: str = "color"
     border: str = "theme"
     with_content: bool = True

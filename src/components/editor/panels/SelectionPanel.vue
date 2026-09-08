@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   Close,
   ArrowDown,
@@ -70,6 +70,7 @@ const emit = defineEmits<{
   (e: 'send-backward'): void
   (e: 'duplicate'): void
   (e: 'replace-image'): void
+  (e: 'image-crop', insets: { top: number; right: number; bottom: number; left: number }): void
   (e: 'regenerate-element', prompt: string): void
   (e: 'edit-image-region'): void
   (e: 'decompose-image'): void
@@ -77,6 +78,8 @@ const emit = defineEmits<{
   (e: 'erase-object'): void
   (e: 'text-replace'): void
   (e: 'adjust-image'): void
+  (e: 'to-line-art'): void
+  (e: 'lasso-select'): void
   (e: 'delete'): void
 }>()
 
@@ -84,6 +87,35 @@ const regenPrompt = ref('')
 function submitRegen() {
   const p = regenPrompt.value.trim()
   if (p) emit('regenerate-element', p)
+}
+
+/** 微调裁切：四边裁掉的源像素数，从 selection.imageCrop 回显，改动即时 emit */
+const cropOpen = ref(false)
+const cropTop = ref(0)
+const cropRight = ref(0)
+const cropBottom = ref(0)
+const cropLeft = ref(0)
+watch(
+  () => props.selection.imageCrop,
+  (c) => {
+    cropTop.value = c?.top ?? 0
+    cropRight.value = c?.right ?? 0
+    cropBottom.value = c?.bottom ?? 0
+    cropLeft.value = c?.left ?? 0
+  },
+  { immediate: true },
+)
+function applyCrop() {
+  emit('image-crop', {
+    top: cropTop.value || 0,
+    right: cropRight.value || 0,
+    bottom: cropBottom.value || 0,
+    left: cropLeft.value || 0,
+  })
+}
+function resetCrop() {
+  cropTop.value = cropRight.value = cropBottom.value = cropLeft.value = 0
+  applyCrop()
 }
 
 const TEXT_COLORS = ['#1f2937', '#dc2626', '#ea580c', '#16a34a', '#2563eb', '#7c3aed', '#ffffff']
@@ -574,6 +606,13 @@ function pickWarp(kind: WarpKind) {
             {{ decomposingImage ? '拆解中…（约 3~5 分钟）' : '拆成可编辑元素（AI 把图里的东西一个个拆出来）' }}
           </button>
           <button
+            class="flex w-full items-center gap-2 rounded border border-violet-200 bg-violet-50/40 px-2 py-2 text-xs text-violet-700 hover:bg-violet-50"
+            @click="emit('lasso-select')"
+          >
+            <el-icon :size="14"><EditPen /></el-icon>
+            圈选处理（钢笔）— 抠出/去掉某一块
+          </button>
+          <button
             class="flex w-full items-center gap-2 rounded px-2 py-2 text-xs text-gray-600 hover:bg-gray-100"
             @click="emit('edit-image-region')"
           >
@@ -616,6 +655,42 @@ function pickWarp(kind: WarpKind) {
             <el-icon :size="14"><Brush /></el-icon>
             调色
           </button>
+          <button
+            class="flex w-full items-center gap-2 rounded px-2 py-2 text-xs text-gray-600 hover:bg-gray-100"
+            @click="emit('to-line-art')"
+          >
+            <el-icon :size="14"><EditPen /></el-icon>
+            转线稿（极淡）
+          </button>
+        </div>
+
+        <div class="mt-3 border-t border-gray-100 pt-3">
+          <button class="flex w-full items-center justify-between" @click="cropOpen = !cropOpen">
+            <span class="text-xs font-medium text-gray-600">微调裁切</span>
+            <el-icon :size="12" class="text-gray-400 transition-transform" :class="{ 'rotate-180': cropOpen }"><ArrowDown /></el-icon>
+          </button>
+          <div v-if="cropOpen" class="mt-2">
+            <p class="mb-2 text-[11px] text-gray-400">每条边裁掉多少像素，其余画面固定不动</p>
+            <div class="grid grid-cols-2 gap-x-2 gap-y-1.5">
+              <label class="flex items-center gap-1 text-[11px] text-gray-500">
+                <span class="w-4 shrink-0">上</span>
+                <el-input-number v-model="cropTop" :min="0" :step="2" size="small" controls-position="right" class="!w-full" @change="applyCrop" />
+              </label>
+              <label class="flex items-center gap-1 text-[11px] text-gray-500">
+                <span class="w-4 shrink-0">下</span>
+                <el-input-number v-model="cropBottom" :min="0" :step="2" size="small" controls-position="right" class="!w-full" @change="applyCrop" />
+              </label>
+              <label class="flex items-center gap-1 text-[11px] text-gray-500">
+                <span class="w-4 shrink-0">左</span>
+                <el-input-number v-model="cropLeft" :min="0" :step="2" size="small" controls-position="right" class="!w-full" @change="applyCrop" />
+              </label>
+              <label class="flex items-center gap-1 text-[11px] text-gray-500">
+                <span class="w-4 shrink-0">右</span>
+                <el-input-number v-model="cropRight" :min="0" :step="2" size="small" controls-position="right" class="!w-full" @change="applyCrop" />
+              </label>
+            </div>
+            <button class="mt-2 text-[11px] text-violet-600 hover:underline" @click="resetCrop">复位</button>
+          </div>
         </div>
       </template>
 

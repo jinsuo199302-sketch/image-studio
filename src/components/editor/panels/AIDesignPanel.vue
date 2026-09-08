@@ -264,6 +264,7 @@ const hoLandscape = ref(true)                  // 手抄报默认横版
 const hoStyle = ref(HANDOUT_STYLES[0].key)
 const hoBorder = ref(HANDOUT_BORDERS[0].key)   // 花边边框，默认「跟随主题」
 const hoTopic = ref('')
+const hoCustom = ref('')                       // 用户自定义补充要求（预设骨架之外的微调）
 const hoWithContent = ref(true)                // 带文字内容 / 只要画和标题（纯涂色）
 const hoLayered = ref(false)                   // 可拆分元素版（AI 出整图 → 框选 → 拆成一堆可拖动小图）
 const hoApplyMode = ref<'colored' | 'lineart'>('colored')  // 应用到画布用哪张
@@ -285,7 +286,7 @@ async function generateHo() {
   try {
     const r = await generateHandout(
       hoCategory.value, hoTopic.value.trim(), hoStyle.value, hoBorder.value,
-      w, h, hoWithContent.value, hoLayered.value,
+      w, h, hoWithContent.value, hoLayered.value, hoCustom.value.trim(),
     )
     hoResult.value = { ...r, w, h }
   } catch (e) {
@@ -468,6 +469,22 @@ function applyHo() {
         <div>
           <label class="mb-1 block text-xs font-medium text-gray-600">具体主题（可选，不填就出这个分类的通用版）</label>
           <el-input v-model="hoTopic" size="small" placeholder="例：防溺水、垃圾分类、我的中秋节…" maxlength="20" />
+        </div>
+
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-600">
+            自定义补充要求（可选，写给 AI 的额外提示词）
+          </label>
+          <el-input
+            v-model="hoCustom"
+            type="textarea"
+            :rows="2"
+            size="small"
+            maxlength="200"
+            show-word-limit
+            placeholder="例：一定要有「遇到火灾先报警119」这条；插画里画一只戴头盔的小熊；语气再活泼一点…"
+          />
+          <p class="mt-1 text-[10px] text-gray-400">板块结构和留白规则不变，这段是在预设之上做微调。</p>
         </div>
 
         <div>

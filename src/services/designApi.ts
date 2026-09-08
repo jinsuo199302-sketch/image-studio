@@ -273,9 +273,11 @@ export async function generateHandout(
   canvasHeight: number,
   withContent = true,
   layered = false,
+  customPrompt = '',
 ): Promise<HandoutResult> {
   const body = {
     category, topic, style, border,
+    custom_prompt: customPrompt,
     with_content: withContent, layered,
     canvas_width: canvasWidth, canvas_height: canvasHeight,
   }

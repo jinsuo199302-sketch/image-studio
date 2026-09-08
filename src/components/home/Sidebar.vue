@@ -12,10 +12,32 @@ import {
   Location,
 } from '@element-plus/icons-vue'
 import { prepareUpload } from '../../utils/prepImage'
+import { PAPER_SIZES, paperDims, type Orientation } from '../../data/paperSizes'
 
 const route = useRoute()
 const router = useRouter()
 const active = ref('home')
+
+const newDialogOpen = ref(false)
+const newOrientation = ref<Orientation>('portrait')
+
+function startBlank(w: number, h: number) {
+  try {
+    sessionStorage.setItem('pendingCanvasSize', JSON.stringify({ w, h }))
+  } catch {
+    /* 存不下就用编辑器默认尺寸 */
+  }
+  sessionStorage.removeItem('pendingUploadImage')
+  newDialogOpen.value = false
+  router.push('/design/upload')
+}
+
+function pickPaper(key: string) {
+  const p = PAPER_SIZES.find((s) => s.key === key)
+  if (!p) return
+  const { width, height } = paperDims(p, newOrientation.value)
+  startBlank(width, height)
+}
 
 const NAV = [
   { key: 'home', label: '首页', icon: HomeFilled },
@@ -67,10 +89,48 @@ async function onUploadPick(e: Event) {
       type="primary"
       class="!mb-3 !w-full !justify-start !bg-gradient-to-r !from-violet-500 !to-fuchsia-500 !border-none"
       :icon="Plus"
-      @click="router.push('/design/upload')"
+      @click="newDialogOpen = true"
     >
       创建设计
     </el-button>
+
+    <el-dialog v-model="newDialogOpen" title="新建设计 · 选纸张" width="440px">
+      <div class="mb-3 flex items-center justify-between">
+        <span class="text-xs font-medium text-gray-600">方向</span>
+        <div class="flex items-center gap-1">
+          <button
+            class="rounded px-2 py-0.5 text-[11px] transition"
+            :class="newOrientation === 'portrait' ? 'bg-violet-50 text-violet-600' : 'text-gray-500 hover:bg-gray-100'"
+            @click="newOrientation = 'portrait'"
+          >
+            竖版
+          </button>
+          <button
+            class="rounded px-2 py-0.5 text-[11px] transition"
+            :class="newOrientation === 'landscape' ? 'bg-violet-50 text-violet-600' : 'text-gray-500 hover:bg-gray-100'"
+            @click="newOrientation = 'landscape'"
+          >
+            横版
+          </button>
+        </div>
+      </div>
+      <div class="grid grid-cols-4 gap-1.5">
+        <button
+          v-for="p in PAPER_SIZES"
+          :key="p.key"
+          class="rounded-md border border-gray-200 px-2 py-2 text-center text-[11px] text-gray-600 transition hover:border-violet-400 hover:text-violet-600"
+          @click="pickPaper(p.key)"
+        >
+          {{ p.label }}
+        </button>
+      </div>
+      <button
+        class="mt-3 w-full rounded-md border border-dashed border-gray-300 py-2 text-xs text-gray-500 transition hover:border-violet-400 hover:text-violet-600"
+        @click="startBlank(1480, 1050)"
+      >
+        空白画布（1480 × 1050）
+      </button>
+    </el-dialog>
 
     <button
       v-for="item in NAV"

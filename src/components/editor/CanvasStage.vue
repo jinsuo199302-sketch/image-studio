@@ -53,6 +53,8 @@ export interface SelectionInfo {
   vertical?: boolean
   text?: string
   src?: string
+  /** 仅图片：当前四边裁掉的源像素数 + 原图尺寸，供"微调裁切"面板回显 */
+  imageCrop?: { top: number; right: number; bottom: number; left: number; naturalW: number; naturalH: number }
   /** 只有联网搜索提炼出来的文字才有，选中面板据此显示"来源"这一行 */
   source?: TextSource
 }
@@ -92,7 +94,7 @@ function emitHistory() {
 /** 拖拽时的吸附候选位置（画布边缘/中心 + 其它对象边缘/中心），一次拖拽只算一次 */
 let dragStaticTargets: { v: number[]; h: number[] } | null = null
 const GUIDE_COLOR = '#f43f5e'
-/** 像素→毫米换算比例，跟 ResizeDialog.vue 里"A4 文档"预设（700×990px＝210×297mm）保持一致 */
+/** 像素→毫米换算比例，按约 85 DPI（700px≈210mm）估，仅用于拖拽对齐辅助线上显示的毫米数 */
 const PX_PER_MM = 700 / 210
 
 function computeStaticTargets(moving: FabricObject) {
@@ -370,14 +372,28 @@ function describeSelection(obj: FabricObject | undefined): SelectionInfo | null 
       source: (obj as unknown as { _source?: TextSource })._source,
     }
   }
-  if (obj instanceof FabricImage)
+  if (obj instanceof FabricImage) {
+    const elImg = obj.getElement() as { naturalWidth?: number; naturalHeight?: number } | undefined
+    const naturalW = elImg?.naturalWidth || obj.width || 0
+    const naturalH = elImg?.naturalHeight || obj.height || 0
+    const cropX = obj.cropX ?? 0
+    const cropY = obj.cropY ?? 0
     return {
       type: 'image',
       src: obj.getSrc(),
       opacity: obj.opacity ?? 1,
       blendMode: obj.globalCompositeOperation ?? 'source-over',
       locked: !!obj.lockMovementX,
+      imageCrop: {
+        left: Math.round(cropX),
+        top: Math.round(cropY),
+        right: Math.round(naturalW - cropX - (obj.width ?? naturalW)),
+        bottom: Math.round(naturalH - cropY - (obj.height ?? naturalH)),
+        naturalW,
+        naturalH,
+      },
     }
+  }
   if (obj instanceof Rect)
     return {
       type: 'rect',
@@ -472,11 +488,13 @@ onMounted(async () => {
   await buildFromTemplate(props.template)
   fitCanvas()
   window.addEventListener('resize', fitCanvas)
+  window.addEventListener('keydown', onNudgeKeyDown)
   emit('ready')
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', fitCanvas)
+  window.removeEventListener('keydown', onNudgeKeyDown)
   canvas?.dispose()
 })
 
@@ -565,6 +583,68 @@ function setSelectedImageAdjust({ brightness, contrast, saturation, preset }: Im
 }
 
 function commitSelectedImageAdjust() {
+  pushHistory()
+}
+
+/**
+ * 微调裁切：insets 是四边要裁掉的"源像素"绝对值（不是增量）。
+ * Fabric 裁图只改 cropX/cropY/width/height，left/top 不动 —— 从上/左裁会让留下的画面整体位移，
+ * 所以这里按 cropX/cropY 的变化量沿元素本地轴补偿 left/top，保证"没被裁掉的画面"在画布上纹丝不动。
+ */
+function cropSelectedImage(insets: { top: number; right: number; bottom: number; left: number }) {
+  if (!canvas) return
+  const active = canvas.getActiveObject()
+  if (!(active instanceof FabricImage)) return
+  const elImg = active.getElement() as { naturalWidth?: number; naturalHeight?: number } | undefined
+  const naturalW = elImg?.naturalWidth || active.width || 0
+  const naturalH = elImg?.naturalHeight || active.height || 0
+  const MIN = 8
+  const left = Math.max(0, Math.round(insets.left))
+  const top = Math.max(0, Math.round(insets.top))
+  const right = Math.max(0, Math.round(insets.right))
+  const bottom = Math.max(0, Math.round(insets.bottom))
+  if (left + right > naturalW - MIN || top + bottom > naturalH - MIN) return
+  const dCropX = left - (active.cropX ?? 0)
+  const dCropY = top - (active.cropY ?? 0)
+  const a = ((active.angle ?? 0) * Math.PI) / 180
+  const ox = dCropX * (active.scaleX ?? 1)
+  const oy = dCropY * (active.scaleY ?? 1)
+  active.set({
+    cropX: left,
+    cropY: top,
+    width: naturalW - left - right,
+    height: naturalH - top - bottom,
+    left: (active.left ?? 0) + (ox * Math.cos(a) - oy * Math.sin(a)),
+    top: (active.top ?? 0) + (ox * Math.sin(a) + oy * Math.cos(a)),
+    dirty: true,
+  })
+  active.setCoords()
+  canvas.requestRenderAll()
+  pushHistory()
+  emit('selection', describeSelection(active))
+}
+
+/** 方向键微调选中元素位置：1px，Shift 为 10px。文字进入编辑态或焦点在输入框时不拦截。 */
+function onNudgeKeyDown(e: KeyboardEvent) {
+  if (!canvas) return
+  const dir: Record<string, [number, number]> = {
+    ArrowLeft: [-1, 0],
+    ArrowRight: [1, 0],
+    ArrowUp: [0, -1],
+    ArrowDown: [0, 1],
+  }
+  const d = dir[e.key]
+  if (!d) return
+  const t = e.target as HTMLElement | null
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+  const active = canvas.getActiveObject()
+  if (!active || (active as unknown as { isEditing?: boolean }).isEditing) return
+  if (active.lockMovementX || active.lockMovementY) return
+  e.preventDefault()
+  const step = e.shiftKey ? 10 : 1
+  active.set({ left: (active.left ?? 0) + d[0] * step, top: (active.top ?? 0) + d[1] * step })
+  active.setCoords()
+  canvas.requestRenderAll()
   pushHistory()
 }
 
@@ -2159,6 +2239,7 @@ defineExpose({
   duplicateSelected,
   setSelectedImageAdjust,
   commitSelectedImageAdjust,
+  cropSelectedImage,
   getSelectedText,
   setSelectedText,
   deleteSelected,

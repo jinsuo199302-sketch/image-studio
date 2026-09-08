@@ -14,6 +14,8 @@ import ImageAdjustDialog from '../components/editor/ImageAdjustDialog.vue'
 import EraseDialog from '../components/editor/EraseDialog.vue'
 import TextReplaceDialog from '../components/editor/TextReplaceDialog.vue'
 import AIEditImageDialog from '../components/editor/AIEditImageDialog.vue'
+import LineArtDialog from '../components/editor/LineArtDialog.vue'
+import LassoDialog from '../components/editor/LassoDialog.vue'
 import TemplateSwitchPanel from '../components/editor/panels/TemplateSwitchPanel.vue'
 import BackgroundPanel from '../components/editor/panels/BackgroundPanel.vue'
 import ShapePanel from '../components/editor/panels/ShapePanel.vue'
@@ -57,10 +59,19 @@ async function loadTemplate(id: string) {
         pendingUploadSrc.value = p.src
         w = Math.round(p.w) || w
         h = Math.round(p.h) || h
+      } else {
+        const s = JSON.parse(sessionStorage.getItem('pendingCanvasSize') || 'null') as
+          | { w: number; h: number }
+          | null
+        if (s?.w && s?.h) {
+          w = Math.round(s.w)
+          h = Math.round(s.h)
+        }
       }
     } catch {
       /* 用默认空白画布 */
     }
+    sessionStorage.removeItem('pendingCanvasSize')
     template.value = {
       id: 'upload', name: pendingUploadSrc.value ? '我的图片' : '空白设计',
       category: '', scene: '', industry: '',
@@ -108,6 +119,8 @@ const adjustDialogOpen = ref(false)
 const eraseDialogOpen = ref(false)
 const textReplaceDialogOpen = ref(false)
 const editImgDialogOpen = ref(false)
+const lineArtDialogOpen = ref(false)
+const lassoDialogOpen = ref(false)
 
 function switchTemplate(id: string) {
   currentId.value = id
@@ -363,6 +376,7 @@ async function onDecomposeImage() {
           @send-backward="stageRef?.sendSelectedBackward()"
           @duplicate="stageRef?.duplicateSelected()"
           @replace-image="replaceViaUpload"
+          @image-crop="(insets) => stageRef?.cropSelectedImage(insets)"
           @regenerate-element="onRegenerateElement"
           @decompose-image="onDecomposeImage"
           @edit-image-region="editImgDialogOpen = true"
@@ -370,6 +384,8 @@ async function onDecomposeImage() {
           @erase-object="eraseDialogOpen = true"
           @text-replace="textReplaceDialogOpen = true"
           @adjust-image="adjustDialogOpen = true"
+          @to-line-art="lineArtDialogOpen = true"
+          @lasso-select="lassoDialogOpen = true"
           @delete="stageRef?.deleteSelected()"
         />
         <TemplateSwitchPanel v-else-if="activePanel === 'template'" :active-id="currentId" @switch="switchTemplate" />
@@ -439,6 +455,17 @@ async function onDecomposeImage() {
     <AIEditImageDialog
       v-model="editImgDialogOpen"
       :image-src="selection?.src ?? ''"
+      @result="(url) => stageRef?.replaceSelectedImage(url)"
+    />
+    <LineArtDialog
+      v-model="lineArtDialogOpen"
+      :image-src="selection?.src ?? ''"
+      @result="(url) => stageRef?.replaceSelectedImage(url)"
+    />
+    <LassoDialog
+      v-model="lassoDialogOpen"
+      :image-src="selection?.src ?? ''"
+      @cutout="(url) => stageRef?.addImage(url)"
       @result="(url) => stageRef?.replaceSelectedImage(url)"
     />
   </div>
