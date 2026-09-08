@@ -10,8 +10,8 @@ const emit = defineEmits<{
 }>()
 
 const thickness = ref(2)
-const depth = ref(2)
-const color = ref('#6b7280')
+const depth = ref(3)
+const color = ref('#4b5563')
 const lineStyle = ref<'solid' | 'dashed'>('solid')
 const previewUrl = ref('')
 const busy = ref(false)
@@ -20,7 +20,7 @@ const loadError = ref('')
 let sourceImg: HTMLImageElement | null = null
 let renderTimer: ReturnType<typeof setTimeout> | null = null
 
-const COLORS = ['#6b7280', '#94a3b8', '#78716c', '#1f2937', '#3b82f6', '#166534']
+const COLORS = ['#4b5563', '#9ca3af', '#78716c', '#1f2937', '#3b82f6', '#166534']
 
 async function loadSource() {
   loadError.value = ''
@@ -140,7 +140,7 @@ function apply() {
           <el-color-picker v-model="color" size="small" />
         </div>
         <p class="text-[11px] text-gray-400">
-          输出是透明底的浅色线稿，默认很淡（像轻轻描过一遍）。想更明显就调高「深浅」；线太碎就调高「粗细」。
+          透明底线稿，用局部对比提干净轮廓（不吃蜡笔纹理）。「深浅」越小越淡、只留主轮廓；线断就调高「粗细」。
         </p>
       </div>
     </template>
