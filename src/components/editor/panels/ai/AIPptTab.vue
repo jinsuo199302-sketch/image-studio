@@ -9,6 +9,7 @@ import { prepareUpload } from '../../../../utils/prepImage'
 import { saveFile } from '../../../../utils/saveFile'
 import { useAuthStore } from '../../../../stores/auth'
 import SlidePreview from '../../SlidePreview.vue'
+import DeckHtmlPreview from '../../DeckHtmlPreview.vue'
 
 type Mode = 'ai' | 'text' | 'image'
 const mode = ref<Mode>('ai')
@@ -188,6 +189,11 @@ function rmImg(i: number) {
           <p class="text-[11px] text-gray-400">
             装饰目前是代码画的简版；下载的 PPTX 是原生形状，文字/配色/排版都能在 PowerPoint 里改。
           </p>
+
+          <div v-if="deck.outline" class="mt-3 rounded-lg border border-violet-100 bg-violet-50/40 p-2">
+            <p class="mb-1 text-[11px] font-medium text-violet-700">HTML 版（实验）：CSS 排版 → 浏览器转可编辑 PPTX</p>
+            <DeckHtmlPreview :outline="deck.outline" :theme-key="deck.theme" />
+          </div>
         </template>
       </template>
 

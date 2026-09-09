@@ -337,10 +337,29 @@ export interface DeckSlide {
   w: number
   h: number
 }
+export interface DeckOutlineRaw {
+  title: string
+  subtitle?: string
+  palette?: string[]
+  mood?: string
+  sections: {
+    heading: string
+    en?: string
+    slides: {
+      title?: string
+      en?: string
+      intro?: string
+      bullets?: string[]
+      data?: { kind: 'bar' | 'stat'; items: { label: string; value: string | number }[] }
+    }[]
+  }[]
+}
 export interface DeckResult {
   title: string
   theme: string
   slides: DeckSlide[]
+  outline?: DeckOutlineRaw
+  bg?: { cover?: string; content?: string; section?: string } | null
 }
 
 /** AI 生成 PPT：主题 → 一套幻灯片。aiBg=true 时后端另出 3 张整页背景图，走异步轮询。 */

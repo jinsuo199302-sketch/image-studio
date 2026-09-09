@@ -877,7 +877,7 @@ async def _run_deck_job(job_id, user_id, ticket, topic, n, theme, extra, ai_bg):
         slides = deck_gen.build_deck(outline, theme, bg)
         _HANDOUT_JOBS[job_id] = {
             "status": "done",
-            "result": {"title": outline.get("title") or topic, "theme": theme, "slides": slides},
+            "result": {"title": outline.get("title") or topic, "theme": theme, "slides": slides, "outline": outline, "bg": bg},
             "user_id": user_id,
         }
     except HTTPException as e:
@@ -932,7 +932,7 @@ async def design_deck(
     try:
         outline = await _gen_deck_outline(topic, n, extra)
         slides = deck_gen.build_deck(outline, payload.theme)
-        return {"title": (outline.get("title") or topic), "theme": payload.theme, "slides": slides}
+        return {"title": (outline.get("title") or topic), "theme": payload.theme, "slides": slides, "outline": outline}
     except Exception:
         billing.refund_ticket(db, user, ticket)
         raise
