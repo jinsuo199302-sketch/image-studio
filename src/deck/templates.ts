@@ -9,6 +9,22 @@
  *  - 内容页浅底 / 章节页深底，形成节奏
  */
 
+import { ICONS, ICON_HINTS } from './icons'
+
+/** 一个 Tabler 线性图标的内联 SVG（stroke 用当前色，靠外层 color 上主题色） */
+function icon(name: string, size = 40): string {
+  const inner = ICONS[name] || ICONS['circle-check']
+  return `<svg class="ico" viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`
+}
+
+/** 给一条要点挑个图标：LLM 指定的优先，否则按关键词猜，再不行按顺序轮 */
+function pickIcon(text: string, i: number, hint?: string): string {
+  if (hint && ICONS[hint]) return hint
+  for (const [re, nm] of ICON_HINTS) if (re.test(text)) return nm
+  const rot = ['target', 'bulb', 'circle-check', 'flag-3', 'shield-check', 'chart-bar', 'settings', 'star']
+  return rot[i % rot.length]
+}
+
 export interface DeckTheme {
   primary: string
   accent: string
@@ -65,6 +81,8 @@ export interface DeckSlideIn {
   big_number?: DeckBigNumber
   /** 通用四象限 */
   matrix?: DeckMatrix
+  /** 每条要点对应的图标语义名（可选，LLM 给；缺了按关键词自动挑） */
+  icons?: string[]
   /** 用户上传的真实照片 URL——有则这一页排成「图文分栏」 */
   image?: string
 }
@@ -142,8 +160,9 @@ function css(t: DeckTheme): string {
   .s-toc .en{margin:10px 0 4px;color:${t.accent}}
   .s-toc .grid{margin-top:52px;display:grid;grid-template-columns:1fr;gap:6px}
   .s-toc .grid.two{grid-template-columns:1fr 1fr;column-gap:56px}
-  .s-toc .it{display:flex;align-items:baseline;gap:22px;padding:16px 0;border-bottom:1px solid #e4e7ec}
-  .s-toc .no{font-size:30px;font-weight:800;color:${t.primary};opacity:.32;min-width:46px}
+  .s-toc .it{display:flex;align-items:center;gap:18px;padding:15px 0;border-bottom:1px solid #e4e7ec}
+  .s-toc .tocic{width:40px;height:40px;flex:none;border-radius:11px;background:${t.primary}10;color:${t.primary};display:flex;align-items:center;justify-content:center}
+  .s-toc .no{font-size:24px;font-weight:800;color:${t.primary};opacity:.34;min-width:36px}
   .s-toc .h{font-size:18px;font-weight:700}
 
   /* 章节过渡 */
@@ -171,20 +190,31 @@ function css(t: DeckTheme): string {
   .head .en{margin-top:8px}
   /* 导语按中文办公稿：左对齐、首行空两格（缩进写在文本里，导出到 PPT 也保留） */
   .intro{text-align:left;color:#7f7f7f;font-size:15px;line-height:1.72;margin:20px 0 0}
+  /* 内容页统一的淡雅底纹（代码画，全篇一致；无 AI 内容底图时用） */
+  .cbg{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+  .cbg i{position:absolute;display:block}
+  .cbg .a{right:-100px;top:-100px;width:260px;height:260px;border-radius:50%;background:${t.primary}0a}
+  .cbg .b{right:56px;top:52px;width:64px;height:64px;border-radius:50%;background:${t.accent}12}
+  .cbg .c{left:52px;bottom:44px;width:52px;height:5px;background:${t.accent}88}
+  .cbg .d{left:52px;bottom:44px;width:5px;height:52px;background:${t.accent}88}
+  .body>.z,.s-toc>.z{position:relative;z-index:1}
+
+  .ico{display:block}
 
   /* 卡片（2~3 条） */
-  .cards{display:grid;gap:28px;flex:1;margin-top:38px;align-content:center}
-  .card{border:1px solid #e2e5ec;border-radius:14px;padding:30px 28px;display:flex;flex-direction:column;align-items:flex-start;gap:15px}
-  .card .ring{width:54px;height:54px;border:2px solid ${t.primary};border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:800;color:${t.primary}}
-  .card .bd{width:26px;height:3px;background:${t.accent}}
-  .card .ct{font-size:16px;line-height:1.64;text-align:left;align-self:stretch}
+  .cards{display:grid;gap:28px;flex:1;margin-top:36px;align-content:center}
+  .card{border:1px solid #e4e7ec;border-radius:16px;padding:30px 28px;display:flex;flex-direction:column;align-items:flex-start;gap:16px;background:#fff}
+  .card .ic{width:60px;height:60px;flex:none;border-radius:15px;background:${t.primary}12;color:${t.primary};display:flex;align-items:center;justify-content:center}
+  .card .num{font-size:12px;letter-spacing:2px;font-weight:800;color:${t.accent}}
+  .card .ct{font-size:16px;line-height:1.64;text-align:left;align-self:stretch;color:${t.ink}}
 
   /* 清单（4~5 条） */
-  .list{flex:1;margin-top:34px;display:flex;flex-direction:column;justify-content:center}
-  .row{display:flex;align-items:center;gap:22px;padding:16px 0;border-bottom:1px solid #e8eaef}
+  .list{flex:1;margin-top:30px;display:flex;flex-direction:column;justify-content:center;gap:6px}
+  .row{display:flex;align-items:center;gap:20px;padding:15px 0;border-bottom:1px solid #ebedf1}
   .row:last-child{border-bottom:0}
-  .row .n{width:36px;height:36px;flex:none;border:2px solid ${t.accent};border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:${t.accent}}
-  .row .rt{font-size:16px;line-height:1.5}
+  .row .ic{width:44px;height:44px;flex:none;border-radius:12px;background:${t.primary}0f;color:${t.primary};display:flex;align-items:center;justify-content:center}
+  .row .n{font-size:12px;font-weight:800;color:${t.accent};letter-spacing:1px;flex:none;width:24px}
+  .row .rt{font-size:16px;line-height:1.55;color:${t.ink}}
 
   /* 引言（1 句） */
   .quote{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:20px}
@@ -194,9 +224,10 @@ function css(t: DeckTheme): string {
   /* 时间轴（流程/步骤） */
   .steps{flex:1;display:flex;align-items:center;margin-top:30px}
   .steps .track{flex:1;display:flex;align-items:flex-start;position:relative}
-  .steps .track::before{content:"";position:absolute;left:6%;right:6%;top:19px;height:2px;background:#dfe2e8}
+  .steps .track::before{content:"";position:absolute;left:6%;right:6%;top:25px;height:2px;background:${t.primary}33}
   .steps .st{flex:1;display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px;padding:0 10px}
-  .steps .dot{width:40px;height:40px;border-radius:50%;background:${t.primary};color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;position:relative;z-index:1}
+  .steps .dot{width:52px;height:52px;border-radius:50%;background:${t.primary};color:#fff;display:flex;align-items:center;justify-content:center;position:relative;z-index:1}
+  .steps .sn{font-size:11px;letter-spacing:1px;font-weight:800;color:${t.accent}}
   .steps .sl{font-size:14px;line-height:1.5;color:${t.ink}}
 
   /* KPI 大数字 */
@@ -306,10 +337,10 @@ function toc(o: DeckOutline): string {
   const li = rows
     .map(
       (s, i) =>
-        `<div class="it"><span class="no">${pad2(i + 1)}</span><span class="h">${esc(s.heading)}</span></div>`,
+        `<div class="it"><span class="tocic">${icon(pickIcon(s.heading, i), 22)}</span><span class="no">${pad2(i + 1)}</span><span class="h">${esc(s.heading)}</span></div>`,
     )
     .join('')
-  return `<div class="slide s-toc">${bgImg(o.bg?.content)}<div class="z">
+  return `<div class="slide s-toc">${bgImg(o.bg?.content)}${cbg(o)}<div class="z">
     <h2>目录</h2><div class="en">CONTENTS</div><div class="tick"></div>
     <div class="grid ${two ? 'two' : ''}">${li}</div></div></div>`
 }
@@ -334,9 +365,16 @@ function head(sl: DeckSlideIn, en: string): string {
     ${sl.intro ? `<div class="intro">${para(sl.intro)}</div>` : ''}`
 }
 
+/** 内容页统一淡雅底纹（无 AI 内容底图时）+ 内容层包一层 .z */
+const cbg = (o: DeckOutline) =>
+  o.bg?.content ? '' : `<div class="cbg"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i></div>`
+const bodySlide = (o: DeckOutline, inner: string) =>
+  `<div class="slide body">${bgImg(o.bg?.content)}${cbg(o)}<div class="z">${inner}</div></div>`
+
 const STEP_RE = /流程|步骤|阶段|环节|顺序|先后|第一步|首先/
 
 function content(sl: DeckSlideIn, en: string, o: DeckOutline, imgFlip = false, layout = ''): string {
+  const ic = (b: string, i: number, size: number) => icon(pickIcon(b, i, sl.icons?.[i]), size)
   if (sl.image) {
     const lis = (sl.bullets || [])
       .map((s) => s.trim())
@@ -344,12 +382,14 @@ function content(sl: DeckSlideIn, en: string, o: DeckOutline, imgFlip = false, l
       .slice(0, 5)
       .map((b) => `<div class="li">${esc(b)}</div>`)
       .join('')
-    return `<div class="slide body">${bgImg(o.bg?.content)}<div class="z">
-      <div class="head"><h2>${esc(sl.title || '')}</h2><div class="fl"></div><div class="en">${esc(sl.en || en)}</div></div>
+    return bodySlide(
+      o,
+      `<div class="head"><h2>${esc(sl.title || '')}</h2><div class="fl"></div><div class="en">${esc(sl.en || en)}</div></div>
       <div class="imgrow${imgFlip ? ' rev' : ''}">
         <div class="pic"><span class="fr"></span><img src="${esc(sl.image)}" crossorigin="anonymous"></div>
         <div class="txt">${sl.intro ? `<div class="lead">${esc(sl.intro)}</div>` : ''}${lis}</div>
-      </div></div></div>`
+      </div>`,
+    )
   }
   const items = (sl.bullets || []).map((s) => s.trim()).filter(Boolean).slice(0, 6)
   const n = items.length
@@ -365,7 +405,10 @@ function content(sl: DeckSlideIn, en: string, o: DeckOutline, imgFlip = false, l
   let body: string
   if (branch === 'timeline') {
     body = `<div class="steps"><div class="track">${items
-      .map((b, i) => `<div class="st"><div class="dot">${i + 1}</div><div class="sl">${esc(b)}</div></div>`)
+      .map(
+        (b, i) =>
+          `<div class="st"><div class="dot">${ic(b, i, 26)}</div><div class="sn">STEP ${pad2(i + 1)}</div><div class="sl">${esc(b)}</div></div>`,
+      )
       .join('')}</div></div>`
   } else if (branch === 'quote') {
     body = `<div class="quote"><div class="q">"</div><div class="qt">${esc(items[0] || '')}</div><div class="tick"></div></div>`
@@ -374,28 +417,32 @@ function content(sl: DeckSlideIn, en: string, o: DeckOutline, imgFlip = false, l
     body = `<div class="cards" style="grid-template-columns:repeat(${Math.max(cards.length, 1)},1fr)">${cards
       .map(
         (b, i) =>
-          `<div class="card"><div class="ring">${i + 1}</div><div class="bd"></div><div class="ct">${para(b)}</div></div>`,
+          `<div class="card"><div class="ic">${ic(b, i, 30)}</div><div class="num">${pad2(i + 1)}</div><div class="ct">${para(b)}</div></div>`,
       )
       .join('')}</div>`
   } else {
     body = `<div class="list">${items
       .map(
-        (b, i) => `<div class="row"><div class="n">${pad2(i + 1)}</div><div class="rt">${esc(b)}</div></div>`,
+        (b, i) =>
+          `<div class="row"><div class="ic">${ic(b, i, 22)}</div><span class="n">${pad2(i + 1)}</span><div class="rt">${esc(b)}</div></div>`,
       )
       .join('')}</div>`
   }
-  return `<div class="slide body">${bgImg(o.bg?.content)}<div class="z">${head(sl, en)}${body}</div></div>`
+  return bodySlide(o, `${head(sl, en)}${body}`)
 }
 
 function bigNumber(sl: DeckSlideIn, en: string, o: DeckOutline): string {
   const b = sl.big_number || { value: '' }
-  return `<div class="slide body">${bgImg(o.bg?.content)}<div class="z">${head(sl, en)}
+  return bodySlide(
+    o,
+    `${head(sl, en)}
     <div class="bignum">
       <div class="bar"></div>
       <div class="v">${esc(b.value || '—')}</div>
       ${b.label ? `<div class="lb">${esc(b.label)}</div>` : ''}
       ${b.note ? `<div class="nt">${esc(b.note)}</div>` : ''}
-    </div></div></div>`
+    </div>`,
+  )
 }
 
 function matrix(sl: DeckSlideIn, en: string, o: DeckOutline): string {
@@ -410,9 +457,11 @@ function matrix(sl: DeckSlideIn, en: string, o: DeckOutline): string {
           .join('')}</div>`,
     )
     .join('')
-  return `<div class="slide body">${bgImg(o.bg?.content)}<div class="z">${head(sl, en)}
-    <div class="mtx">${m.xLabel ? `<div class="xl">${esc(m.xLabel)}</div>` : ''}${m.yLabel ? `<div class="yl">${esc(m.yLabel)}</div>` : ''}${q}</div>
-    </div></div>`
+  return bodySlide(
+    o,
+    `${head(sl, en)}
+    <div class="mtx">${m.xLabel ? `<div class="xl">${esc(m.xLabel)}</div>` : ''}${m.yLabel ? `<div class="yl">${esc(m.yLabel)}</div>` : ''}${q}</div>`,
+  )
 }
 
 function chart(sl: DeckSlideIn, t: DeckTheme, en: string, o: DeckOutline): string {
@@ -439,7 +488,7 @@ function chart(sl: DeckSlideIn, t: DeckTheme, en: string, o: DeckOutline): strin
       })
       .join('')}</div>`
   }
-  return `<div class="slide body">${bgImg(o.bg?.content)}<div class="z">${head(sl, en)}${body}</div></div>`
+  return bodySlide(o, `${head(sl, en)}${body}`)
 }
 
 function compare(sl: DeckSlideIn, en: string, o: DeckOutline): string {
@@ -451,8 +500,7 @@ function compare(sl: DeckSlideIn, en: string, o: DeckOutline): string {
       .slice(0, 5)
       .map((p) => `<div class="ci">${esc(p)}</div>`)
       .join('')}</div>`
-  return `<div class="slide body">${bgImg(o.bg?.content)}<div class="z">${head(sl, en)}
-    <div class="cmp">${col('a', c.left)}${col('b', c.right)}</div></div></div>`
+  return bodySlide(o, `${head(sl, en)}<div class="cmp">${col('a', c.left)}${col('b', c.right)}</div>`)
 }
 
 function swot(sl: DeckSlideIn, en: string, o: DeckOutline): string {
@@ -464,13 +512,16 @@ function swot(sl: DeckSlideIn, en: string, o: DeckOutline): string {
       .slice(0, 4)
       .map((i) => `<div class="qi">· ${esc(i)}</div>`)
       .join('')}</div>`
-  return `<div class="slide body">${bgImg(o.bg?.content)}<div class="z">${head(sl, en)}
+  return bodySlide(
+    o,
+    `${head(sl, en)}
     <div class="swot">
       ${quad('qs', '优势', 'STRENGTHS', s.s)}
       ${quad('qw', '劣势', 'WEAKNESSES', s.w)}
       ${quad('qo', '机会', 'OPPORTUNITIES', s.o)}
       ${quad('qt', '威胁', 'THREATS', s.t)}
-    </div></div></div>`
+    </div>`,
+  )
 }
 
 function closing(o: DeckOutline): string {

@@ -357,6 +357,7 @@ export interface DeckOutlineRaw {
       swot?: { s: string[]; w: string[]; o: string[]; t: string[] }
       big_number?: { value: string; label?: string; note?: string }
       matrix?: { xLabel?: string; yLabel?: string; cells: { title: string; items: string[] }[] }
+      icons?: string[]
       image?: string
     }[]
   }[]
