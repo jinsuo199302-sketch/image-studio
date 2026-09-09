@@ -797,10 +797,25 @@ _DECK_JSON_SPEC = (
 )
 
 
-async def _gen_deck_outline(topic: str, sections: int, extra: str = "", material: str = "") -> dict:
+_DECK_PHOTO_RULE = (
+    "\n用户还上传了以下真实照片（编号从 0 开始）：\n{photo_list}\n"
+    "对于内容跟某张照片契合的普通 slide（有 bullets 的），加一个字段 \"image\": 照片编号（整数）。"
+    "一张照片最多用在一页；不契合就不要硬配，宁可这页不放图。图表页/对比页/SWOT 页不要放图。"
+    "如果有一张照片适合当封面主图，在顶层加 \"cover_image\": 编号。"
+)
+
+
+async def _gen_deck_outline(
+    topic: str, sections: int, extra: str = "", material: str = "", photo_tags: list[str] | None = None
+) -> dict:
     """主题（或整份资料）→ PPT 大纲 JSON（含 title/subtitle/sections + palette + mood）。
-    material 非空时走"重组资料"模式：标题/内容全部从资料提炼，不新增资料里没有的信息。"""
+    material 非空时走"重组资料"模式：标题/内容全部从资料提炼，不新增资料里没有的信息。
+    photo_tags 非空时让模型给合适的 slide 标 "image":编号。"""
     extra_line = f"用户补充要求：{extra}。\n" if extra else ""
+    photo_rule = ""
+    if photo_tags:
+        photo_list = "\n".join(f"[{i}] {t}" for i, t in enumerate(photo_tags))
+        photo_rule = _DECK_PHOTO_RULE.format(photo_list=photo_list)
     if material:
         prompt = (
             "你是资深 PPT 设计师。下面【资料原文】是用户准备好的素材，请把它重组成一份逻辑清晰的幻灯片大纲，"
@@ -810,14 +825,14 @@ async def _gen_deck_outline(topic: str, sections: int, extra: str = "", material
             f"章节数：资料结构清晰就按它自然的段落数（2~6 个）来；否则归纳成约 {sections} 个章节。"
             "每个 section 下 2~4 个 slides，普通 slide 3~5 条 bullets、每条 15~45 字。\n"
             f"{extra_line}"
-            f"{_DECK_JSON_SPEC}\n"
+            f"{_DECK_JSON_SPEC}{photo_rule}\n"
             f"【资料原文】\n{material}"
         )
     else:
         prompt = (
             f"你是资深 PPT 设计师。为主题「{topic}」写一份幻灯片大纲，并给出配套的视觉方案。\n"
             f"{extra_line}"
-            f"{_DECK_JSON_SPEC}\n"
+            f"{_DECK_JSON_SPEC}{photo_rule}\n"
             f"要求：sections 生成 {sections} 个；每个 section 下 2~3 个 slides；普通 slide 配 3~5 条 bullets，"
             "每条 20~45 字，具体、准确、书面语，不空话套话；title/heading 精炼；涉及事实或数据要可靠。"
         )
@@ -886,16 +901,20 @@ def _persist_bg_kit(db: Session, user_id: str, raw_kit: dict) -> dict:
     return out
 
 
-async def _run_deck_job(job_id, user_id, ticket, topic, n, theme, extra, ai_bg, material=""):
+async def _run_deck_job(job_id, user_id, ticket, topic, n, theme, extra, ai_bg, material="", photos=None):
     from app.database import SessionLocal
 
+    photos = photos or []
     db = SessionLocal()
     try:
         user = db.query(models.User).filter(models.User.id == user_id).first()
         if user is None:
             raise RuntimeError("用户不存在")
-        outline = await _gen_deck_outline(topic, n, extra, material)
+        outline = await _gen_deck_outline(
+            topic, n, extra, material, [p["tag"] for p in photos] if photos else None
+        )
         outline = deck_gen.apply_theme_palette(outline, theme)
+        outline = _attach_deck_photos(outline, photos)
         bg = None
         if ai_bg:
             raw_kit = await _gen_deck_bg_kit(outline.get("mood", ""), outline.get("palette") or [])
@@ -946,18 +965,22 @@ async def design_deck(
     extra = payload.extra.strip()[:300]
     await _moderate_text(topic + " " + extra)
     n = min(6, max(2, payload.sections))
+    photos = _clean_deck_photos(payload.photos)
     ticket = billing.consume(db, user, "AIPPT")
 
     if payload.ai_bg:
         job_id = uuid.uuid4().hex
         _HANDOUT_JOBS[job_id] = {"status": "pending", "user_id": user.id}
         _prune_handout_jobs()
-        asyncio.create_task(_run_deck_job(job_id, user.id, ticket, topic, n, payload.theme, extra, True))
+        asyncio.create_task(
+            _run_deck_job(job_id, user.id, ticket, topic, n, payload.theme, extra, True, "", photos)
+        )
         return {"jobId": job_id}
 
     try:
-        outline = await _gen_deck_outline(topic, n, extra)
+        outline = await _gen_deck_outline(topic, n, extra, "", [p["tag"] for p in photos] if photos else None)
         outline = deck_gen.apply_theme_palette(outline, payload.theme)
+        outline = _attach_deck_photos(outline, photos)
         slides = deck_gen.build_deck(outline, payload.theme)
         return {"title": (outline.get("title") or topic), "theme": payload.theme, "slides": slides, "outline": outline}
     except Exception:
@@ -965,9 +988,34 @@ async def design_deck(
         raise
 
 
+def _shrink_jpeg(image_bytes: bytes, max_px: int = 1024, quality: int = 80) -> tuple[bytes, str]:
+    """任意图片 → 缩到 max_px 内的 JPEG 字节。视觉模型调用前统一走这个，
+    原图直传 base64 塞 JSON body 弱网易超时。解析失败原样返回。"""
+    try:
+        im = PILImage.open(io.BytesIO(image_bytes)).convert("RGB")
+        if max(im.size) > max_px:
+            r = max_px / max(im.size)
+            im = im.resize((max(1, round(im.width * r)), max(1, round(im.height * r))), PILImage.LANCZOS)
+        b = io.BytesIO()
+        im.save(b, "JPEG", quality=quality)
+        return b.getvalue(), "image/jpeg"
+    except Exception:
+        return image_bytes, "image/png"
+
+
+def _persist_photo(db: Session, user_id: str, image_bytes: bytes) -> str:
+    """用户为 PPT 上传的照片：缩到 1600px 转 JPEG 落盘，返回可访问 URL。"""
+    data, _ = _shrink_jpeg(image_bytes, max_px=1600, quality=85)
+    file_name = f"{uuid.uuid4().hex}.jpg"
+    (GENERATED_ASSETS_DIR / file_name).write_bytes(data)
+    crud.create_generated_asset(db, user_id, "deck-photo", file_name)
+    return f"/api/ai/generated/{file_name}"
+
+
 async def _transcribe_image_text(image_bytes: bytes, media_type: str) -> str:
     """图片（拍照/截图的备课资料）→ 逐字转录的纯文本，交给大纲模型重组。"""
-    b64 = base64.b64encode(image_bytes).decode()
+    data, ct = _shrink_jpeg(image_bytes, max_px=1600, quality=82)
+    b64 = base64.b64encode(data).decode()
     res = await _post_openlux(
         f"{OPENLUX_BASE_URL}/chat/completions",
         timeout=120,
@@ -981,7 +1029,7 @@ async def _transcribe_image_text(image_bytes: bytes, media_type: str) -> str:
                         "把这张图片里的所有文字完整、逐字转录出来，保留原有的分段和条目结构。"
                         "不要翻译、不要总结、不要补充说明，只输出文字本身。"
                     )},
-                    {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{b64}"}},
+                    {"type": "image_url", "image_url": {"url": f"data:{ct};base64,{b64}"}},
                 ],
             }],
         },
@@ -994,6 +1042,110 @@ async def _transcribe_image_text(image_bytes: bytes, media_type: str) -> str:
     return text[:12000]
 
 
+async def _tag_deck_photos(image_list: list[bytes]) -> list[str]:
+    """一批用户上传的照片 → 每张一句中文描述（给幻灯片自动配图用）。一次视觉调用批量处理。"""
+    content: list[dict] = [{
+        "type": "text",
+        "text": (
+            "下面是用户为一份 PPT 上传的照片。为每一张写一句 8~24 字的中文描述，"
+            "说明画面主体和场景。严格按输入顺序返回一个 JSON 字符串数组，"
+            "长度和图片数量一致，只返回数组本身，不要多余说明。"
+        ),
+    }]
+    for raw in image_list:
+        data, ct = _shrink_jpeg(raw, max_px=768, quality=76)
+        content.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:{ct};base64,{base64.b64encode(data).decode()}"},
+        })
+    tags: list[str] = []
+    try:
+        res = await _post_openlux(
+            f"{OPENLUX_BASE_URL}/chat/completions",
+            timeout=120,
+            headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
+            json={"model": "gemini-3-flash-preview", "messages": [{"role": "user", "content": content}]},
+        )
+        if res.status_code < 400:
+            txt = res.json()["choices"][0]["message"]["content"]
+            m = re.search(r"\[[\s\S]*\]", txt or "")
+            if m:
+                tags = [str(x).strip() for x in json.loads(m.group(0)) if str(x).strip()]
+    except Exception:
+        tags = []
+    tags = tags[: len(image_list)]
+    while len(tags) < len(image_list):
+        tags.append("用户上传的照片")
+    return tags
+
+
+def _clean_deck_photos(photos) -> list[dict]:
+    """客户端带回来的 [{url, tag}]——只认我们自己生成资产目录里的文件，防止塞外链。"""
+    out: list[dict] = []
+    for p in (photos or [])[:12]:
+        url = str((p or {}).get("url") or "")
+        name = url.rsplit("/", 1)[-1]
+        if url.startswith("/api/ai/generated/") and name and "/" not in name and ".." not in name \
+                and (GENERATED_ASSETS_DIR / name).is_file():
+            out.append({"url": url, "tag": str((p or {}).get("tag") or "用户上传的照片")[:60]})
+    return out
+
+
+def _attach_deck_photos(outline: dict, photos: list[dict]) -> dict:
+    """LLM 在 slide 上写的 "image":序号 → 换成真实照片 URL；越界/重复/无效的丢弃。
+    顶层 "cover_image":序号 同样处理。photos = [{"url":..,"tag":..}]。"""
+    if not photos:
+        for sec in outline.get("sections") or []:
+            for sl in sec.get("slides") or []:
+                sl.pop("image", None)
+        outline.pop("cover_image", None)
+        return outline
+    used: set[int] = set()
+    for sec in outline.get("sections") or []:
+        for sl in sec.get("slides") or []:
+            idx = sl.get("image")
+            if isinstance(idx, bool):
+                idx = None
+            if isinstance(idx, int) and 0 <= idx < len(photos) and idx not in used:
+                sl["image"] = photos[idx]["url"]
+                used.add(idx)
+            else:
+                sl.pop("image", None)
+    ci = outline.get("cover_image")
+    if isinstance(ci, int) and not isinstance(ci, bool) and 0 <= ci < len(photos):
+        outline["cover_image"] = photos[ci]["url"]
+    else:
+        outline.pop("cover_image", None)
+    return outline
+
+
+@router.post("/design/deck/photos")
+async def design_deck_photos(
+    files: list[UploadFile] = File(...),
+    user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """AI PPT 配图：上传若干张真实照片 → 存下来 + 视觉模型逐张打标签，
+    返回 [{url, tag}]。前端把它带进 /design/deck 或 /design/deck/material，
+    由大纲模型决定哪一页用哪张。不单独计费（生成时按 AIPPT 扣）。"""
+    _require_openlux()
+    files = files[:12]
+    raws: list[bytes] = []
+    for f in files:
+        raw = await f.read()
+        if not raw:
+            continue
+        if len(raw) > 15 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="单张图片上限 15MB")
+        await _check_not_sensitive_document(raw, f.content_type or "image/jpeg", "PPT 配图")
+        raws.append(raw)
+    if not raws:
+        raise HTTPException(status_code=400, detail="没有可用的图片")
+    tags = await _tag_deck_photos(raws)
+    photos = [{"url": _persist_photo(db, user.id, raw), "tag": tag} for raw, tag in zip(raws, tags)]
+    return {"photos": photos}
+
+
 @router.post("/design/deck/material")
 async def design_deck_material(
     file: UploadFile | None = File(None),
@@ -1002,6 +1154,7 @@ async def design_deck_material(
     theme: str = Form("auto"),
     extra: str = Form(""),
     ai_bg: bool = Form(False),
+    photos_json: str = Form(""),
     user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -1035,6 +1188,11 @@ async def design_deck_material(
     else:
         raise HTTPException(status_code=400, detail="请上传资料文件或粘贴文字")
 
+    try:
+        photos = _clean_deck_photos(json.loads(photos_json) if photos_json.strip() else [])
+    except Exception:
+        photos = []
+
     await _moderate_text(material[:2000] + " " + extra.strip()[:200])
     n = min(6, max(2, sections))
     ticket = billing.consume(db, user, "AIPPT")
@@ -1043,7 +1201,9 @@ async def design_deck_material(
     _HANDOUT_JOBS[job_id] = {"status": "pending", "user_id": user.id}
     _prune_handout_jobs()
     asyncio.create_task(
-        _run_deck_job(job_id, user.id, ticket, "", n, theme, extra.strip()[:300], bool(ai_bg), material)
+        _run_deck_job(
+            job_id, user.id, ticket, "", n, theme, extra.strip()[:300], bool(ai_bg), material, photos
+        )
     )
     return {"jobId": job_id}
 

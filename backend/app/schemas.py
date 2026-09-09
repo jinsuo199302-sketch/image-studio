@@ -162,6 +162,8 @@ class DeckRequest(BaseModel):
     theme: str = "auto"
     extra: str = ""
     ai_bg: bool = False
+    # AI 配图：/design/deck/photos 返回的 [{url, tag}]，由大纲模型决定哪页用哪张
+    photos: list[dict] = []
 
 
 class DeckPptxRequest(BaseModel):

@@ -36,6 +36,7 @@ const composed = computed(() => {
     theme: theme.value,
     sections: props.outline.sections || [],
     bg: props.bg ?? null,
+    coverImage: props.outline.cover_image,
   }
   return composeDeck(o)
 })

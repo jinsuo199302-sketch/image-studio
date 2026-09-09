@@ -6,8 +6,10 @@ import { textToPptx, imagesToPptx } from '../../../../services/pdfApi'
 import {
   generateDeck,
   generateDeckFromMaterial,
+  uploadDeckPhotos,
   deckToPptx,
   type DeckResult,
+  type DeckPhoto,
 } from '../../../../services/designApi'
 import { preloadSlideImages, type SlideData } from '../../../../utils/slideRender'
 import { prepareUpload } from '../../../../utils/prepImage'
@@ -70,6 +72,26 @@ function pickMatFile(e: Event) {
   matFile.value = f
 }
 
+// AI 配图：上传真实照片，AI 自动分到合适的页
+const deckPhotos = ref<{ file: File; url: string }[]>([])
+const photoInput = ref<HTMLInputElement>()
+async function pickPhotos(e: Event) {
+  const picked = Array.from((e.target as HTMLInputElement).files ?? [])
+  ;(e.target as HTMLInputElement).value = ''
+  for (const f of picked) {
+    if (deckPhotos.value.length >= 12) {
+      ElMessage.warning('最多 12 张配图')
+      break
+    }
+    const p = await prepareUpload(f)
+    deckPhotos.value.push({ file: p, url: URL.createObjectURL(p) })
+  }
+}
+function rmPhoto(i: number) {
+  URL.revokeObjectURL(deckPhotos.value[i].url)
+  deckPhotos.value.splice(i, 1)
+}
+
 async function genDeck() {
   const useMaterial = aiSource.value === 'material'
   if (useMaterial) {
@@ -84,6 +106,10 @@ async function genDeck() {
   generating.value = true
   deck.value = null
   try {
+    let photos: DeckPhoto[] = []
+    if (deckPhotos.value.length) {
+      photos = await uploadDeckPhotos(deckPhotos.value.map((p) => p.file))
+    }
     const r = useMaterial
       ? await generateDeckFromMaterial(
           { file: matFile.value ?? undefined, pastedText: matText.value.trim() || undefined },
@@ -91,8 +117,16 @@ async function genDeck() {
           theme.value,
           extra.value.trim(),
           aiBg.value,
+          photos,
         )
-      : await generateDeck(topic.value.trim(), sections.value, theme.value, extra.value.trim(), aiBg.value)
+      : await generateDeck(
+          topic.value.trim(),
+          sections.value,
+          theme.value,
+          extra.value.trim(),
+          aiBg.value,
+          photos,
+        )
     await preloadSlideImages(r.slides as unknown as SlideData[])
     deck.value = r
     await nextTick()
@@ -229,6 +263,34 @@ function rmImg(i: number) {
             :placeholder="matFile ? '（已选文件，这里可留空）也可以直接粘贴补充文字' : '或直接把备课稿 / 讲话稿 / 材料粘贴进来'"
           />
         </template>
+
+        <div>
+          <p class="mb-1 text-xs text-gray-500">配图（可选）· AI 自动放到合适的页</p>
+          <input ref="photoInput" type="file" accept="image/*" multiple class="hidden" @change="pickPhotos" />
+          <div v-if="deckPhotos.length" class="mb-1.5 grid grid-cols-4 gap-1.5">
+            <div
+              v-for="(p, i) in deckPhotos"
+              :key="p.url"
+              class="group relative overflow-hidden rounded-md border border-gray-200"
+            >
+              <img :src="p.url" class="h-14 w-full object-cover" />
+              <button
+                class="absolute right-0.5 top-0.5 rounded bg-black/45 p-0.5 text-white opacity-0 transition group-hover:opacity-100"
+                @click="rmPhoto(i)"
+              >
+                <el-icon :size="10"><Close /></el-icon>
+              </button>
+            </div>
+          </div>
+          <button
+            v-if="deckPhotos.length < 12"
+            class="w-full rounded-md border border-dashed border-gray-300 py-1.5 text-[11px] text-gray-400 transition hover:border-violet-400 hover:text-violet-500"
+            @click="photoInput?.click()"
+          >
+            + 选择照片（活动照 / 现场图 / 作品图，最多 12 张）
+          </button>
+        </div>
+
         <div class="flex items-center gap-3">
           <span class="shrink-0 text-xs text-gray-500">章节数</span>
           <el-slider v-model="sections" :min="2" :max="6" :step="1" show-stops :show-tooltip="false" class="!flex-1" />

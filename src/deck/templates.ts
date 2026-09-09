@@ -37,6 +37,8 @@ export interface DeckSlideIn {
   compare?: DeckCompare
   /** SWOT 四象限 */
   swot?: DeckSwot
+  /** 用户上传的真实照片 URL——有则这一页排成「图文分栏」 */
+  image?: string
 }
 export interface DeckSection {
   heading: string
@@ -50,6 +52,8 @@ export interface DeckOutline {
   sections: DeckSection[]
   /** AI 生成的整页背景（可选） */
   bg?: { cover?: string; content?: string; section?: string } | null
+  /** 用户上传的照片里选一张当封面主图（可选） */
+  coverImage?: string
 }
 
 const esc = (s = '') =>
@@ -76,6 +80,20 @@ function css(t: DeckTheme): string {
   .s-cover h1{font-size:52px;line-height:1.18;color:${t.primaryDk};font-weight:800;margin:14px 0 20px}
   .s-cover .sub{font-size:19px;color:#7c7c7c;margin-top:20px}
   .s-cover .meta{margin-top:36px;font-size:13px;color:#9a9a9a;line-height:2}
+  /* 封面带用户照片：右 46% 放图，左侧留白放标题 */
+  .s-cover.has-pic .panel{background:transparent;left:76px;width:600px;padding:0}
+  .s-cover .cpic{position:absolute;right:0;top:0;width:46%;height:100%;object-fit:cover;z-index:1}
+  .s-cover.has-pic h1{color:${t.primaryDk}}
+
+  /* 图文分栏内容页 */
+  .imgrow{flex:1;display:flex;gap:46px;margin-top:30px;align-items:stretch}
+  .imgrow.rev{flex-direction:row-reverse}
+  .imgrow .pic{width:44%;flex:none;border-radius:14px;overflow:hidden;background:#eef0f3}
+  .imgrow .pic img{width:100%;height:100%;object-fit:cover;display:block}
+  .imgrow .txt{flex:1;display:flex;flex-direction:column;justify-content:center;gap:16px}
+  .imgrow .lead{font-size:15px;line-height:1.6;color:#8b8b8b}
+  .imgrow .li{font-size:16px;line-height:1.6;padding-left:18px;position:relative}
+  .imgrow .li::before{content:"";position:absolute;left:0;top:9px;width:7px;height:7px;border-radius:50%;background:${t.accent}}
 
   /* 目录 */
   .s-toc{padding:76px 116px}
@@ -187,7 +205,9 @@ const bgImg = (url?: string) => (url ? `<img class="bg" src="${esc(url)}" crosso
 /* ── 页型 ─────────────────────────────────────────────── */
 function cover(o: DeckOutline): string {
   const b = o.bg?.cover
-  return `<div class="slide s-cover">${bgImg(b)}<div class="side"></div>
+  const pic = !b && o.coverImage
+  return `<div class="slide s-cover${pic ? ' has-pic' : ''}">${bgImg(b)}<div class="side"></div>
+    ${pic ? `<img class="cpic" src="${esc(o.coverImage!)}" crossorigin="anonymous">` : ''}
     <div class="panel">
       <div class="kick">KEYNOTE PRESENTATION</div>
       <h1>${esc(o.title)}</h1><div class="tick"></div>
@@ -228,7 +248,21 @@ function head(sl: DeckSlideIn, en: string): string {
 
 const STEP_RE = /流程|步骤|阶段|环节|顺序|先后|第一步|首先/
 
-function content(sl: DeckSlideIn, en: string, o: DeckOutline): string {
+function content(sl: DeckSlideIn, en: string, o: DeckOutline, imgFlip = false): string {
+  if (sl.image) {
+    const lis = (sl.bullets || [])
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .slice(0, 5)
+      .map((b) => `<div class="li">${esc(b)}</div>`)
+      .join('')
+    return `<div class="slide body">${bgImg(o.bg?.content)}<div class="z">
+      <div class="head"><h2>${esc(sl.title || '')}</h2><div class="fl"></div><div class="en">${esc(sl.en || en)}</div></div>
+      <div class="imgrow${imgFlip ? ' rev' : ''}">
+        <div class="pic"><img src="${esc(sl.image)}" crossorigin="anonymous"></div>
+        <div class="txt">${sl.intro ? `<div class="lead">${esc(sl.intro)}</div>` : ''}${lis}</div>
+      </div></div></div>`
+  }
   const items = (sl.bullets || []).map((s) => s.trim()).filter(Boolean).slice(0, 6)
   const n = items.length
   let body: string
@@ -328,19 +362,25 @@ export function composeDeck(o: DeckOutline): { styleTag: string; slides: string[
   const t = o.theme
   const slides: string[] = [cover(o)]
   if (o.sections.length) slides.push(toc(o))
+  let imgFlip = false
   o.sections.forEach((sec, si) => {
     slides.push(section(sec, si + 1, o.sections.length, o))
     sec.slides.forEach((sl) => {
       const en = EN[si % EN.length]
-      slides.push(
-        sl.swot
-          ? swot(sl, en, o)
-          : sl.compare
-            ? compare(sl, en, o)
-            : sl.data?.items?.length
-              ? chart(sl, t, en, o)
-              : content(sl, en, o),
-      )
+      if (sl.image && !sl.swot && !sl.compare && !sl.data?.items?.length) {
+        slides.push(content(sl, en, o, imgFlip))
+        imgFlip = !imgFlip
+      } else {
+        slides.push(
+          sl.swot
+            ? swot(sl, en, o)
+            : sl.compare
+              ? compare(sl, en, o)
+              : sl.data?.items?.length
+                ? chart(sl, t, en, o)
+                : content(sl, en, o),
+        )
+      }
     })
   })
   slides.push(closing(o))

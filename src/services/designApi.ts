@@ -342,6 +342,7 @@ export interface DeckOutlineRaw {
   subtitle?: string
   palette?: string[]
   mood?: string
+  cover_image?: string
   sections: {
     heading: string
     en?: string
@@ -353,6 +354,7 @@ export interface DeckOutlineRaw {
       data?: { kind: 'bar' | 'stat'; items: { label: string; value: string | number }[] }
       compare?: { left: { heading: string; points: string[] }; right: { heading: string; points: string[] } }
       swot?: { s: string[]; w: string[]; o: string[]; t: string[] }
+      image?: string
     }[]
   }[]
 }
@@ -378,6 +380,19 @@ async function pollDeckJob(jobId: string): Promise<DeckResult> {
   throw new Error('生成超时，请稍后重试')
 }
 
+export interface DeckPhoto {
+  url: string
+  tag: string
+}
+
+/** AI PPT 配图：上传若干张真实照片 → 每张打一句标签，返回 [{url,tag}]。生成时带上即可。 */
+export async function uploadDeckPhotos(files: File[]): Promise<DeckPhoto[]> {
+  const form = new FormData()
+  for (const f of files) form.append('files', f, f.name || 'photo.jpg')
+  const r = await authPostForm<{ photos: DeckPhoto[] }>('/design/deck/photos', form, '照片上传失败')
+  return r.photos
+}
+
 /** AI 生成 PPT：主题 → 一套幻灯片。aiBg=true 时后端另出 3 张整页背景图，走异步轮询。 */
 export async function generateDeck(
   topic: string,
@@ -385,10 +400,11 @@ export async function generateDeck(
   theme: string,
   extra = '',
   aiBg = false,
+  photos: DeckPhoto[] = [],
 ): Promise<DeckResult> {
   const r = await authPostJson<DeckResult & { jobId?: string }>(
     '/design/deck',
-    { topic, sections, theme, extra, ai_bg: aiBg },
+    { topic, sections, theme, extra, ai_bg: aiBg, photos },
     'PPT 生成失败',
   )
   return r.jobId ? pollDeckJob(r.jobId) : r
@@ -404,6 +420,7 @@ export async function generateDeckFromMaterial(
   theme: string,
   extra = '',
   aiBg = false,
+  photos: DeckPhoto[] = [],
 ): Promise<DeckResult> {
   const form = new FormData()
   if (input.file) form.append('file', input.file, input.file.name || 'material')
@@ -412,6 +429,7 @@ export async function generateDeckFromMaterial(
   form.append('theme', theme)
   form.append('extra', extra)
   form.append('ai_bg', String(aiBg))
+  if (photos.length) form.append('photos_json', JSON.stringify(photos))
   const { jobId } = await authPostForm<{ jobId: string }>('/design/deck/material', form, 'PPT 生成失败')
   return pollDeckJob(jobId)
 }

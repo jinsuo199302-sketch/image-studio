@@ -191,7 +191,36 @@ def _fit_size(text: str, box_w: float, base: float, max_lines: int = 2) -> float
     return size
 
 
-def _cover(t: dict, title: str, subtitle: str, bg: str | None) -> dict:
+def _cover(t: dict, title: str, subtitle: str, bg: str | None, cover_image: str | None = None) -> dict:
+    if cover_image and not bg:
+        # 用户上传的真实照片当封面主图：右 46% 放图，左侧留白放标题
+        pic_w = W * 0.46
+        els = [
+            _r(0, 0, W, H, "#ffffff"),
+            _img(W - pic_w, 0, pic_w, H, cover_image),
+            _r(0, 0, 16, H, t["primary"]),
+            _r(0, 0, 16, 128, t["accent"]),
+        ]
+        box_w = W - pic_w - M - 40
+        tsize = _fit_size(title, box_w, DISPLAY, 3)
+        tlines = estimate_text_lines(title, box_w, tsize)
+        title_h = tsize * (1 + 1.15 * (tlines - 1))
+        els += [
+            _t(M + 12, 176, box_w, "KEYNOTE PRESENTATION", CAP, t["accent"], bold=True,
+               font=t["kicker_font"], spacing=4),
+            _t(M + 12, 220, box_w, title, tsize, t["primary_dk"], bold=True, font=t["title_font"]),
+            _r(M + 16, 220 + title_h + 22, 84, 6, t["accent"]),
+        ]
+        yy = 220 + title_h + 52
+        if subtitle:
+            els.append(_t(M + 12, yy, box_w, subtitle, H3, t["muted"]))
+            yy += estimate_text_height(subtitle, box_w, H3) + 24
+        els += [
+            _t(M + 12, max(yy, H - 150), 400, "汇报单位：____________", CAP, t["muted"]),
+            _t(M + 12, max(yy, H - 150) + 26, 400, "汇报时间：____________", CAP, t["muted"]),
+        ]
+        return {"background": "#ffffff", "elements": els, "w": W, "h": H}
+
     on_img = bg is not None
     els = _bg_layer(t, bg, "cover")
     tsize = _fit_size(title, CW * 0.66, DISPLAY, 2)
@@ -292,9 +321,36 @@ def _content_head(t: dict, title: str, en: str, page: int, bg: str | None) -> tu
     return els, 52 + H2 * 1.25 + 34
 
 
-def _content(t: dict, sec_idx: int, title: str, en: str, intro: str, bullets: list[str], page: int, bg: str | None) -> dict:
+def _content(t: dict, sec_idx: int, title: str, en: str, intro: str, bullets: list[str], page: int,
+             bg: str | None, image: str | None = None) -> dict:
     els, y = _content_head(t, title, en or _EN_CAP[sec_idx % len(_EN_CAP)], page, bg)
     items = [b for b in bullets if b][:5]
+
+    if image:
+        # 图文分栏：一侧放用户照片，另一侧标题下的要点。左右按章节奇偶交替
+        ink = t["ink"]
+        img_left = sec_idx % 2 == 0
+        gap = 46
+        img_w = CW * 0.44
+        txt_w = CW - img_w - gap
+        top = y + 6
+        h_area = (H - 56) - top
+        img_x = M if img_left else M + txt_w + gap
+        txt_x = (M + img_w + gap) if img_left else M
+        els.append(_img(img_x, top, img_w, h_area, image))
+        ty = top + 4
+        if intro:
+            els.append(_t(txt_x, ty, txt_w, intro, BODY, t["muted"]))
+            ty += estimate_text_height(intro, txt_w, BODY) + 20
+        for b in items:
+            bh = estimate_text_height(b, txt_w - 24, BODY)
+            els += [
+                _circle(txt_x + 5, ty + BODY * 0.7, 3.5, fill=t["accent"]),
+                _t(txt_x + 22, ty, txt_w - 24, b, BODY, ink),
+            ]
+            ty += bh + 18
+        return {"background": t["paper"], "elements": els, "w": W, "h": H}
+
     if intro:
         ih = estimate_text_height(intro, CW - 120, BODY)
         els.append(_t(M + 60, y, CW - 120, intro, BODY, t["muted"], align="center"))
@@ -500,7 +556,8 @@ def build_deck(outline: dict, theme_key: str = "red", bg: dict | None = None) ->
     sections = [s for s in (outline.get("sections") or []) if s.get("heading")]
     total = len(sections)
 
-    slides = [_cover(t, title, subtitle, bg.get("cover"))]
+    cover_image = outline.get("cover_image") if isinstance(outline.get("cover_image"), str) else None
+    slides = [_cover(t, title, subtitle, bg.get("cover"), cover_image)]
     if sections:
         slides.append(_toc(t, sections, bg.get("content")))
     page = len(slides) + 1
@@ -526,6 +583,7 @@ def build_deck(outline: dict, theme_key: str = "red", bg: dict | None = None) ->
                     t, i, ttl, en, (sl.get("intro") or "").strip(),
                     [str(x).strip() for x in (sl.get("bullets") or []) if str(x).strip()],
                     page, bg.get("content"),
+                    sl.get("image") if isinstance(sl.get("image"), str) else None,
                 ))
             page += 1
     slides.append(_closing(t, title, bg.get("content")))
