@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { UploadFilled, Close, ArrowUp, ArrowDown } from '@element-plus/icons-vue'
 import { textToPptx, imagesToPptx } from '../../../../services/pdfApi'
@@ -58,6 +58,7 @@ const sections = ref(4)
 const theme = ref('auto')
 const extra = ref('')
 const aiBg = ref(false)
+const isGeoTheme = computed(() => theme.value === 'geoblue')
 const deck = ref<DeckResult | null>(null)
 const generating = ref(false)
 
@@ -373,7 +374,11 @@ function rmImg(i: number) {
         />
         <label class="flex cursor-pointer items-start gap-2 rounded-md border border-gray-200 p-2 text-xs">
           <el-checkbox v-model="aiBg" class="!h-4" />
-          <span class="text-gray-600">
+          <span v-if="isGeoTheme" class="text-gray-600">
+            AI 按主题生成配图（嵌进六边形 / 三角形图框）<br />
+            <span class="text-[11px] text-gray-400">几何风：AI 生成 4~6 张相关照片自动排进图文页；多花 2~4 分钟</span>
+          </span>
+          <span v-else class="text-gray-600">
             AI 生成整套背景（封面 + 章节页设计图 + 正文页底图）<br />
             <span class="text-[11px] text-gray-400">AI 按主题画好背景，我们叠文字和图标；多花 2~4 分钟</span>
           </span>

@@ -786,8 +786,9 @@ _DECK_JSON_SPEC = (
     '"section_image_prompt":"给章节过渡页配一张 16:9 氛围图的提示词，风格跟封面一致",'
     '"content_image_prompt":"给正文页配一张几乎纯白、只角落有极淡装饰的底图提示词",'
     '"cover_features":[{"value":"4K","label":"超清影像","en":"4K Ultra HD"}],'
+    '"photo_prompts":["一张跟主题强相关的写实照片的英文提示词","另一张…"],'
     '"sections":[{"heading":"章节标题","en":"章节英文短标题(全大写,2~4词)",'
-    '"slides":[{"layout":"版式类型","title":"小标题","en":"英文短标题(全大写,1~3词)","intro":"1~2句导语,可空","bullets":["要点一","要点二"]}]}]}\n'
+    '"slides":[{"layout":"版式类型","title":"小标题","en":"英文短标题(全大写,1~3词)","intro":"1~2句导语,可空","bullets":["要点一","要点二"],"image":0}]}]}\n'
     "\n【关键】每个 slide 必须先判断内容最适合哪种版式,填 layout 字段(只做这道选择题,不要输出坐标/字号)。"
     "可选 layout 及对应要填的数据字段:\n"
     '- "cards"：2~3 个并列要点(最常用)。填 bullets(2~3 条,每条 12~40 字)\n'
@@ -821,12 +822,20 @@ _DECK_JSON_SPEC = (
     "（每项 value=数字或短词、label=中文说明 4~6 字、en=英文，例 {\"value\":\"46分钟\",\"label\":\"超长续航\",\"en\":\"46 Min Flight\"}）；"
     "不是发布类主题就设为空数组 []。\n"
     "文案排版规范（办公稿标准，务必遵守）：所有中文标点用全角（，。、；：？！“”（）），不要用半角逗号句号；"
-    "中文字符之间不加空格；每条 bullet 和 intro 都是完整通顺的句子、以句号结尾；title/heading 是短语、结尾不加标点。"
+    "中文字符之间不加空格；每条 bullet 和 intro 都是完整通顺的句子、以句号结尾；title/heading 是短语、结尾不加标点。\n"
+    "photo_prompts：给这份 PPT 配 4~6 张写实照片的英文提示词（会用 AI 生成，嵌在几何图框里）。"
+    "每条描述一张跟主题强相关的高质量摄影照片——单一清晰主体（产品实拍 / 行业场景 / 人物工作 / 环境实景），"
+    "自然真实的光线，主体居中或偏一侧留出干净空间，画面绝对不要任何文字/水印/logo/拼贴/示意图。"
+    "主题实在不适合配实拍照片（纯理论 / 纯数据）就给空数组 []。\n"
+    "配图分配：在 2~4 个内容契合的普通 slide（有 bullets 的）上加 \"image\": 照片编号（0 起的整数，对应 photo_prompts 里第几条）。"
+    "可以另外挑 1 个 slide 把 layout 设成 \"gallery\" 并加 \"images\": [编号,编号,编号]（正好 3 张，bullets 写这 3 张的短说明）。"
+    "一张照片最多用一次；图表页 / 对比页 / SWOT / matrix / big_number 不放图；不契合宁可不放。"
 )
 
 
 _DECK_PHOTO_RULE = (
     "\n用户还上传了以下真实照片（编号从 0 开始）：\n{photo_list}\n"
+    "这种情况【忽略 photo_prompts】，photo_prompts 直接给空数组 []；配图只用用户上传的这些照片。"
     "对于内容跟某张照片契合的普通 slide（有 bullets 的），加一个字段 \"image\": 照片编号（整数）。"
     "一张照片最多用在一页；不契合就不要硬配，宁可这页不放图。图表页/对比页/SWOT 页不要放图。"
     "如果有一张照片适合当封面主图，在顶层加 \"cover_image\": 编号。"
@@ -943,6 +952,29 @@ def _persist_bg_kit(db: Session, user_id: str, raw_kit: dict) -> dict:
     return out
 
 
+_DECK_PHOTO_GUARD = (
+    " Realistic professional photograph, natural lighting, single clear subject, "
+    "some clean negative space, no text, no watermark, no logo, no collage, not an illustration."
+)
+
+
+async def _gen_deck_spot_photos(prompts: list[str], db: Session, user_id: str) -> list[dict]:
+    """一组英文提示词 → 逐张 AI 生成写实照片，落盘。返回 [{url, tag}]（跟上传照片同结构，
+    直接喂 _attach_deck_photos）。单张失败跳过，整体不致命。"""
+    out: list[dict] = []
+    for p in prompts[:6]:
+        p = str(p or "").strip()
+        if not p:
+            continue
+        try:
+            raw = await _gen_image_bytes(p + _DECK_PHOTO_GUARD, "1024x1024", attempts=2, timeout=150)
+        except Exception:
+            continue
+        a = _persist_asset_bytes(db, user_id, "deck-photo", raw)
+        out.append({"url": f"/api/ai/generated/{a.file_name}", "tag": p[:60]})
+    return out
+
+
 async def _run_deck_job(job_id, user_id, ticket, topic, n, theme, extra, ai_bg, material="", photos=None, palette=None):
     from app.database import SessionLocal
 
@@ -957,9 +989,15 @@ async def _run_deck_job(job_id, user_id, ticket, topic, n, theme, extra, ai_bg, 
         )
         outline = deck_gen.normalize_outline_text(outline)
         outline = deck_gen.apply_theme_palette(outline, theme, palette)
+        is_geo = theme in deck_gen.GEO_THEMES
+        # 用户没上传照片、又勾了「AI 配图」：几何风 → AI 按 photo_prompts 生成写实照片嵌进图框
+        if not photos and ai_bg and is_geo:
+            prompts = [p for p in (outline.get("photo_prompts") or []) if isinstance(p, str) and p.strip()][:6]
+            if prompts:
+                photos = await _gen_deck_spot_photos(prompts, db, user_id)
         outline = _attach_deck_photos(outline, photos)
         bg = None
-        if ai_bg and theme not in deck_gen.GEO_THEMES:
+        if ai_bg and not is_geo:
             raw_kit = await _gen_deck_cover_kit(outline)
             bg = _persist_bg_kit(db, user_id, raw_kit)
         slides = deck_gen.build_deck(outline, theme, bg)
@@ -998,9 +1036,9 @@ async def design_deck(
     user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(get_db),
 ):
-    """AI 生成 PPT（一期）：主题 → 大纲(+配色) → 排成一套幻灯片。
-    ai_bg=True 时另外生成 3 张 AI 整页背景，走异步 job（轮询 /design/handout/job/{id}）。
-    计费「AIPPT」。"""
+    """AI 生成 PPT（一期）：主题 → 大纲(+配色) → 排成一套幻灯片。一律走异步 job（轮询
+    /design/handout/job/{id}）。ai_bg=True：非几何风生成整页 AI 底图；几何风按主题生成
+    4~6 张写实照片嵌进几何图框。计费「AIPPT」。"""
     _require_openlux()
     topic = payload.topic.strip()
     if not topic:
@@ -1012,7 +1050,8 @@ async def design_deck(
     ref_pal = [c for c in (payload.palette or []) if re.match(r"^#[0-9a-fA-F]{6}$", str(c))][:5]
     ref_pal = ref_pal if len(ref_pal) == 5 else None
     ticket = billing.consume(db, user, "AIPPT")
-    ai_bg = payload.ai_bg and payload.theme not in deck_gen.GEO_THEMES  # 几何风不生图
+    # ai_bg：非几何风 = 生成整页 AI 底图；几何风 = 按主题生成写实照片嵌进几何图框
+    ai_bg = bool(payload.ai_bg)
 
     # 一律走异步 job：大纲(+可选生图)可能要 1~3 分钟，同步返回会被 nginx 网关超时掐断
     job_id = uuid.uuid4().hex
@@ -1147,6 +1186,19 @@ def _attach_deck_photos(outline: dict, photos: list[dict]) -> dict:
                 used.add(idx)
             else:
                 sl.pop("image", None)
+            imgs = sl.get("images")
+            if isinstance(imgs, list):
+                urls = []
+                for j in imgs:
+                    if isinstance(j, int) and not isinstance(j, bool) and 0 <= j < len(photos) and j not in used:
+                        urls.append(photos[j]["url"])
+                        used.add(j)
+                if len(urls) >= 2:
+                    sl["images"] = urls[:3]
+                else:
+                    sl.pop("images", None)
+            else:
+                sl.pop("images", None)
     ci = outline.get("cover_image")
     if isinstance(ci, int) and not isinstance(ci, bool) and 0 <= ci < len(photos):
         outline["cover_image"] = photos[ci]["url"]
@@ -1303,7 +1355,7 @@ async def design_deck_material(
 
     await _moderate_text(material[:2000] + " " + extra.strip()[:200])
     n = min(6, max(2, sections))
-    ai_bg2 = bool(ai_bg) and theme not in deck_gen.GEO_THEMES
+    ai_bg2 = bool(ai_bg)  # 几何风时 = AI 按主题配图；非几何风 = AI 整页底图
     ticket = billing.consume(db, user, "AIPPT")
 
     job_id = uuid.uuid4().hex

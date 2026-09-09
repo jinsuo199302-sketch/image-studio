@@ -360,6 +360,7 @@ export interface DeckOutlineRaw {
       matrix?: { xLabel?: string; yLabel?: string; cells: { title: string; items: string[] }[] }
       icons?: string[]
       image?: string
+      images?: string[]
     }[]
   }[]
 }

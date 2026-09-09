@@ -350,6 +350,7 @@ export type DeckLayout =
   | 'spoke'
   | 'hive'
   | 'cycle'
+  | 'gallery'
 export interface DeckSlideIn {
   /** LLM 判断的版式类型；缺失时按内容推断 */
   layout?: DeckLayout | string
@@ -368,8 +369,10 @@ export interface DeckSlideIn {
   matrix?: DeckMatrix
   /** 每条要点对应的图标语义名（可选，LLM 给；缺了按关键词自动挑） */
   icons?: string[]
-  /** 用户上传的真实照片 URL——有则这一页排成「图文分栏」 */
+  /** 真实照片 URL（用户上传 / AI 生成）——有则这一页排成「图文分栏」，几何风套图框 */
   image?: string
+  /** 一组照片 URL（正好 2~3 张）——gallery 版式：几何图框照片墙 */
+  images?: string[]
 }
 export interface DeckSection {
   heading: string
@@ -723,6 +726,23 @@ function css(t: DeckTheme): string {
   .trif-b{position:absolute;inset:-10px;background:${t.accent};clip-path:polygon(0 0,100% 0,50% 100%);z-index:0}
   .imgrow.tri{align-items:center;gap:56px}
   .imgrow.tri .pic{width:auto;flex:none}
+  /* 大图出血照片页 */
+  .photobig{flex:1;display:flex;gap:0;margin-top:18px;position:relative}
+  .photobig .pbtx{flex:1;display:flex;flex-direction:column;justify-content:center;gap:20px;padding-right:44px}
+  .photobig .pbtx .lead{font-size:16px;color:${t.ink};line-height:1.7}
+  .photobig .pbi{display:flex;align-items:flex-start;gap:12px;font-size:14px;color:${t.ink};line-height:1.5}
+  .photobig .pbi .pbn{flex:none;width:26px;height:26px;border-radius:50%;background:${t.primary};color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;font-family:"Arial","Microsoft YaHei",sans-serif}
+  .photobig .pbimg{position:absolute;right:-96px;top:-72px;bottom:-72px;width:46%;overflow:hidden}
+  .photobig .pbimg img{width:100%;height:100%;object-fit:cover}
+  .photobig .pbimg .pbfr{position:absolute;left:0;top:0;bottom:0;width:10px;background:${t.accent}}
+  /* 照片墙 */
+  .gallery{flex:1;display:flex;align-items:center;justify-content:center;gap:44px;margin-top:18px}
+  .gallery .gcell{display:flex;flex-direction:column;align-items:center;gap:16px;width:300px}
+  .gallery .gcell .hexf{width:260px}
+  .gallery .gcell .gph{width:280px;aspect-ratio:4/3;overflow:hidden;position:relative}
+  .gallery .gcell .gph::after{content:"";position:absolute;left:0;bottom:0;width:46px;height:6px;background:${t.accent}}
+  .gallery .gcell .gph img{width:100%;height:100%;object-fit:cover}
+  .gallery .gcell .gcap{font-size:13.5px;color:${t.ink};text-align:center;line-height:1.5;max-width:260px}
   /* 蜂窝六边形群 */
   .hive{flex:1;position:relative;align-self:center;width:640px;height:440px;margin-top:8px}
   .hive .hvc{position:absolute;transform:translate(-50%,-50%);width:130px;height:148px;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;padding:12px;font-size:12px;line-height:1.3}
@@ -925,14 +945,41 @@ function content(sl: DeckSlideIn, en: string, o: DeckOutline, imgFlip = false, l
       .map((b) => `<div class="li">${esc(b)}</div>`)
       .join('')
     const geo = isGeo(o)
-    const tri = geo && _geoIdx % 2 === 1
+    // geo 风照片页三种框：六边形 / 倒三角 / 大图出血，按页序轮换。导语放正文列，不走 head
+    const hdNoIntro = { ...sl, intro: '' }
+    const gv = geo ? _geoIdx % 3 : -1
+    if (gv === 2) {
+      return bodySlide(
+        o,
+        `${head(hdNoIntro, en, o)}
+        <div class="photobig">
+          <div class="pbtx">${sl.intro ? `<div class="lead">${esc(sl.intro)}</div>` : ''}${(sl.bullets || [])
+            .map((s) => s.trim())
+            .filter(Boolean)
+            .slice(0, 3)
+            .map((b, i) => `<div class="pbi"><span class="pbn">${pad2(i + 1)}</span><span>${esc(b)}</span></div>`)
+            .join('')}</div>
+          <div class="pbimg"><img src="${esc(sl.image)}" crossorigin="anonymous"><span class="pbfr"></span></div>
+        </div>`,
+      )
+    }
     const picBlock = geo
-      ? `<div class="pic">${tri ? triImg(sl.image) : hexImg(sl.image)}</div>`
+      ? `<div class="pic">${gv === 1 ? triImg(sl.image) : hexImg(sl.image)}</div>`
       : `<div class="pic"><span class="fr"></span><img src="${esc(sl.image)}" crossorigin="anonymous"></div>`
+    if (geo) {
+      return bodySlide(
+        o,
+        `${head(hdNoIntro, en, o)}
+        <div class="imgrow${imgFlip ? ' rev' : ''} ${gv === 1 ? 'tri' : 'hex'}">
+          ${picBlock}
+          <div class="txt">${sl.intro ? `<div class="lead">${esc(sl.intro)}</div>` : ''}${lis}</div>
+        </div>`,
+      )
+    }
     return bodySlide(
       o,
       `<div class="head"><h2>${esc(sl.title || '')}</h2><div class="fl"></div><div class="en">${esc(sl.en || en)}</div></div>
-      <div class="imgrow${imgFlip ? ' rev' : ''}${geo ? (tri ? ' tri' : ' hex') : ''}">
+      <div class="imgrow${imgFlip ? ' rev' : ''}">
         ${picBlock}
         <div class="txt">${sl.intro ? `<div class="lead">${esc(sl.intro)}</div>` : ''}${lis}</div>
       </div>`,
@@ -1125,6 +1172,7 @@ const CONTENT_LAYOUTS = new Set([
   'spoke',
   'hive',
   'cycle',
+  'gallery',
 ])
 
 function spokeLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
@@ -1147,6 +1195,22 @@ function cycleLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
   return bodySlide(o, `${head(sl, en, o)}${arrowRing(o.theme, center, items)}`)
 }
 
+/** 照片墙：2~3 张照片套几何图框 + 每张一句说明 */
+function galleryLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
+  const pics = (sl.images || []).filter(Boolean).slice(0, 3)
+  const caps = (sl.bullets || []).map((s) => s.trim()).filter(Boolean)
+  const geo = isGeo(o)
+  const cells = pics
+    .map(
+      (u, i) =>
+        `<div class="gcell">${
+          geo ? hexImg(u) : `<div class="gph"><img src="${esc(u)}" crossorigin="anonymous"></div>`
+        }<div class="gcap">${caps[i] ? esc(caps[i]) : ''}</div></div>`,
+    )
+    .join('')
+  return bodySlide(o, `${head(sl, en, o)}<div class="gallery">${cells}</div>`)
+}
+
 /** LLM 给的 layout 优先，缺失/对不上数据就按 payload 推断 */
 export function resolveLayout(sl: DeckSlideIn): string {
   let lay = String(sl.layout || '').trim().toLowerCase()
@@ -1160,7 +1224,9 @@ export function resolveLayout(sl: DeckSlideIn): string {
   if ((lay === 'bar' || lay === 'stats' || lay === 'rings') && !sl.data?.items?.length) lay = ''
   if ((lay === 'spoke' || lay === 'hive' || lay === 'cycle') && (sl.bullets || []).filter((b) => b && b.trim()).length < 3)
     lay = ''
+  if (lay === 'gallery' && (sl.images || []).filter(Boolean).length < 2) lay = ''
   if (CONTENT_LAYOUTS.has(lay)) return lay
+  if ((sl.images || []).filter(Boolean).length >= 2) return 'gallery'
   if (sl.data?.kind === 'ring' && sl.data.items?.length) return 'rings'
   if (sl.swot && (sl.swot.s?.length || sl.swot.w?.length || sl.swot.o?.length || sl.swot.t?.length))
     return 'swot'
@@ -1192,6 +1258,7 @@ export function composeDeck(o: DeckOutline): { styleTag: string; slides: string[
       else if (lay === 'spoke') slides.push(spokeLayout(sl, en, o))
       else if (lay === 'hive') slides.push(hiveLayout(sl, en, o))
       else if (lay === 'cycle') slides.push(cycleLayout(sl, en, o))
+      else if (lay === 'gallery') slides.push(galleryLayout(sl, en, o))
       else if (lay === 'bar' || lay === 'stats') slides.push(chart(sl, t, en, o))
       else if (lay === 'big_number') slides.push(bigNumber(sl, en, o))
       else if (lay === 'image_text') {

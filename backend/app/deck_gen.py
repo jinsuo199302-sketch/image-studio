@@ -733,6 +733,8 @@ def build_deck(outline: dict, theme_key: str = "red", bg: dict | None = None) ->
             mx = sl.get("matrix") if isinstance(sl.get("matrix"), dict) else None
             bn = sl.get("big_number") if isinstance(sl.get("big_number"), dict) else None
             img = sl.get("image") if isinstance(sl.get("image"), str) else None
+            if not img and isinstance(sl.get("images"), list) and sl["images"]:
+                img = next((u for u in sl["images"] if isinstance(u, str)), None)
             ttl = (sl.get("title") or "").strip()
             en = (sl.get("en") or "").strip()
             lay = resolve_layout(sl)
@@ -764,7 +766,7 @@ def build_deck(outline: dict, theme_key: str = "red", bg: dict | None = None) ->
 
 _CONTENT_LAYOUTS = {
     "cards", "list", "quote", "timeline", "big_number", "stats", "bar", "rings",
-    "compare", "matrix", "swot", "image_text", "spoke", "hive", "cycle",
+    "compare", "matrix", "swot", "image_text", "spoke", "hive", "cycle", "gallery",
 }
 
 
@@ -794,6 +796,8 @@ def resolve_layout(sl: dict) -> str:
     d = sl.get("data")
     if isinstance(d, dict) and d.get("items"):
         return "bar" if d.get("kind") == "bar" else "stats"
+    if isinstance(sl.get("images"), list) and len([u for u in sl["images"] if isinstance(u, str)]) >= 2:
+        return "gallery"
     if isinstance(sl.get("image"), str) and sl["image"]:
         return "image_text"
     bl = [b for b in (sl.get("bullets") or []) if str(b).strip()]
