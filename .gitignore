@@ -32,3 +32,6 @@ backend/tests/*.png
 .env
 .env.*
 !.env.example
+
+# test artifacts
+backend/*.pptx
