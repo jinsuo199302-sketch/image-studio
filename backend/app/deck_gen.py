@@ -11,8 +11,80 @@
 from __future__ import annotations
 
 import io
+import re
 
 from app.text_metrics import estimate_text_height, estimate_text_lines
+
+# ── 中文办公排版：标点规范化 ──────────────────────────────────────
+_CJK = r"一-鿿㐀-䶿＀-￯"
+_PUNC_MAP = {",": "，", ";": "；", ":": "：", "!": "！", "?": "？", "(": "（", ")": "）"}
+
+
+_FW_PUNC = "，。、；：！？（）【】「」“”"
+
+
+def _norm_text(s: str) -> str:
+    """把 LLM 文案收拾成中文办公稿的标点规范：半角标点→全角、去中文间空格、
+    句尾补句号、直引号→弯引号。英文/数字场景（如 4x100、3.5、A/B）尽量不误伤。"""
+    if not s:
+        return ""
+    s = str(s).replace("　", " ").strip()
+    s = re.sub(r"\s+", " ", s)
+    # 直双引号成对 → 弯引号（第 1、3、5… 个是开引号）
+    parts = s.split('"')
+    if len(parts) > 1:
+        s = parts[0] + "".join(("“" if i % 2 == 0 else "”") + p for i, p in enumerate(parts[1:]))
+    # 半角标点若两侧至少一侧是中文 → 全角
+    for a, b in _PUNC_MAP.items():
+        s = re.sub(rf"(?<=[{_CJK}])\{a}|\{a}(?=[{_CJK}])", b, s)
+    # 中文句点：中文后的 "." 且不在数字中间 → 。
+    s = re.sub(rf"(?<=[{_CJK}])\.(?!\d)", "。", s)
+    # 去掉中文字符之间的空格
+    s = re.sub(rf"(?<=[{_CJK}])\s+(?=[{_CJK}])", "", s)
+    # 全角标点两侧的空格一律去掉
+    s = re.sub(rf"\s*([{_FW_PUNC}])\s*", r"\1", s)
+    # 句尾若是中文且没有终止标点 → 补句号
+    if s and re.search(rf"[{_CJK}”）】」]$", s) and not re.search(r"[。！？；]”?$", s):
+        s += "。"
+    return s.strip()
+
+
+def normalize_outline_text(outline: dict) -> dict:
+    """就地规范化大纲里所有展示文案（标题/副标题/章节/要点/导语/对比/SWOT）。
+    HTML 路和 python 路都在生成前调一次。"""
+    if not isinstance(outline, dict):
+        return outline
+
+    def fix_short(x):  # 标题类：不补句尾句号
+        t = _norm_text(x)
+        return t[:-1] if t.endswith("。") else t
+
+    outline["title"] = fix_short(outline.get("title", ""))
+    if outline.get("subtitle"):
+        outline["subtitle"] = fix_short(outline["subtitle"])
+    for sec in outline.get("sections") or []:
+        sec["heading"] = fix_short(sec.get("heading", ""))
+        for sl in sec.get("slides") or []:
+            if sl.get("title"):
+                sl["title"] = fix_short(sl["title"])
+            if sl.get("intro"):
+                sl["intro"] = _norm_text(sl["intro"])
+            if isinstance(sl.get("bullets"), list):
+                sl["bullets"] = [_norm_text(b) for b in sl["bullets"] if str(b).strip()]
+            cmp = sl.get("compare")
+            if isinstance(cmp, dict):
+                for side in ("left", "right"):
+                    g = cmp.get(side)
+                    if isinstance(g, dict):
+                        g["heading"] = fix_short(g.get("heading", ""))
+                        if isinstance(g.get("points"), list):
+                            g["points"] = [_norm_text(p) for p in g["points"] if str(p).strip()]
+            sw = sl.get("swot")
+            if isinstance(sw, dict):
+                for k in ("s", "w", "o", "t"):
+                    if isinstance(sw.get(k), list):
+                        sw[k] = [_norm_text(p) for p in sw[k] if str(p).strip()]
+    return outline
 
 W, H = 1280, 720           # 16:9
 M = 76                     # 页边距

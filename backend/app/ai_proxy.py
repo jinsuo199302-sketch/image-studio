@@ -793,7 +793,9 @@ _DECK_JSON_SPEC = (
     '写成 {"title":"...","en":"...","swot":{"s":["优势要点"],"w":["劣势要点"],"o":["机会要点"],"t":["威胁要点"]}}，每个象限 2~4 条、每条 10~22 字，不要 bullets。\n'
     "对比页 / SWOT 页整份大纲里最多各 1 页，只在内容确实契合时才用，不要硬套。\n"
     "palette 必须是 5 个协调的十六进制色，符合主题气质、对比度足够（正文色要能在背景浅色上看清）；"
-    "en 字段是给版式当装饰小字用的英文，要贴切、地道。"
+    "en 字段是给版式当装饰小字用的英文，要贴切、地道。\n"
+    "文案排版规范（办公稿标准，务必遵守）：所有中文标点用全角（，。、；：？！“”（）），不要用半角逗号句号；"
+    "中文字符之间不加空格；每条 bullet 和 intro 都是完整通顺的句子、以句号结尾；title/heading 是短语、结尾不加标点。"
 )
 
 
@@ -913,6 +915,7 @@ async def _run_deck_job(job_id, user_id, ticket, topic, n, theme, extra, ai_bg, 
         outline = await _gen_deck_outline(
             topic, n, extra, material, [p["tag"] for p in photos] if photos else None
         )
+        outline = deck_gen.normalize_outline_text(outline)
         outline = deck_gen.apply_theme_palette(outline, theme)
         outline = _attach_deck_photos(outline, photos)
         bg = None
@@ -979,6 +982,7 @@ async def design_deck(
 
     try:
         outline = await _gen_deck_outline(topic, n, extra, "", [p["tag"] for p in photos] if photos else None)
+        outline = deck_gen.normalize_outline_text(outline)
         outline = deck_gen.apply_theme_palette(outline, payload.theme)
         outline = _attach_deck_photos(outline, photos)
         slides = deck_gen.build_deck(outline, payload.theme)

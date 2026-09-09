@@ -75,11 +75,12 @@ function css(t: DeckTheme): string {
   .s-cover{background:#f4f5f7}
   .s-cover .side{position:absolute;left:0;top:0;width:16px;height:100%;background:${t.primary};z-index:3}
   .s-cover .side::after{content:"";position:absolute;left:0;top:0;width:16px;height:150px;background:${t.accent}}
-  /* 角落造型装饰（代码画，无 AI 背景时用） */
-  .s-cover .cn1{position:absolute;right:0;top:0;width:360px;height:360px;background:${t.primary};z-index:0}
-  .s-cover .cn2{position:absolute;right:0;top:0;width:150px;height:150px;background:${t.accent};z-index:1}
-  .s-cover .cn3{position:absolute;right:250px;top:-60px;width:180px;height:180px;background:${t.primaryDk};z-index:0}
-  .s-cover .ring{position:absolute;left:-120px;bottom:-120px;width:340px;height:340px;border:34px solid ${t.primary}1f;border-radius:50%;z-index:0}
+  /* 角落造型装饰（代码画，无 AI 背景时用）—— 一律控制在画面内，不出血 */
+  .s-cover .cn1{position:absolute;right:0;top:0;width:340px;height:300px;background:${t.primary};z-index:0}
+  .s-cover .cn2{position:absolute;right:0;top:0;width:132px;height:132px;background:${t.accent};z-index:1}
+  .s-cover .cn3{position:absolute;right:340px;top:0;width:52px;height:200px;background:${t.primaryDk};z-index:0}
+  .s-cover .br1{position:absolute;right:90px;bottom:84px;width:132px;height:7px;background:${t.primary};z-index:1}
+  .s-cover .br2{position:absolute;right:90px;bottom:84px;width:7px;height:132px;background:${t.primary};z-index:1}
   .s-cover .panel{position:absolute;left:110px;top:206px;width:720px;z-index:2}
   .s-cover.on-bg .panel{left:76px;top:150px;width:760px;padding:44px 46px 40px;background:rgba(255,255,255,.92);border-radius:8px}
   .s-cover .kbar{width:64px;height:8px;background:${t.accent};margin-bottom:22px}
@@ -134,14 +135,15 @@ function css(t: DeckTheme): string {
   .head .fl{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:10px}
   .head .fl::before,.head .fl::after{content:"";width:30px;height:3px;background:${t.accent}}
   .head .en{margin-top:8px}
-  .intro{text-align:center;color:#8b8b8b;font-size:15px;line-height:1.62;margin:22px auto 0;max-width:860px}
+  /* 导语按中文办公稿：左对齐、首行缩进两字 */
+  .intro{text-align:left;text-indent:2em;color:#7f7f7f;font-size:15px;line-height:1.72;margin:20px 0 0}
 
   /* 卡片（2~3 条） */
-  .cards{display:grid;gap:30px;flex:1;margin-top:42px;align-content:center}
-  .card{border:1px solid #e2e5ec;border-radius:14px;padding:32px 26px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:16px}
-  .card .ring{width:58px;height:58px;border:2px solid ${t.primary};border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:${t.primary}}
+  .cards{display:grid;gap:28px;flex:1;margin-top:38px;align-content:center}
+  .card{border:1px solid #e2e5ec;border-radius:14px;padding:30px 28px;display:flex;flex-direction:column;align-items:flex-start;gap:15px}
+  .card .ring{width:54px;height:54px;border:2px solid ${t.primary};border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:800;color:${t.primary}}
   .card .bd{width:26px;height:3px;background:${t.accent}}
-  .card .ct{font-size:16px;line-height:1.62}
+  .card .ct{font-size:16px;line-height:1.64;text-align:left;align-self:stretch}
 
   /* 清单（4~5 条） */
   .list{flex:1;margin-top:34px;display:flex;flex-direction:column;justify-content:center}
@@ -227,7 +229,9 @@ function cover(o: DeckOutline): string {
   const pic = !b && o.coverImage
   const cls = b ? 's-cover on-bg' : pic ? 's-cover has-pic' : 's-cover'
   const deco =
-    !b && !pic ? `<div class="cn3"></div><div class="cn1"></div><div class="cn2"></div><div class="ring"></div>` : ''
+    !b && !pic
+      ? `<div class="cn3"></div><div class="cn1"></div><div class="cn2"></div><div class="br1"></div><div class="br2"></div>`
+      : ''
   return `<div class="slide ${cls}">${bgImg(b)}${deco}<div class="side"></div>
     ${pic ? `<img class="cpic" src="${esc(o.coverImage!)}" crossorigin="anonymous">` : ''}
     <div class="panel">

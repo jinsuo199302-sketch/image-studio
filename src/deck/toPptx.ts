@@ -7,6 +7,18 @@ import { measureSlide, type Prim } from './measure'
 
 const IN_PER_PX_W = 13.333 / 1280
 const IN_PER_PX_H = 7.5 / 720
+const SLIDE_W = 13.333
+const SLIDE_H = 7.5
+
+/** 把矩形裁到画布内（模拟 .slide 的 overflow:hidden）。完全在外返回 null。 */
+function clip(x: number, y: number, w: number, h: number) {
+  const x0 = Math.max(0, x)
+  const y0 = Math.max(0, y)
+  const x1 = Math.min(SLIDE_W, x + w)
+  const y1 = Math.min(SLIDE_H, y + h)
+  if (x1 - x0 < 0.01 || y1 - y0 < 0.01) return null
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0, clipped: x0 !== x || y0 !== y || x1 !== x + w || y1 !== y + h }
+}
 
 async function imgToDataUrl(src: string): Promise<string | null> {
   try {
@@ -30,13 +42,17 @@ function addPrim(slide: PptxGenJS.Slide, p: Prim, pptx: PptxGenJS, imgCache: Map
   const h = p.h * IN_PER_PX_H
 
   if (p.kind === 'rect') {
-    const opts: PptxGenJS.ShapeProps = { x, y, w, h }
+    const c = clip(x, y, w, h)
+    if (!c) return
+    // 椭圆/圆无法裁切：越界就整体丢弃，别在画布外露出半个
+    if (p.ellipse && c.clipped) return
+    const opts: PptxGenJS.ShapeProps = { x: c.x, y: c.y, w: c.w, h: c.h }
     opts.fill = p.fill ? { color: p.fill.replace('#', '') } : { type: 'none' }
     if (p.lineColor) opts.line = { color: p.lineColor.replace('#', ''), width: Math.max(0.5, p.lineW || 1) }
     else opts.line = { type: 'none' } as unknown as PptxGenJS.ShapeLineProps
     if (p.ellipse) slide.addShape(pptx.ShapeType.ellipse, opts)
     else if (p.radius) {
-      opts.rectRadius = Math.min(0.5, (p.radius * IN_PER_PX_W) / Math.min(w, h)) * Math.min(w, h)
+      opts.rectRadius = Math.min(0.5, (p.radius * IN_PER_PX_W) / Math.min(c.w, c.h)) * Math.min(c.w, c.h)
       slide.addShape(pptx.ShapeType.roundRect, opts)
     } else slide.addShape(pptx.ShapeType.rect, opts)
     return
@@ -44,11 +60,27 @@ function addPrim(slide: PptxGenJS.Slide, p: Prim, pptx: PptxGenJS, imgCache: Map
 
   if (p.kind === 'image') {
     const data = p.src ? imgCache.get(p.src) : null
-    if (data) slide.addImage({ data, x, y, w, h })
+    if (!data) return
+    const c = clip(x, y, w, h)
+    if (!c) return
+    if (c.clipped) {
+      // 越界的图按裁掉的比例裁图源，不压缩变形
+      slide.addImage({
+        data,
+        x: c.x,
+        y: c.y,
+        w: c.w,
+        h: c.h,
+        sizing: { type: 'crop', w: c.w, h: c.h, x: c.x - x, y: c.y - y },
+      })
+    } else {
+      slide.addImage({ data, x, y, w, h })
+    }
     return
   }
 
   if (p.kind === 'text' && p.text) {
+    if (x >= SLIDE_W - 0.05 || x + w <= 0.05 || y >= SLIDE_H - 0.05) return
     const fs = p.fontSize || 16
     const lh = p.lineHeight || 1.2
     const wrap = p.wrap !== false
