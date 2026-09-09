@@ -1,13 +1,13 @@
 /**
  * 把一页幻灯片的 elements 数组画到 canvas 上（缩略图 / 预览用）。
- * 后端 deck_gen 出的 elements 只有 text / rect / image 三种，坐标是 1280×720 基准。
+ * 后端 deck_gen 出的 elements：text / rect / image / line / circle / arc。坐标 1280×720 基准。
  */
 
 export interface SlideElement {
-  type: 'text' | 'rect' | 'image'
-  x: number
-  y: number
-  width: number
+  type: 'text' | 'rect' | 'image' | 'line' | 'circle' | 'arc'
+  x?: number
+  y?: number
+  width?: number
   height?: number
   // text
   text?: string
@@ -24,6 +24,17 @@ export interface SlideElement {
   rx?: number
   // image
   src?: string
+  // line
+  x1?: number
+  y1?: number
+  x2?: number
+  y2?: number
+  // circle / arc
+  cx?: number
+  cy?: number
+  r?: number
+  start?: number
+  end?: number
 }
 
 export interface SlideData {
@@ -99,8 +110,11 @@ export function renderSlide(canvas: HTMLCanvasElement, slide: SlideData, targetW
   c.fillRect(0, 0, slide.w, slide.h)
 
   for (const el of slide.elements) {
+    const x = el.x ?? 0
+    const y = el.y ?? 0
+    const width = el.width ?? 0
     if (el.type === 'rect') {
-      roundRectPath(c, el.x, el.y, el.width, el.height || 0, el.rx || 0)
+      roundRectPath(c, x, y, width, el.height || 0, el.rx || 0)
       if (el.fill && el.fill !== 'none') {
         c.fillStyle = el.fill
         c.fill()
@@ -110,8 +124,35 @@ export function renderSlide(canvas: HTMLCanvasElement, slide: SlideData, targetW
         c.lineWidth = el.strokeWidth || 1
         c.stroke()
       }
+    } else if (el.type === 'line') {
+      c.beginPath()
+      c.moveTo(el.x1 ?? 0, el.y1 ?? 0)
+      c.lineTo(el.x2 ?? 0, el.y2 ?? 0)
+      c.strokeStyle = el.stroke || '#999'
+      c.lineWidth = el.strokeWidth || 1
+      c.lineCap = 'round'
+      c.stroke()
+    } else if (el.type === 'circle') {
+      c.beginPath()
+      c.arc(el.cx ?? 0, el.cy ?? 0, el.r ?? 0, 0, Math.PI * 2)
+      if (el.fill && el.fill !== 'none') {
+        c.fillStyle = el.fill
+        c.fill()
+      }
+      if (el.stroke) {
+        c.strokeStyle = el.stroke
+        c.lineWidth = el.strokeWidth || 1
+        c.stroke()
+      }
+    } else if (el.type === 'arc') {
+      c.beginPath()
+      c.arc(el.cx ?? 0, el.cy ?? 0, el.r ?? 0, ((el.start ?? 0) * Math.PI) / 180, ((el.end ?? 0) * Math.PI) / 180)
+      c.strokeStyle = el.stroke || '#999'
+      c.lineWidth = el.strokeWidth || 1
+      c.lineCap = 'round'
+      c.stroke()
     } else if (el.type === 'image' && el.src && imgCache.has(el.src)) {
-      c.drawImage(imgCache.get(el.src)!, el.x, el.y, el.width, el.height || 0)
+      c.drawImage(imgCache.get(el.src)!, x, y, width, el.height || 0)
     } else if (el.type === 'text' && el.text) {
       const size = el.fontSize || 16
       c.font = `${el.fontWeight === 'bold' ? 'bold ' : ''}${size}px ${el.fontFamily || '"Noto Sans SC", sans-serif'}`
@@ -122,9 +163,9 @@ export function renderSlide(canvas: HTMLCanvasElement, slide: SlideData, targetW
       } catch {
         /* 老浏览器不支持 letterSpacing，忽略 */
       }
-      const ax = el.align === 'center' ? el.x + el.width / 2 : el.align === 'right' ? el.x + el.width : el.x
-      const lines = wrapLines(c, el.text, el.width)
-      let ly = el.y
+      const ax = el.align === 'center' ? x + width / 2 : el.align === 'right' ? x + width : x
+      const lines = wrapLines(c, el.text, width)
+      let ly = y
       for (const ln of lines) {
         if (el.stroke && (el.strokeWidth || 0) > 0) {
           c.strokeStyle = el.stroke

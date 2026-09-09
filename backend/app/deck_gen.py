@@ -107,6 +107,49 @@ def _img(x, y, w, h, src):
     return {"type": "image", "x": round(x), "y": round(y), "width": round(w), "height": round(h), "src": src}
 
 
+def _line(x1, y1, x2, y2, stroke, sw=2):
+    return {"type": "line", "x1": round(x1), "y1": round(y1), "x2": round(x2), "y2": round(y2),
+            "stroke": stroke, "strokeWidth": sw}
+
+
+def _circle(cx, cy, r, *, fill=None, stroke=None, sw=0.0):
+    e = {"type": "circle", "cx": round(cx), "cy": round(cy), "r": round(r), "fill": fill or "none"}
+    if stroke:
+        e["stroke"] = stroke
+        e["strokeWidth"] = sw
+    return e
+
+
+# ── 简版线性图标：几笔 line/circle/rect 拼出来，都在 [-1,1] 单位坐标里 ──
+def _icon(name: str, cx: float, cy: float, size: float, color: str) -> list[dict]:
+    s = size / 2
+    L = lambda a, b, cc, d: _line(cx + a * s, cy + b * s, cx + cc * s, cy + d * s, color, max(2, size * 0.06))  # noqa: E731
+    C = lambda a, b, rr: _circle(cx + a * s, cy + b * s, rr * s, stroke=color, sw=max(2, size * 0.06))  # noqa: E731
+    m = {
+        "check": [C(0, 0, 1), L(-0.42, 0.02, -0.12, 0.34), L(-0.12, 0.34, 0.44, -0.34)],
+        "target": [C(0, 0, 1), C(0, 0, 0.55), _circle(cx, cy, s * 0.14, fill=color)],
+        "flag": [L(-0.5, -0.7, -0.5, 0.7), L(-0.5, -0.7, 0.5, -0.4), L(0.5, -0.4, -0.5, -0.1)],
+        "doc": [L(-0.5, -0.7, -0.5, 0.7), L(0.4, -0.7, 0.4, 0.7), L(-0.5, -0.7, 0.4, -0.7),
+                L(-0.5, 0.7, 0.4, 0.7), L(-0.28, -0.3, 0.18, -0.3), L(-0.28, 0.05, 0.18, 0.05)],
+        "bulb": [C(0, -0.2, 0.62), L(-0.24, 0.5, 0.24, 0.5), L(-0.18, 0.72, 0.18, 0.72)],
+        "gear": [C(0, 0, 0.62), _circle(cx, cy, s * 0.18, fill=color),
+                 L(0, -1, 0, -0.62), L(0, 1, 0, 0.62), L(-1, 0, -0.62, 0), L(1, 0, 0.62, 0)],
+        "up": [L(0, 0.7, 0, -0.7), L(0, -0.7, -0.4, -0.28), L(0, -0.7, 0.4, -0.28)],
+        "shield": [L(-0.5, -0.55, 0, -0.75), L(0, -0.75, 0.5, -0.55), L(-0.5, -0.55, -0.5, 0.15),
+                   L(0.5, -0.55, 0.5, 0.15), L(-0.5, 0.15, 0, 0.75), L(0.5, 0.15, 0, 0.75)],
+        "chat": [L(-0.6, -0.5, 0.6, -0.5), L(-0.6, 0.3, 0.6, 0.3), L(-0.6, -0.5, -0.6, 0.3),
+                 L(0.6, -0.5, 0.6, 0.3), L(-0.4, 0.3, -0.4, 0.6), L(-0.4, 0.6, -0.05, 0.3)],
+        "star": [L(0, -0.75, 0.22, -0.1), L(0.22, -0.1, 0.75, -0.1), L(0.75, -0.1, 0.32, 0.28),
+                 L(0.32, 0.28, 0.48, 0.75), L(0.48, 0.75, 0, 0.42), L(0, 0.42, -0.48, 0.75),
+                 L(-0.48, 0.75, -0.32, 0.28), L(-0.32, 0.28, -0.75, -0.1), L(-0.75, -0.1, -0.22, -0.1),
+                 L(-0.22, -0.1, 0, -0.75)],
+    }
+    return m.get(name, m["check"])
+
+
+_ICON_CYCLE = ["target", "check", "bulb", "flag", "gear", "shield", "chat", "star"]
+
+
 def _bg_layer(t: dict, bg_url: str | None, kind: str) -> list[dict]:
     """整页背景层：有 AI 图铺图，没有就代码画（克制：不挡文字区）。"""
     if bg_url:
@@ -248,27 +291,30 @@ def _content(t: dict, sec_idx: int, title: str, en: str, intro: str, bullets: li
     elif n == 2:
         gap = 60
         cw = (CW - gap) / 2
-        cy = y + 40
+        cy = y + 56
         for i, b in enumerate(items):
             x = M + i * (cw + gap)
+            ic = _ICON_CYCLE[(sec_idx * 2 + i) % len(_ICON_CYCLE)]
             els += [
-                _r(x + cw / 2 - 30, cy, 60, 60, "none", rx=30, stroke=t["accent"], sw=2),
-                _t(x + cw / 2 - 30, cy + 15, 60, f"{i + 1:02d}", H3, t["accent"], align="center", bold=True, font=t["kicker_font"]),
-                _t(x, cy + 92, cw, b, H3, ink, align="center"),
+                _circle(x + cw / 2, cy, 34, stroke=t["accent"], sw=2),
+                *_icon(ic, x + cw / 2, cy, 34, t["accent"] if not bg else "#fff"),
+                _t(x + cw / 2 - 30, cy + 46, 60, f"0{i + 1}", CAP, _mix(ink, t["paper"], 0.45), align="center", font=t["kicker_font"], spacing=2),
+                _t(x, cy + 76, cw, b, H3, ink, align="center"),
             ]
             if i == 0:
-                els.append(_r(M + cw + gap / 2 - 1, y + 20, 2, bottom - y - 60, rule))
+                els.append(_r(M + cw + gap / 2 - 1, y + 24, 2, bottom - y - 70, rule))
     elif n == 3:
         gap = 40
         cw = (CW - 2 * gap) / 3
-        cy = y + 30
+        cy = y + 48
         for i, b in enumerate(items):
             x = M + i * (cw + gap)
+            ic = _ICON_CYCLE[(sec_idx * 3 + i) % len(_ICON_CYCLE)]
             els += [
-                _r(x + cw / 2 - 32, cy, 64, 64, "none", rx=32, stroke=_mix(t["primary"], t["paper"], 0.15), sw=2),
-                _t(x + cw / 2 - 32, cy + 16, 64, f"{i + 1}", H2, t["primary"] if not bg else "#fff", align="center", bold=True, font=t["kicker_font"]),
-                _r(x + cw / 2 - 14, cy + 82, 28, 3, t["accent"]),
-                _t(x + 12, cy + 100, cw - 24, b, BODY, ink, align="center"),
+                _circle(x + cw / 2, cy, 36, stroke=_mix(t["primary"], t["paper"], 0.1) if not bg else "#fff", sw=2),
+                *_icon(ic, x + cw / 2, cy, 36, t["primary"] if not bg else "#fff"),
+                _r(x + cw / 2 - 14, cy + 58, 28, 3, t["accent"]),
+                _t(x + 12, cy + 76, cw - 24, b, BODY, ink, align="center"),
             ]
     else:
         # 4~5 条 → 竖排清单，圆圈序号 + 分隔线，留白足
@@ -292,8 +338,55 @@ def _content(t: dict, sec_idx: int, title: str, en: str, intro: str, bullets: li
             y += max(row_h, 40) + 34
             if i < n - 1:
                 els.append(_r(M + 66, y - 20, CW - 110, 1, rule))
-            if i < len(items) - 1:
-                els.append(_r(M + 52, y - 16, CW - 84, 1, _mix(t["ink"], t["paper"], 0.86)))
+    return {"background": t["paper"], "elements": els, "w": W, "h": H}
+
+
+def _num(v) -> float:
+    try:
+        return float(str(v).replace("%", "").replace(",", "").strip())
+    except Exception:
+        return 0.0
+
+
+def _chart(t: dict, sec_idx: int, title: str, en: str, kind: str, items: list[dict], page: int, bg: str | None) -> dict:
+    els, y = _content_head(t, title, en or "DATA", page, bg)
+    ink = "#ffffff" if bg else t["ink"]
+    rows = [it for it in items if it.get("label")][:6]
+    bottom = H - 70
+    if not rows:
+        return {"background": t["paper"], "elements": els, "w": W, "h": H}
+
+    if kind == "stat":
+        n = len(rows[:4])
+        gap = 40
+        cw = (CW - (n - 1) * gap) / n
+        cy = y + (bottom - y) / 2 - 60
+        for i, it in enumerate(rows[:4]):
+            x = M + i * (cw + gap)
+            els += [
+                _t(x, cy, cw, str(it.get("value", "")), 66, t["primary"] if not bg else "#fff",
+                   align="center", bold=True, font=t["kicker_font"]),
+                _r(x + cw / 2 - 16, cy + 84, 32, 3, t["accent"]),
+                _t(x, cy + 100, cw, it.get("label", ""), BODY, ink, align="center"),
+            ]
+            if i:
+                els.append(_r(x - gap / 2, cy + 6, 1, 100, _mix(ink, t["paper"], 0.85)))
+    else:  # bar：横向条形
+        vals = [_num(it.get("value")) for it in rows]
+        mx = max(vals) or 1
+        avail = bottom - y - 10
+        rh = min(64, avail / len(rows))
+        bx = M + 220
+        bw_max = W - M - bx - 90
+        for i, it in enumerate(rows):
+            ry = y + 10 + i * rh
+            bw = max(6, bw_max * (_num(it.get("value")) / mx))
+            els += [
+                _t(M, ry + rh / 2 - 12, 200, it.get("label", ""), BODY, ink),
+                _r(bx, ry + rh / 2 - 9, bw_max, 18, _mix(t["primary"], t["paper"], 0.9), rx=9),
+                _r(bx, ry + rh / 2 - 9, bw, 18, t["primary"] if i % 2 == 0 else t["accent"], rx=9),
+                _t(bx + bw + 12, ry + rh / 2 - 12, 90, str(it.get("value", "")), BODY, t["primary"] if not bg else "#fff", bold=True, font=t["kicker_font"]),
+            ]
     return {"background": t["paper"], "elements": els, "w": W, "h": H}
 
 
@@ -328,12 +421,19 @@ def build_deck(outline: dict, theme_key: str = "red", bg: dict | None = None) ->
         slides.append(_section(t, i + 1, total, sec["heading"], (sec.get("en") or "").strip(), bg.get("section")))
         page += 1
         for sl in (sec.get("slides") or [])[:4]:
-            slides.append(_content(
-                t, i, (sl.get("title") or "").strip(), (sl.get("en") or "").strip(),
-                (sl.get("intro") or "").strip(),
-                [str(x).strip() for x in (sl.get("bullets") or []) if str(x).strip()],
-                page, bg.get("content"),
-            ))
+            d = sl.get("data") if isinstance(sl.get("data"), dict) else None
+            if d and d.get("items"):
+                slides.append(_chart(
+                    t, i, (sl.get("title") or "").strip(), (sl.get("en") or "").strip(),
+                    d.get("kind", "bar"), d.get("items") or [], page, bg.get("content"),
+                ))
+            else:
+                slides.append(_content(
+                    t, i, (sl.get("title") or "").strip(), (sl.get("en") or "").strip(),
+                    (sl.get("intro") or "").strip(),
+                    [str(x).strip() for x in (sl.get("bullets") or []) if str(x).strip()],
+                    page, bg.get("content"),
+                ))
             page += 1
     slides.append(_closing(t, title, bg.get("content")))
     return slides
@@ -379,7 +479,31 @@ def deck_to_pptx(slides: list[dict], theme_key: str = "red", title: str = "演�
         s.background.fill.solid()
         s.background.fill.fore_color.rgb = rgb(sl.get("background", "#ffffff"))
         for el in sl.get("elements", []):
-            x, y = Emu(int(el["x"] * ex)), Emu(int(el["y"] * ey))
+            x, y = Emu(int(el.get("x", 0) * ex)), Emu(int(el.get("y", 0) * ey))
+            if el["type"] == "line":
+                cn = s.shapes.add_connector(
+                    1, Emu(int(el["x1"] * ex)), Emu(int(el["y1"] * ey)),
+                    Emu(int(el["x2"] * ex)), Emu(int(el["y2"] * ey)))
+                cn.line.color.rgb = rgb(el.get("stroke", "#999999"))
+                cn.line.width = Pt(max(0.5, el.get("strokeWidth", 1)))
+                continue
+            if el["type"] in ("circle", "arc"):
+                r = el.get("r", 10)
+                d = Emu(int(r * 2 * ex))
+                shp = s.shapes.add_shape(
+                    MSO_SHAPE.OVAL, Emu(int((el["cx"] - r) * ex)), Emu(int((el["cy"] - r) * ey)), d, d)
+                if el.get("fill") and el["fill"] != "none":
+                    shp.fill.solid()
+                    shp.fill.fore_color.rgb = rgb(el["fill"])
+                else:
+                    shp.fill.background()
+                if el.get("stroke"):
+                    shp.line.color.rgb = rgb(el["stroke"])
+                    shp.line.width = Pt(max(0.5, el.get("strokeWidth", 1)))
+                else:
+                    shp.line.fill.background()
+                shp.shadow.inherit = False
+                continue
             if el["type"] == "image":
                 data = asset_reader(el["src"]) if asset_reader else None
                 if data:

@@ -788,8 +788,11 @@ async def _gen_deck_outline(topic: str, sections: int, extra: str = "") -> dict:
         '"mood":"用一句话描述整体视觉基调，例：庄重大气的党政红金风、简洁现代的科技蓝",'
         '"sections":[{"heading":"章节标题","en":"章节英文短标题(全大写,2~4词)",'
         '"slides":[{"title":"小标题","en":"这一页的英文短标题(全大写,1~3词)","intro":"1~2句导语，可为空字符串","bullets":["要点一","要点二"]}]}]}\n'
+        "当某一页内容本身是量化的（占比、数量、几个关键指标），可以把这一页改成图表页——"
+        '把该 slide 写成 {"title":"...","en":"...","data":{"kind":"bar 或 stat","items":[{"label":"标签","value":85}]}}，'
+        "bar 用于多项数值对比、stat 用于 2~4 个关键指标；此时不需要 bullets。data 里的数字要真实合理，编不出准确数就不要用图表页。\n"
         f"要求：palette 必须是 5 个协调的十六进制色，符合主题气质、对比度足够（正文色要能在背景浅色上看清）；"
-        f"sections 生成 {sections} 个；每个 section 下 2~3 个 slides；每个 slide 配 3~5 条 bullets，"
+        f"sections 生成 {sections} 个；每个 section 下 2~3 个 slides；普通 slide 配 3~5 条 bullets，"
         "每条 20~45 字，具体、准确、书面语，不空话套话；title/heading 精炼；en 字段是给版式当装饰小字用的英文，"
         "要贴切、地道；涉及事实或数据要可靠。"
     )
