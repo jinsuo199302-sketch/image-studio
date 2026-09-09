@@ -59,6 +59,9 @@ export interface DeckOutline {
 const esc = (s = '') =>
   s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
 
+/** 中文办公稿正文段落：首行空两格（用全角空格，导出到 PPT 也保留） */
+const para = (s = '') => '　　' + esc(s.replace(/^[　\s]+/, ''))
+
 const pad2 = (n: number) => String(n).padStart(2, '0')
 
 function css(t: DeckTheme): string {
@@ -67,7 +70,7 @@ function css(t: DeckTheme): string {
     font-family:"Microsoft YaHei","Noto Sans SC",sans-serif;color:${t.ink};box-sizing:border-box}
   .slide *{box-sizing:border-box;margin:0;padding:0}
   .bg{position:absolute;inset:0;width:1280px;height:720px;object-fit:cover;z-index:0}
-  .z{position:relative;z-index:1;height:100%}
+  .z{position:relative;z-index:1;height:100%;display:flex;flex-direction:column}
   .tick{width:52px;height:3px;background:${t.accent};flex:none}
   .en{font-size:12px;letter-spacing:3px;color:#a9adb6;font-weight:700}
 
@@ -127,16 +130,17 @@ function css(t: DeckTheme): string {
   .s-sec .rule{width:520px;height:1px;background:rgba(255,255,255,.22)}
   .s-sec .en{margin-top:18px;color:rgba(255,255,255,.4);letter-spacing:2px;font-size:12px;font-weight:700}
 
-  /* 内容页骨架。注意：用绝对定位铺满 .slide，不要 height:100% —— 导出用的隐藏舞台
-     没有父级高度，height:100% 会塌成内容高度，整页排版全乱（踩过） */
-  .body{position:absolute;inset:0;padding:54px 96px;display:flex;flex-direction:column}
+  /* 内容页骨架。.body 是加在 .slide 上的修饰类（同一个元素），只管内边距和弹性布局，
+     绝对不要设 height / position —— .slide 已经是显式 720px；早先写过 height:100%，
+     导出隐藏舞台没有父级高度时会塌成内容高度，整页排版全乱（踩过） */
+  .body{padding:54px 96px;display:flex;flex-direction:column}
   .head{text-align:center}
   .head h2{font-size:28px;color:${t.primary};font-weight:800;letter-spacing:.5px}
   .head .fl{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:10px}
   .head .fl::before,.head .fl::after{content:"";width:30px;height:3px;background:${t.accent}}
   .head .en{margin-top:8px}
-  /* 导语按中文办公稿：左对齐、首行缩进两字 */
-  .intro{text-align:left;text-indent:2em;color:#7f7f7f;font-size:15px;line-height:1.72;margin:20px 0 0}
+  /* 导语按中文办公稿：左对齐、首行空两格（缩进写在文本里，导出到 PPT 也保留） */
+  .intro{text-align:left;color:#7f7f7f;font-size:15px;line-height:1.72;margin:20px 0 0}
 
   /* 卡片（2~3 条） */
   .cards{display:grid;gap:28px;flex:1;margin-top:38px;align-content:center}
@@ -274,7 +278,7 @@ function section(s: DeckSection, idx: number, total: number, o: DeckOutline): st
 function head(sl: DeckSlideIn, en: string): string {
   return `<div class="head"><h2>${esc(sl.title || '')}</h2><div class="fl"></div>
     <div class="en">${esc(sl.en || en)}</div></div>
-    ${sl.intro ? `<div class="intro">${esc(sl.intro)}</div>` : ''}`
+    ${sl.intro ? `<div class="intro">${para(sl.intro)}</div>` : ''}`
 }
 
 const STEP_RE = /流程|步骤|阶段|环节|顺序|先后|第一步|首先/
@@ -309,7 +313,7 @@ function content(sl: DeckSlideIn, en: string, o: DeckOutline, imgFlip = false): 
     body = `<div class="cards" style="grid-template-columns:repeat(${n},1fr)">${items
       .map(
         (b, i) =>
-          `<div class="card"><div class="ring">${i + 1}</div><div class="bd"></div><div class="ct">${esc(b)}</div></div>`,
+          `<div class="card"><div class="ring">${i + 1}</div><div class="bd"></div><div class="ct">${para(b)}</div></div>`,
       )
       .join('')}</div>`
   } else {

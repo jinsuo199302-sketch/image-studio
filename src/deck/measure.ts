@@ -27,6 +27,7 @@ export interface Prim {
   lineHeight?: number
   letterSpacing?: number
   wrap?: boolean
+  vcenter?: boolean
   // image
   src?: string
 }
@@ -120,14 +121,25 @@ export function measureSlide(root: HTMLElement): { w: number; h: number; prims: 
     }
 
     if (isTextLeaf(el)) {
-      // innerText 会把 <br> 变成换行、去掉多余空白
-      const t = (el.innerText || el.textContent || '').replace(/[ \t]+/g, ' ').replace(/\n{2,}/g, '\n').trim()
+      // innerText 会把 <br> 变成换行、去掉多余空白。
+      // 注意：不能用 .trim() —— 它会连开头的全角空格（首行缩进）一起吃掉
+      const t = (el.innerText || el.textContent || '')
+        .replace(/[ \t]+/g, ' ')
+        .replace(/\n{2,}/g, '\n')
+        .replace(/^[ \t\r\n]+/, '')
+        .replace(/\s+$/, '')
       if (t) {
         const fs = parseFloat(cs.fontSize)
         const lh = parseFloat(cs.lineHeight) / fs || 1.2
         // 浏览器里就一行的文字（标题/大数字/装饰英文）→ 导出时禁止换行，
         // 否则 PPT 字体更宽会折行、撑高文本框、压到下一个元素
         const oneLine = !t.includes('\n') && r.height <= fs * lh * 1.6
+        // flex 居中的文字（圆圈里的序号、圆点里的数字）——PPT 里文本框跟形状是两个独立对象，
+        // 得显式告诉它水平+垂直都居中，否则数字会歪到角上
+        const flexCentered =
+          cs.display.includes('flex') &&
+          cs.justifyContent.includes('center') &&
+          cs.alignItems.includes('center')
         prims.push({
           kind: 'text', x, y, w, h,
           text: t,
@@ -135,11 +147,14 @@ export function measureSlide(root: HTMLElement): { w: number; h: number; prims: 
           bold: parseInt(cs.fontWeight, 10) >= 600 || cs.fontWeight === 'bold',
           italic: cs.fontStyle === 'italic',
           color: toRgb(cs.color, bg) || '#222222',
-          align: (cs.textAlign === 'center' || cs.textAlign === 'right' ? cs.textAlign : 'left') as Prim['align'],
+          align: flexCentered
+            ? 'center'
+            : ((cs.textAlign === 'center' || cs.textAlign === 'right' ? cs.textAlign : 'left') as Prim['align']),
           font: firstFont(cs.fontFamily),
           lineHeight: lh,
           letterSpacing: parseFloat(cs.letterSpacing) || 0,
           wrap: !oneLine,
+          vcenter: flexCentered || undefined,
         })
       }
       return
