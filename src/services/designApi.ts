@@ -353,7 +353,7 @@ export interface DeckOutlineRaw {
       en?: string
       intro?: string
       bullets?: string[]
-      data?: { kind: 'bar' | 'stat'; items: { label: string; value: string | number }[] }
+      data?: { kind: 'bar' | 'stat' | 'ring'; items: { label: string; value: string | number }[] }
       compare?: { left: { heading: string; points: string[] }; right: { heading: string; points: string[] } }
       swot?: { s: string[]; w: string[]; o: string[]; t: string[] }
       big_number?: { value: string; label?: string; note?: string }

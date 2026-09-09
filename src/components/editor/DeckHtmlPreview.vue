@@ -20,14 +20,25 @@ const FALLBACK: Record<string, string[]> = {
   slate: ['#37506b', '#c98a3c', '#243447', '#f4f6f8', '#2b2b2b'],
   teal: ['#1f7a72', '#e0a52b', '#134b46', '#f2f7f6', '#2b2b2b'],
   techblue: ['#1a3f7a', '#2f7de0', '#0d2951', '#f3f6fb', '#232a33'],
+  geoblue: ['#12579e', '#3aa0e0', '#0c3b6b', '#f4f8fc', '#233240'],
 }
+/** 纯几何图形装饰风的主题 key */
+const GEO_KEYS = new Set(['geoblue'])
 
 const theme = computed<DeckTheme>(() => {
+  const geo = GEO_KEYS.has(props.themeKey)
   const p =
-    props.outline.palette && props.outline.palette.length >= 5
+    !geo && props.outline.palette && props.outline.palette.length >= 5
       ? props.outline.palette
       : FALLBACK[props.themeKey] || FALLBACK.red
-  return { primary: p[0], accent: p[1], primaryDk: p[2], paper: p[3], ink: p[4] }
+  return {
+    primary: p[0],
+    accent: p[1],
+    primaryDk: p[2],
+    paper: p[3],
+    ink: p[4],
+    style: geo ? 'geo' : 'plain',
+  }
 })
 
 const composed = computed(() => {

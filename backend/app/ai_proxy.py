@@ -796,6 +796,7 @@ _DECK_JSON_SPEC = (
     '- "timeline"：有时间/阶段/步骤先后顺序。填 bullets(3~5 步,按顺序)\n'
     '- "big_number"：这一页核心就是一个关键数字。填 big_number:{"value":"85%","label":"客户满意度","note":"一句补充说明"}\n'
     '- "stats"：2~4 个并列的关键指标。填 data:{"kind":"stat","items":[{"label":"标签","value":85}]}\n'
+    '- "rings"：2~5 个百分比数据,适合做成环形进度。填 data:{"kind":"ring","items":[{"label":"标签","value":75}]}(value 是 0~100 的数)\n'
     '- "bar"：多项数值需要横向对比。填 data:{"kind":"bar","items":[{"label":"标签","value":85}]}(数字要真实,编不出别用)\n'
     '- "compare"：两个对象/方案/时期的对照。填 compare:{"left":{"heading":"左栏标题","points":["要点"]},"right":{"heading":"右栏标题","points":["要点"]}}(每栏 3~4 条)\n'
     '- "matrix"：按两个维度分成四类。填 matrix:{"xLabel":"横轴","yLabel":"纵轴","cells":[{"title":"象限名","items":["要点"]}]}(正好 4 个 cell)\n'
@@ -955,7 +956,7 @@ async def _run_deck_job(job_id, user_id, ticket, topic, n, theme, extra, ai_bg, 
         outline = deck_gen.apply_theme_palette(outline, theme)
         outline = _attach_deck_photos(outline, photos)
         bg = None
-        if ai_bg:
+        if ai_bg and theme not in deck_gen.GEO_THEMES:
             raw_kit = await _gen_deck_cover_kit(outline)
             bg = _persist_bg_kit(db, user_id, raw_kit)
         slides = deck_gen.build_deck(outline, theme, bg)
@@ -1006,8 +1007,9 @@ async def design_deck(
     n = min(6, max(2, payload.sections))
     photos = _clean_deck_photos(payload.photos)
     ticket = billing.consume(db, user, "AIPPT")
+    ai_bg = payload.ai_bg and payload.theme not in deck_gen.GEO_THEMES  # 几何风不生图
 
-    if payload.ai_bg:
+    if ai_bg:
         job_id = uuid.uuid4().hex
         _HANDOUT_JOBS[job_id] = {"status": "pending", "user_id": user.id}
         _prune_handout_jobs()

@@ -31,6 +31,46 @@ export interface DeckTheme {
   primaryDk: string
   paper: string
   ink: string
+  /** 'geo' = 纯几何图形装饰风（白底 + 同心圆弧/圆点圈/环形进度，不用 AI 大图） */
+  style?: 'plain' | 'geo'
+}
+
+/* ── 几何装饰 SVG（geo 风格用，全篇复用同一套母题）────────────── */
+/** 右上角标志性的同心圆弧组 */
+function arcCluster(t: DeckTheme, size = 420): string {
+  const c = size / 2
+  const ring = (r: number, col: string, w: number, dash = '') =>
+    `<circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${col}" stroke-width="${w}" ${dash ? `stroke-dasharray="${dash}"` : ''}/>`
+  const arc = (r: number, col: string, w: number, a0: number, a1: number) => {
+    const p = (a: number) => `${c + r * Math.cos((a * Math.PI) / 180)} ${c + r * Math.sin((a * Math.PI) / 180)}`
+    const large = a1 - a0 > 180 ? 1 : 0
+    return `<path d="M ${p(a0)} A ${r} ${r} 0 ${large} 1 ${p(a1)}" fill="none" stroke="${col}" stroke-width="${w}" stroke-linecap="round"/>`
+  }
+  return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">
+    ${ring(c - 8, t.primary + '14', 2)}
+    ${arc(c - 8, t.primary, 6, 120, 260)}
+    ${ring(c - 46, t.accent + '22', 14)}
+    ${arc(c - 84, t.accent, 5, -30, 120)}
+    ${ring(c - 120, t.primary + '10', 2, '2 8')}
+    <circle cx="${c}" cy="${c}" r="${c - 150}" fill="${t.primary}0c"/>
+  </svg>`
+}
+/** 圆点虚线圈 */
+function dotRing(t: DeckTheme, size = 120): string {
+  const c = size / 2
+  return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}"><circle cx="${c}" cy="${c}" r="${c - 6}" fill="none" stroke="${t.accent}" stroke-width="4" stroke-dasharray="1 9" stroke-linecap="round"/></svg>`
+}
+/** 环形进度：pct 0~100 */
+function progRing(t: DeckTheme, pct: number, size = 150): string {
+  const c = size / 2
+  const r = c - 12
+  const circ = 2 * Math.PI * r
+  const off = circ * (1 - Math.max(0, Math.min(100, pct)) / 100)
+  return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">
+    <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${t.primary}18" stroke-width="10"/>
+    <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${t.accent}" stroke-width="10" stroke-linecap="round"
+      stroke-dasharray="${circ}" stroke-dashoffset="${off}" transform="rotate(-90 ${c} ${c})"/>
+  </svg>`
 }
 
 export interface DeckCompare {
@@ -65,6 +105,7 @@ export type DeckLayout =
   | 'matrix'
   | 'swot'
   | 'image_text'
+  | 'rings'
 export interface DeckSlideIn {
   /** LLM 判断的版式类型；缺失时按内容推断 */
   layout?: DeckLayout | string
@@ -72,7 +113,7 @@ export interface DeckSlideIn {
   en?: string
   intro?: string
   bullets?: string[]
-  data?: { kind: 'bar' | 'stat'; items: { label: string; value: string | number }[] }
+  data?: { kind: 'bar' | 'stat' | 'ring'; items: { label: string; value: string | number }[] }
   /** 对比页：左右两栏各一个观点组 */
   compare?: DeckCompare
   /** SWOT 四象限 */
@@ -341,13 +382,105 @@ function css(t: DeckTheme): string {
   .closing h1{font-size:58px;font-weight:800;color:${t.primary}}
   .closing .tick{width:96px;height:6px;background:${t.accent}}
   .closing .sub{font-size:17px;color:#8a8a8a;line-height:1.5}
+
+  /* ══ 几何风（style:geo）——白底 + 同心圆弧/圆点圈/环形进度 ══ */
+  .geo-d{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+  .geo-d .arc{position:absolute;right:-150px;top:-150px}
+  .geo-d .dr{position:absolute;left:-40px;bottom:-40px;opacity:.5}
+  .geo-d .gbar{position:absolute;left:0;top:0;width:8px;height:100%;background:${t.primary}}
+  .geo-d .gbar::after{content:"";position:absolute;left:0;top:0;width:8px;height:140px;background:${t.accent}}
+
+  .g-cover{background:#fff}
+  .g-cover .ga{position:absolute;right:-160px;top:-180px}
+  .g-cover .gwedge{position:absolute;right:0;bottom:0;width:44%;height:78%;background:${t.primary};clip-path:polygon(28% 0,100% 0,100% 100%,0 100%)}
+  .g-cover .gwedge2{position:absolute;right:0;bottom:0;width:44%;height:78%;background:${t.accent};clip-path:polygon(40% 0,52% 0,24% 100%,12% 100%);opacity:.9}
+  .g-cover .panel{position:absolute;left:110px;top:196px;width:640px;z-index:2}
+
+  .g-sec{background:${t.primaryDk};color:#fff}
+  .g-sec .ga{position:absolute;right:-120px;top:50%;transform:translateY(-50%);opacity:.5}
+  .g-sec .gbig{position:absolute;left:96px;top:150px;font-size:300px;font-weight:800;line-height:.8;color:rgba(255,255,255,.09);font-family:"Arial Black","Arial",sans-serif;z-index:1}
+  .g-sec .box{position:absolute;left:120px;top:280px;width:640px;z-index:2}
+  .g-sec .part{font-size:15px;letter-spacing:6px;color:${t.accent};font-weight:800}
+  .g-sec h2{font-size:46px;font-weight:800;margin:14px 0 20px;line-height:1.2}
+  .g-sec .rule{width:480px;height:1px;background:rgba(255,255,255,.22)}
+  .g-sec .en{margin-top:16px;font-size:12px;letter-spacing:2px;color:rgba(255,255,255,.42);font-weight:700}
+
+  /* 环形进度墙 */
+  .rings{flex:1;display:flex;align-items:center;justify-content:space-around;margin-top:24px;gap:24px}
+  .rings .rw{display:flex;flex-direction:column;align-items:center;text-align:center;position:relative}
+  .rings .rw .rc{position:relative}
+  .rings .rw .rv{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:800;color:${t.primary};font-family:"Arial","Microsoft YaHei",sans-serif}
+  .rings .rw .rl{margin-top:14px;font-size:15px;color:${t.ink};max-width:180px;line-height:1.4}
+
+  /* geo 风：白底 + 实心导航块卡片（参考模板那种） */
+  .body.geo,.s-toc.geo{background:#fff}
+  .geo .cards .card{background:${t.primary};border:0;color:#fff}
+  .geo .cards .card .ic{background:rgba(255,255,255,.14);color:#fff}
+  .geo .cards .card .num{color:${t.accent}}
+  .geo .cards .card .ct{color:rgba(255,255,255,.92)}
   `
 }
 
 const bgImg = (url?: string) => (url ? `<img class="bg" src="${esc(url)}" crossorigin="anonymous">` : '')
 
+const isGeo = (o: DeckOutline) => o.theme.style === 'geo'
+/** geo 风内容页装饰：右上同心圆弧 + 左下圆点圈 + 左侧色条 */
+const geoDeco = (t: DeckTheme) =>
+  `<div class="geo-d"><div class="arc">${arcCluster(t, 460)}</div><div class="dr">${dotRing(t, 130)}</div><div class="gbar"></div></div>`
+
 /* ── 页型 ─────────────────────────────────────────────── */
+function gCover(o: DeckOutline): string {
+  const t = o.theme
+  const feats = (o.coverFeatures || []).filter((f) => f && f.value).slice(0, 4)
+  const featStrip = feats.length
+    ? `<div class="feats">${feats
+        .map(
+          (f, i) =>
+            `<div class="feat"><div class="fv">${icon(pickIcon(f.label + f.value, i), 18)}${esc(f.value)}</div><div class="fl">${esc(f.label)}</div>${f.en ? `<div class="fe">${esc(f.en)}</div>` : ''}</div>`,
+        )
+        .join('')}</div>`
+    : ''
+  return `<div class="slide s-cover g-cover">
+    <div class="ga">${arcCluster(t, 520)}</div>
+    <div class="gwedge"></div><div class="gwedge2"></div>
+    <div class="side"></div>
+    <div class="panel">
+      <div class="kbar"></div>
+      <div class="kick">KEYNOTE PRESENTATION</div>
+      <h1>${esc(o.title)}</h1><div class="tick"></div>
+      ${o.subtitle ? `<div class="sub">${esc(o.subtitle)}</div>` : ''}
+      ${featStrip}
+      ${feats.length ? '' : '<div class="meta"><div>汇报单位：____________</div><div>汇报时间：____________</div></div>'}
+    </div></div>`
+}
+
+function gSection(s: DeckSection, idx: number, total: number, o: DeckOutline): string {
+  const t = o.theme
+  return `<div class="slide s-sec g-sec">
+    <div class="ga">${arcCluster(t, 460)}</div>
+    <div class="gbig">${pad2(idx)}</div>
+    <div class="box">
+      <div class="part">PART ${pad2(idx)} · ${pad2(idx)} / ${pad2(total)}</div>
+      <h2>${esc(s.heading)}</h2>
+      <div class="rule"></div>
+      ${s.en ? `<div class="en">${esc(s.en)}</div>` : ''}
+    </div></div>`
+}
+
+function ringStats(sl: DeckSlideIn, en: string, o: DeckOutline): string {
+  const t = o.theme
+  const rows = (sl.data?.items || []).filter((r) => r.label).slice(0, 5)
+  const body = `<div class="rings">${rows
+    .map((r) => {
+      const num = Math.abs(parseFloat(String(r.value).replace(/[^0-9.\-]/g, '')) || 0)
+      return `<div class="rw"><div class="rc">${progRing(t, num, 150)}<div class="rv">${esc(String(r.value))}</div></div><div class="rl">${esc(r.label)}</div></div>`
+    })
+    .join('')}</div>`
+  return bodySlide(o, `${head(sl, en)}${body}`)
+}
+
 function cover(o: DeckOutline): string {
+  if (isGeo(o)) return gCover(o)
   const b = o.bg?.cover
   const pic = !b && o.coverImage
   const cls = b ? 's-cover on-bg' : pic ? 's-cover has-pic' : 's-cover'
@@ -385,12 +518,13 @@ function toc(o: DeckOutline): string {
         `<div class="it"><span class="tocic">${icon(pickIcon(s.heading, i), 22)}</span><span class="no">${pad2(i + 1)}</span><span class="h">${esc(s.heading)}</span></div>`,
     )
     .join('')
-  return `<div class="slide s-toc">${cbg(o)}<div class="z">
+  return `<div class="slide s-toc${isGeo(o) ? ' geo' : ''}">${cbg(o)}<div class="z">
     <h2>目录</h2><div class="en">CONTENTS</div><div class="tick"></div>
     <div class="grid ${two ? 'two' : ''}">${li}</div></div></div>`
 }
 
 function section(s: DeckSection, idx: number, total: number, o: DeckOutline): string {
+  if (isGeo(o)) return gSection(s, idx, total, o)
   const withBg = !!o.bg?.section
   return `<div class="slide s-sec">${bgImg(o.bg?.section)}
     ${withBg ? '<div class="scrim"></div><div class="sbar"></div>' : '<div class="blk"></div><div class="sbar"></div>'}
@@ -413,13 +547,15 @@ function head(sl: DeckSlideIn, en: string): string {
 /** 每张内容页固定的科技角标（全篇一致的科技母题，AI 底图上也画） */
 const techMark = '<div class="ctech"><i class="t1"></i><i class="t2"></i><i class="dot"></i><i class="b1"></i><i class="b2"></i></div>'
 
-/** 内容页底：有 AI 底图就铺图 + 渐变白蒙层保证正文可读；没有就用代码画的淡纹。都叠一层科技角标 */
+/** 内容页底：geo 风用几何装饰；否则有 AI 底图就铺图+渐变白蒙层，没有就代码淡纹+科技角标 */
 const cbg = (o: DeckOutline) =>
-  (o.bg?.content
-    ? `${bgImg(o.bg.content)}<div class="cwash"></div>`
-    : `<div class="cbg"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i></div>`) + techMark
+  isGeo(o)
+    ? geoDeco(o.theme)
+    : (o.bg?.content
+        ? `${bgImg(o.bg.content)}<div class="cwash"></div>`
+        : `<div class="cbg"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i></div>`) + techMark
 const bodySlide = (o: DeckOutline, inner: string) =>
-  `<div class="slide body">${cbg(o)}<div class="z">${inner}</div></div>`
+  `<div class="slide body${isGeo(o) ? ' geo' : ''}">${cbg(o)}<div class="z">${inner}</div></div>`
 
 const STEP_RE = /流程|步骤|阶段|环节|顺序|先后|第一步|首先/
 
@@ -575,8 +711,12 @@ function swot(sl: DeckSlideIn, en: string, o: DeckOutline): string {
 }
 
 function closing(o: DeckOutline): string {
-  const deco = o.bg?.content ? '' : '<div class="cn s"></div><div class="cn"></div><div class="cn b"></div>'
-  return `<div class="slide closing">${bgImg(o.bg?.content)}${deco}
+  const deco = isGeo(o)
+    ? `<div class="ga" style="position:absolute;right:-160px;bottom:-180px">${arcCluster(o.theme, 520)}</div>`
+    : o.bg?.content
+      ? ''
+      : '<div class="cn s"></div><div class="cn"></div><div class="cn b"></div>'
+  return `<div class="slide closing">${isGeo(o) ? '' : bgImg(o.bg?.content)}${deco}
     <div class="inner">
       <div class="ty">THANK YOU</div><h1>感谢观看</h1><div class="tick"></div>
       <div class="sub">${esc(o.title)}</div>
@@ -597,6 +737,7 @@ const CONTENT_LAYOUTS = new Set([
   'matrix',
   'swot',
   'image_text',
+  'rings',
 ])
 
 /** LLM 给的 layout 优先，缺失/对不上数据就按 payload 推断 */
@@ -609,8 +750,9 @@ export function resolveLayout(sl: DeckSlideIn): string {
     big_number: 'big_number',
   }
   if (lay in need && (sl[need[lay]] == null || typeof sl[need[lay]] !== 'object')) lay = ''
-  if ((lay === 'bar' || lay === 'stats') && !sl.data?.items?.length) lay = ''
+  if ((lay === 'bar' || lay === 'stats' || lay === 'rings') && !sl.data?.items?.length) lay = ''
   if (CONTENT_LAYOUTS.has(lay)) return lay
+  if (sl.data?.kind === 'ring' && sl.data.items?.length) return 'rings'
   if (sl.swot && (sl.swot.s?.length || sl.swot.w?.length || sl.swot.o?.length || sl.swot.t?.length))
     return 'swot'
   if (sl.matrix?.cells?.length) return 'matrix'
@@ -636,6 +778,7 @@ export function composeDeck(o: DeckOutline): { styleTag: string; slides: string[
       if (lay === 'swot') slides.push(swot(sl, en, o))
       else if (lay === 'matrix') slides.push(matrix(sl, en, o))
       else if (lay === 'compare') slides.push(compare(sl, en, o))
+      else if (lay === 'rings') slides.push(ringStats(sl, en, o))
       else if (lay === 'bar' || lay === 'stats') slides.push(chart(sl, t, en, o))
       else if (lay === 'big_number') slides.push(bigNumber(sl, en, o))
       else if (lay === 'image_text') {

@@ -102,8 +102,12 @@ _FALLBACK = {
     "slate":  ["#37506b", "#c98a3c", "#243447", "#f4f6f8", "#2b2b2b"],
     "teal":   ["#1f7a72", "#e0a52b", "#134b46", "#f2f7f6", "#2b2b2b"],
     "techblue": ["#1a3f7a", "#2f7de0", "#0d2951", "#f3f6fb", "#232a33"],
+    "geoblue":  ["#12579e", "#3aa0e0", "#0c3b6b", "#f4f8fc", "#233240"],
     "dark":   ["#e8b04b", "#3f7cc4", "#c8963a", "#1c2230", "#f2f2f2"],
 }
+
+# 纯几何图形装饰风（白底 + 代码画的同心圆弧/环形进度，不用 AI 大图）
+GEO_THEMES = {"geoblue"}
 
 
 def apply_theme_palette(outline: dict, theme_key: str) -> dict:
@@ -736,8 +740,9 @@ def build_deck(outline: dict, theme_key: str = "red", bg: dict | None = None) ->
                 slides.append(_matrix(t, i, ttl, en, mx, page, cbg))
             elif lay == "compare" and cmp:
                 slides.append(_compare(t, i, ttl, en, cmp, page, cbg))
-            elif lay in ("bar", "stats") and d and d.get("items"):
-                slides.append(_chart(t, i, ttl, en, d.get("kind", "bar"), d.get("items") or [], page, cbg))
+            elif lay in ("bar", "stats", "rings") and d and d.get("items"):
+                k = "bar" if d.get("kind") == "bar" else "stat"  # python 备用路把 ring 当 stat 画
+                slides.append(_chart(t, i, ttl, en, k, d.get("items") or [], page, cbg))
             elif lay == "big_number" and bn:
                 slides.append(_big_number(t, i, ttl, en, bn, page, cbg))
             else:
@@ -752,7 +757,8 @@ def build_deck(outline: dict, theme_key: str = "red", bg: dict | None = None) ->
 
 
 _CONTENT_LAYOUTS = {
-    "cards", "list", "quote", "timeline", "big_number", "stats", "bar", "compare", "matrix", "swot", "image_text",
+    "cards", "list", "quote", "timeline", "big_number", "stats", "bar", "rings",
+    "compare", "matrix", "swot", "image_text",
 }
 
 
@@ -762,10 +768,12 @@ def resolve_layout(sl: dict) -> str:
     _need = {"swot": "swot", "matrix": "matrix", "compare": "compare", "big_number": "big_number"}
     if lay in _need and not isinstance(sl.get(_need[lay]), dict):
         lay = ""
-    if lay in ("bar", "stats") and not (isinstance(sl.get("data"), dict) and sl["data"].get("items")):
+    if lay in ("bar", "stats", "rings") and not (isinstance(sl.get("data"), dict) and sl["data"].get("items")):
         lay = ""
     if lay in _CONTENT_LAYOUTS:
         return lay
+    if isinstance(sl.get("data"), dict) and sl["data"].get("kind") == "ring" and sl["data"].get("items"):
+        return "rings"
     # 兜底推断（老数据 / 模型没给 layout）
     if isinstance(sl.get("swot"), dict) and any(sl["swot"].get(k) for k in ("s", "w", "o", "t")):
         return "swot"
