@@ -782,6 +782,8 @@ _DECK_JSON_SPEC = (
     '{"title":"演示标题","subtitle":"一句副标题",'
     '"palette":["#主色","#强调色","#主色深","#背景浅色","#正文深灰"],'
     '"mood":"用一句话描述整体视觉基调，例：庄重大气的党政红金风、简洁现代的科技蓝",'
+    '"cover_image_prompt":"给封面配一张 16:9 专业 PPT 封面设计图的英文或中文提示词",'
+    '"section_image_prompt":"给章节过渡页配一张 16:9 氛围图的提示词，风格跟封面一致",'
     '"sections":[{"heading":"章节标题","en":"章节英文短标题(全大写,2~4词)",'
     '"slides":[{"title":"小标题","en":"这一页的英文短标题(全大写,1~3词)","intro":"1~2句导语，可为空字符串","bullets":["要点一","要点二"]}]}]}\n'
     "当某一页内容本身是量化的（占比、数量、几个关键指标），可以把这一页改成图表页——"
@@ -794,6 +796,11 @@ _DECK_JSON_SPEC = (
     "对比页 / SWOT 页整份大纲里最多各 1 页，只在内容确实契合时才用，不要硬套。\n"
     "palette 必须是 5 个协调的十六进制色，符合主题气质、对比度足够（正文色要能在背景浅色上看清）；"
     "en 字段是给版式当装饰小字用的英文，要贴切、地道。\n"
+    "cover_image_prompt：描述一张能直接当商业 PPT 封面的完整设计图，要有跟主题贴切的主视觉"
+    "（如产品图/行业场景/象征元素/意境画面），符合 mood 的色调和风格，画面有设计感、专业、"
+    "像优品PPT那种成品模板；关键约束：画面左侧到中部约 55% 留出干净、简洁、低细节的区域给标题文字，"
+    "整张图不要出现任何文字、字母、数字、logo。section_image_prompt 同理但更偏氛围/意境，"
+    "左下角约一半区域留干净，风格必须跟封面统一。两个 prompt 都写具体，别写空泛的形容词。\n"
     "文案排版规范（办公稿标准，务必遵守）：所有中文标点用全角（，。、；：？！“”（）），不要用半角逗号句号；"
     "中文字符之间不加空格；每条 bullet 和 intro 都是完整通顺的句子、以句号结尾；title/heading 是短语、结尾不加标点。"
 )
@@ -856,41 +863,39 @@ async def _gen_deck_outline(
     return data
 
 
-_DECK_BG_BASE = (
-    "16:9 宽屏 PPT 背景图，{mood}。主色调只用这几个颜色 {palette}。\n"
-    "{spec}\n"
-    "统一规则：像资深平面设计师做的，干净、克制、专业；"
-    "绝对不要任何文字、字母、数字、logo、国徽党徽警徽等国家标志、二维码；"
-    "不要写实照片、不要写实人物；不要整圈边框相框；"
-    "装饰只用简单的几何形状、色块、细线条、极淡的点阵纹理，且必须贴在画面边缘/角落。"
+# 封面/章节页整张设计图（对标优品PPT那种成品封面）——图里的安全与画质约束
+_DECK_ART_GUARD = (
+    "16:9 横版宽屏，专业商业 PPT 的成品设计图，构图讲究、有设计感、画质高清。"
+    "主色调：{pal}。{mood}。\n"
+    "绝对禁止：任何文字、字母、数字、水印、logo、国徽/党徽/警徽等国家标志、二维码；"
+    "不要整圈边框相框；不要低俗或敏感内容。"
 )
-_DECK_BG_SPEC = {
+_DECK_ART_FALLBACK = {
     "cover": (
-        "这是封面背景：左下角约 1/3 区域可以有较实的色块和 2~3 个简洁几何装饰；"
-        "画面右侧 2/3 和整个上半部分必须是接近纯色/纯白的大片空白，什么都不放（标题会压在左上方）。"
-    ),
-    "content": (
-        "这是正文页背景：整页 90% 以上是接近纯白的干净空白；"
-        "只允许在左上角和右下角各有一小簇（不超过画面 12%）的几何装饰；"
-        "中间和四周大面积留白，不要任何色块、面板、横幅、大图形。"
+        "一张大气的商业 PPT 封面：与「{topic}」主题贴切的主视觉放在画面右侧，"
+        "配简洁的几何色块和光影装饰；画面左侧到中部约 55% 是干净、低细节的浅色留白区（留给标题）。"
     ),
     "section": (
-        "这是章节过渡页背景：整页铺满主色（可有极淡的同色纹理），"
-        "右上方可以有一个大的、同色系、比背景略深或略浅的半透明几何图形作装饰；"
-        "左下角约 45% 宽、40% 高的区域必须保持干净、不放任何装饰（章节标题会放这里）；"
-        "不要白色面板/横幅、不要大数字。"
+        "一张与封面统一风格的章节过渡页氛围图：主色铺底，右上方有大的同色系半透明几何装饰，"
+        "左下角约一半区域保持干净留白。"
     ),
 }
 
 
-async def _gen_deck_bg_kit(mood: str, palette: list) -> dict:
-    """生成 3 张整页背景（封面/内容/章节），返回 {kind: "/api/ai/generated/xxx.png"}。"""
-    pal = "、".join(str(c) for c in (palette or [])[:4]) or "自定"
-    kit: dict[str, str] = {}
-    for kind, spec in _DECK_BG_SPEC.items():
-        prompt = _DECK_BG_BASE.format(mood=mood or "简洁专业的商务风", palette=pal, spec=spec)
-        raw = await _gen_image_bytes(prompt, "1536x1024", attempts=2, timeout=150)
-        # 存 db 需要 user_id——这里由调用方拿到后再存，先返回字节
+async def _gen_deck_cover_kit(outline: dict) -> dict:
+    """生成封面 + 章节页两张整张设计图（不是克制的抽象背景）。返回 {kind: bytes}。"""
+    pal = "、".join(str(c) for c in (outline.get("palette") or [])[:4]) or "自定协调配色"
+    mood = (outline.get("mood") or "简洁现代的商务风").strip()
+    topic = (outline.get("title") or "").strip()
+    guard = _DECK_ART_GUARD.format(pal=pal, mood=mood)
+    plan = {
+        "cover": (outline.get("cover_image_prompt") or "").strip()
+        or _DECK_ART_FALLBACK["cover"].format(topic=topic or "演示主题"),
+        "section": (outline.get("section_image_prompt") or "").strip() or _DECK_ART_FALLBACK["section"],
+    }
+    kit: dict[str, bytes] = {}
+    for kind, body in plan.items():
+        raw = await _gen_image_bytes(f"{body}\n{guard}", "1536x1024", attempts=2, timeout=150)
         kit[kind] = raw
     return kit
 
@@ -920,7 +925,7 @@ async def _run_deck_job(job_id, user_id, ticket, topic, n, theme, extra, ai_bg, 
         outline = _attach_deck_photos(outline, photos)
         bg = None
         if ai_bg:
-            raw_kit = await _gen_deck_bg_kit(outline.get("mood", ""), outline.get("palette") or [])
+            raw_kit = await _gen_deck_cover_kit(outline)
             bg = _persist_bg_kit(db, user_id, raw_kit)
         slides = deck_gen.build_deck(outline, theme, bg)
         _HANDOUT_JOBS[job_id] = {

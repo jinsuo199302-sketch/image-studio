@@ -122,6 +122,8 @@ function css(t: DeckTheme): string {
   .s-sec{background:${t.primaryDk};color:#fff}
   .s-sec .sbar{position:absolute;left:0;top:0;width:14px;height:100%;background:${t.accent};z-index:3}
   .s-sec .blk{position:absolute;right:0;top:0;width:44%;height:100%;background:rgba(255,255,255,.05);z-index:0}
+  /* 有 AI 整图时，左侧压一层深色让白字压得住 */
+  .s-sec .scrim{position:absolute;left:0;top:0;width:60%;height:100%;background:rgba(10,13,18,.44);z-index:1}
   .s-sec .big{position:absolute;right:36px;top:96px;font-size:330px;font-weight:800;color:rgba(255,255,255,.08);line-height:.72;z-index:1;font-family:"Arial Black","Arial",sans-serif}
   .s-sec .box{position:absolute;left:120px;top:256px;width:660px;z-index:2}
   .s-sec .part{font-size:15px;letter-spacing:6px;color:${t.accent};font-weight:800}
@@ -264,7 +266,7 @@ function toc(o: DeckOutline): string {
 function section(s: DeckSection, idx: number, total: number, o: DeckOutline): string {
   const withBg = !!o.bg?.section
   return `<div class="slide s-sec">${bgImg(o.bg?.section)}
-    ${withBg ? '' : '<div class="blk"></div><div class="sbar"></div>'}
+    ${withBg ? '<div class="scrim"></div><div class="sbar"></div>' : '<div class="blk"></div><div class="sbar"></div>'}
     <div class="big">${pad2(idx)}</div>
     <div class="box">
       <div class="part">PART ${pad2(idx)}</div>

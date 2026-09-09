@@ -325,8 +325,8 @@ function rmImg(i: number) {
         <label class="flex cursor-pointer items-start gap-2 rounded-md border border-gray-200 p-2 text-xs">
           <el-checkbox v-model="aiBg" class="!h-4" />
           <span class="text-gray-600">
-            AI 生成整页背景（配色 + 3 张背景图，更精美）<br />
-            <span class="text-[11px] text-gray-400">多花 2~4 分钟；不勾选是代码画的简版，几十秒</span>
+            AI 生成精美封面（封面 + 章节页整张设计图）<br />
+            <span class="text-[11px] text-gray-400">AI 按主题画整张封面/章节图，我们叠文字；多花 1~2 分钟</span>
           </span>
         </label>
         <el-button
@@ -339,7 +339,7 @@ function rmImg(i: number) {
           {{
             generating
               ? aiBg
-                ? 'AI 生成中…（约 2~4 分钟）'
+                ? 'AI 画封面 + 排版中…（约 1~2 分钟）'
                 : aiSource === 'material'
                   ? 'AI 提炼重组中…（约 1~3 分钟）'
                   : 'AI 排版中…（约 20~40 秒）'
