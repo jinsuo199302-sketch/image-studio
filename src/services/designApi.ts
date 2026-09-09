@@ -343,6 +343,7 @@ export interface DeckOutlineRaw {
   palette?: string[]
   mood?: string
   cover_image?: string
+  cover_features?: { value: string; label: string; en?: string }[]
   sections: {
     heading: string
     en?: string

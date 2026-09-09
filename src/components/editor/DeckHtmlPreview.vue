@@ -19,6 +19,7 @@ const FALLBACK: Record<string, string[]> = {
   purple: ['#6b4ea8', '#e0a52b', '#463079', '#f6f4fa', '#2b2b2b'],
   slate: ['#37506b', '#c98a3c', '#243447', '#f4f6f8', '#2b2b2b'],
   teal: ['#1f7a72', '#e0a52b', '#134b46', '#f2f7f6', '#2b2b2b'],
+  techblue: ['#1a3f7a', '#2f7de0', '#0d2951', '#f3f6fb', '#232a33'],
 }
 
 const theme = computed<DeckTheme>(() => {
@@ -37,6 +38,7 @@ const composed = computed(() => {
     sections: props.outline.sections || [],
     bg: props.bg ?? null,
     coverImage: props.outline.cover_image,
+    coverFeatures: props.outline.cover_features,
   }
   return composeDeck(o)
 })

@@ -44,6 +44,7 @@ const THEMES = [
   { key: 'red', label: '党政红金' },
   { key: 'blue', label: '商务蓝' },
   { key: 'green', label: '清新绿' },
+  { key: 'techblue', label: '科技蓝' },
   { key: 'purple', label: '典雅紫' },
   { key: 'slate', label: '沉稳蓝灰' },
   { key: 'teal', label: '青碧' },
@@ -325,8 +326,8 @@ function rmImg(i: number) {
         <label class="flex cursor-pointer items-start gap-2 rounded-md border border-gray-200 p-2 text-xs">
           <el-checkbox v-model="aiBg" class="!h-4" />
           <span class="text-gray-600">
-            AI 生成精美封面（封面 + 章节页整张设计图）<br />
-            <span class="text-[11px] text-gray-400">AI 按主题画整张封面/章节图，我们叠文字；多花 1~2 分钟</span>
+            AI 生成整套背景（封面 + 章节页设计图 + 正文页底图）<br />
+            <span class="text-[11px] text-gray-400">AI 按主题画好背景，我们叠文字和图标；多花 2~4 分钟</span>
           </span>
         </label>
         <el-button
@@ -339,7 +340,7 @@ function rmImg(i: number) {
           {{
             generating
               ? aiBg
-                ? 'AI 画封面 + 排版中…（约 1~2 分钟）'
+                ? 'AI 画背景 + 排版中…（约 2~4 分钟）'
                 : aiSource === 'material'
                   ? 'AI 提炼重组中…（约 1~3 分钟）'
                   : 'AI 排版中…（约 20~40 秒）'

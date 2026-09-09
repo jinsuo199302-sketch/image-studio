@@ -100,6 +100,8 @@ export interface DeckOutline {
   bg?: { cover?: string; content?: string; section?: string } | null
   /** 用户上传的照片里选一张当封面主图（可选） */
   coverImage?: string
+  /** 封面亮点规格条（产品/方案发布类）：3~4 个 */
+  coverFeatures?: { value: string; label: string; en?: string }[]
 }
 
 const esc = (s = '') =>
@@ -130,14 +132,36 @@ function css(t: DeckTheme): string {
   .s-cover .cn3{position:absolute;right:340px;top:0;width:52px;height:200px;background:${t.primaryDk};z-index:0}
   .s-cover .br1{position:absolute;right:90px;bottom:84px;width:132px;height:7px;background:${t.primary};z-index:1}
   .s-cover .br2{position:absolute;right:90px;bottom:84px;width:7px;height:132px;background:${t.primary};z-index:1}
-  .s-cover .panel{position:absolute;left:110px;top:206px;width:720px;z-index:2}
-  .s-cover.on-bg .panel{left:76px;top:150px;width:760px;padding:44px 46px 40px;background:rgba(255,255,255,.92);border-radius:8px}
+  .s-cover .panel{position:absolute;left:110px;top:196px;width:720px;z-index:2}
   .s-cover .kbar{width:64px;height:8px;background:${t.accent};margin-bottom:22px}
   .s-cover .kick{font-size:13px;letter-spacing:5px;color:${t.accent};font-weight:800}
-  .s-cover h1{font-size:56px;line-height:1.16;color:${t.primaryDk};font-weight:800;margin:12px 0 22px}
+  .s-cover h1{font-size:56px;line-height:1.16;color:${t.primaryDk};font-weight:800;margin:12px 0 20px}
   .s-cover .tick{width:96px;height:6px;background:${t.accent}}
-  .s-cover .sub{font-size:20px;color:#6f7378;margin-top:22px;line-height:1.5}
-  .s-cover .meta{margin-top:46px;font-size:13px;color:#9a9a9a;line-height:2.1}
+  .s-cover .sub{font-size:20px;color:#6f7378;margin-top:20px;line-height:1.5}
+  .s-cover .suben{font-size:12px;letter-spacing:3px;color:#9aa4b2;font-weight:700;margin-top:8px}
+  .s-cover .meta{margin-top:40px;font-size:13px;color:#9a9a9a;line-height:2.1}
+  /* 封面亮点规格条 */
+  .s-cover .feats{display:flex;margin-top:34px}
+  .s-cover .feat{padding-right:22px;margin-right:22px;border-right:1px solid rgba(120,130,150,.28)}
+  .s-cover .feat:last-child{border-right:0;margin-right:0}
+  .s-cover .feat .fv{font-size:19px;font-weight:800;color:${t.accent};display:flex;align-items:center;gap:6px}
+  .s-cover .feat .fv .ico{width:18px;height:18px}
+  .s-cover .feat .fl{font-size:12px;color:${t.primaryDk};margin-top:5px;font-weight:600}
+  .s-cover .feat .fe{font-size:9px;letter-spacing:1px;color:#9aa4b2;margin-top:2px}
+
+  /* 封面：有 AI 整图时——白字直接压在图左侧的干净区，梯度蒙层兜底 */
+  .s-cover.on-bg{background:${t.primaryDk}}
+  .s-cover.on-bg .scrim{position:absolute;left:0;top:0;width:56%;height:100%;background:linear-gradient(90deg,rgba(8,16,34,.86) 46%,rgba(8,16,34,0));z-index:1}
+  .s-cover.on-bg .panel{left:96px;width:600px}
+  .s-cover.on-bg .kick{color:#c7d4ec}
+  .s-cover.on-bg h1{color:#fff}
+  .s-cover.on-bg .sub{color:rgba(255,255,255,.74)}
+  .s-cover.on-bg .suben{color:rgba(255,255,255,.4)}
+  .s-cover.on-bg .meta{color:rgba(255,255,255,.5)}
+  .s-cover.on-bg .feat{border-color:rgba(255,255,255,.22)}
+  .s-cover.on-bg .feat .fl{color:rgba(255,255,255,.85)}
+  .s-cover.on-bg .feat .fe{color:rgba(255,255,255,.4)}
+
   /* 封面带用户照片：右 46% 放图，左侧留白放标题 */
   .s-cover.has-pic .cpic{position:absolute;right:0;top:0;width:46%;height:100%;object-fit:cover;z-index:1}
   .s-cover.has-pic .cn1,.s-cover.has-pic .cn2,.s-cover.has-pic .cn3,.s-cover.has-pic .ring{display:none}
@@ -197,6 +221,8 @@ function css(t: DeckTheme): string {
   .cbg .b{right:56px;top:52px;width:64px;height:64px;border-radius:50%;background:${t.accent}12}
   .cbg .c{left:52px;bottom:44px;width:52px;height:5px;background:${t.accent}88}
   .cbg .d{left:52px;bottom:44px;width:5px;height:52px;background:${t.accent}88}
+  /* AI 正文底图上压一层白，不管 AI 画得多花都保证正文清晰 */
+  .cwash{position:absolute;inset:0;background:rgba(255,255,255,.74);z-index:0}
   .body>.z,.s-toc>.z{position:relative;z-index:1}
 
   .ico{display:block}
@@ -320,14 +346,24 @@ function cover(o: DeckOutline): string {
     !b && !pic
       ? `<div class="cn3"></div><div class="cn1"></div><div class="cn2"></div><div class="br1"></div><div class="br2"></div>`
       : ''
-  return `<div class="slide ${cls}">${bgImg(b)}${deco}<div class="side"></div>
+  const feats = (o.coverFeatures || []).filter((f) => f && f.value).slice(0, 4)
+  const featStrip = feats.length
+    ? `<div class="feats">${feats
+        .map(
+          (f, i) =>
+            `<div class="feat"><div class="fv">${icon(pickIcon(f.label + f.value, i), 18)}${esc(f.value)}</div><div class="fl">${esc(f.label)}</div>${f.en ? `<div class="fe">${esc(f.en)}</div>` : ''}</div>`,
+        )
+        .join('')}</div>`
+    : ''
+  return `<div class="slide ${cls}">${bgImg(b)}${deco}${b ? '<div class="scrim"></div>' : ''}<div class="side"></div>
     ${pic ? `<img class="cpic" src="${esc(o.coverImage!)}" crossorigin="anonymous">` : ''}
     <div class="panel">
       <div class="kbar"></div>
       <div class="kick">KEYNOTE PRESENTATION</div>
       <h1>${esc(o.title)}</h1><div class="tick"></div>
       ${o.subtitle ? `<div class="sub">${esc(o.subtitle)}</div>` : ''}
-      <div class="meta"><div>汇报单位：____________</div><div>汇报时间：____________</div></div>
+      ${featStrip}
+      ${feats.length ? '' : '<div class="meta"><div>汇报单位：____________</div><div>汇报时间：____________</div></div>'}
     </div></div>`
 }
 
@@ -340,7 +376,7 @@ function toc(o: DeckOutline): string {
         `<div class="it"><span class="tocic">${icon(pickIcon(s.heading, i), 22)}</span><span class="no">${pad2(i + 1)}</span><span class="h">${esc(s.heading)}</span></div>`,
     )
     .join('')
-  return `<div class="slide s-toc">${bgImg(o.bg?.content)}${cbg(o)}<div class="z">
+  return `<div class="slide s-toc">${cbg(o)}<div class="z">
     <h2>目录</h2><div class="en">CONTENTS</div><div class="tick"></div>
     <div class="grid ${two ? 'two' : ''}">${li}</div></div></div>`
 }
@@ -365,11 +401,13 @@ function head(sl: DeckSlideIn, en: string): string {
     ${sl.intro ? `<div class="intro">${para(sl.intro)}</div>` : ''}`
 }
 
-/** 内容页统一淡雅底纹（无 AI 内容底图时）+ 内容层包一层 .z */
+/** 内容页底：有 AI 底图就铺图 + 白色蒙层保证正文可读；没有就用代码画的淡纹 */
 const cbg = (o: DeckOutline) =>
-  o.bg?.content ? '' : `<div class="cbg"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i></div>`
+  o.bg?.content
+    ? `${bgImg(o.bg.content)}<div class="cwash"></div>`
+    : `<div class="cbg"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i></div>`
 const bodySlide = (o: DeckOutline, inner: string) =>
-  `<div class="slide body">${bgImg(o.bg?.content)}${cbg(o)}<div class="z">${inner}</div></div>`
+  `<div class="slide body">${cbg(o)}<div class="z">${inner}</div></div>`
 
 const STEP_RE = /流程|步骤|阶段|环节|顺序|先后|第一步|首先/
 

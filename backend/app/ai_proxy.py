@@ -782,8 +782,10 @@ _DECK_JSON_SPEC = (
     '{"title":"演示标题","subtitle":"一句副标题",'
     '"palette":["#主色","#强调色","#主色深","#背景浅色","#正文深灰"],'
     '"mood":"用一句话描述整体视觉基调，例：庄重大气的党政红金风、简洁现代的科技蓝",'
-    '"cover_image_prompt":"给封面配一张 16:9 专业 PPT 封面设计图的英文或中文提示词",'
+    '"cover_image_prompt":"给封面配一张 16:9 专业 PPT 封面设计图的提示词",'
     '"section_image_prompt":"给章节过渡页配一张 16:9 氛围图的提示词，风格跟封面一致",'
+    '"content_image_prompt":"给正文页配一张几乎纯白、只角落有极淡装饰的底图提示词",'
+    '"cover_features":[{"value":"4K","label":"超清影像","en":"4K Ultra HD"}],'
     '"sections":[{"heading":"章节标题","en":"章节英文短标题(全大写,2~4词)",'
     '"slides":[{"layout":"版式类型","title":"小标题","en":"英文短标题(全大写,1~3词)","intro":"1~2句导语,可空","bullets":["要点一","要点二"]}]}]}\n'
     "\n【关键】每个 slide 必须先判断内容最适合哪种版式,填 layout 字段(只做这道选择题,不要输出坐标/字号)。"
@@ -802,11 +804,16 @@ _DECK_JSON_SPEC = (
     "分布要求:同一份大纲里 layout 至少出现 4 种以上,不要每页都是 cards;compare/matrix/swot/big_number 各最多 1~2 页,只在真契合时用。\n"
     "palette 必须是 5 个协调的十六进制色，符合主题气质、对比度足够（正文色要能在背景浅色上看清）；"
     "en 字段是给版式当装饰小字用的英文，要贴切、地道。\n"
-    "cover_image_prompt：描述一张能直接当商业 PPT 封面的完整设计图，要有跟主题贴切的主视觉"
-    "（如产品图/行业场景/象征元素/意境画面），符合 mood 的色调和风格，画面有设计感、专业、"
-    "像优品PPT那种成品模板；关键约束：画面左侧到中部约 55% 留出干净、简洁、低细节的区域给标题文字，"
-    "整张图不要出现任何文字、字母、数字、logo。section_image_prompt 同理但更偏氛围/意境，"
-    "左下角约一半区域留干净，风格必须跟封面统一。两个 prompt 都写具体，别写空泛的形容词。\n"
+    "cover_image_prompt：描述一张能直接当商业 PPT 封面的完整设计图。参考市面成品模板的做法——"
+    "一张跟主题强相关的高质量主视觉（产品渲染图 / 行业实景 / 象征元素 / 意境画面）占据画面右侧约 60%，"
+    "配简洁的斜切几何色块、光效、细线条装饰；符合 mood 的色调；"
+    "关键约束：画面左侧约 40% 留出干净、低细节、纯色或浅色的区域给标题；整张图绝对不要任何文字/字母/数字/logo。\n"
+    "section_image_prompt：跟封面同一套视觉语言的章节过渡氛围图，主色调铺底 + 主视觉元素，左下约一半区域留干净。\n"
+    "content_image_prompt：正文页底图，**必须极简**——整页 92% 接近纯白，只左上角和右下角各一小簇极淡的同色系细线/半透明几何，中间完全干净。整篇正文页复用这一张，绝不能压住文字。\n"
+    "三个 prompt 都写具体，别堆空泛形容词。\n"
+    "cover_features：如果主题是产品 / 方案 / 服务发布，且能提炼出 3~4 个亮点规格，就填这个数组"
+    "（每项 value=数字或短词、label=中文说明 4~6 字、en=英文，例 {\"value\":\"46分钟\",\"label\":\"超长续航\",\"en\":\"46 Min Flight\"}）；"
+    "不是发布类主题就设为空数组 []。\n"
     "文案排版规范（办公稿标准，务必遵守）：所有中文标点用全角（，。、；：？！“”（）），不要用半角逗号句号；"
     "中文字符之间不加空格；每条 bullet 和 intro 都是完整通顺的句子、以句号结尾；title/heading 是短语、结尾不加标点。"
 )
@@ -885,11 +892,17 @@ _DECK_ART_FALLBACK = {
         "一张与封面统一风格的章节过渡页氛围图：主色铺底，右上方有大的同色系半透明几何装饰，"
         "左下角约一半区域保持干净留白。"
     ),
+    # 内容页底图：整篇复用同一张，必须极其克制，不能压住正文
+    "content": (
+        "一张几乎纯白的商业 PPT 正文页背景：整页 92% 以上是接近纯白的干净留白；"
+        "只在左上角和右下角各有一小簇（不超过画面 10%）极淡的同色系细线条 / 半透明几何形；"
+        "中间大片区域完全干净，不放任何色块、面板、横幅、图形、渐变。"
+    ),
 }
 
 
-async def _gen_deck_cover_kit(outline: dict) -> dict:
-    """生成封面 + 章节页两张整张设计图（不是克制的抽象背景）。返回 {kind: bytes}。"""
+async def _gen_deck_cover_kit(outline: dict, want_content_bg: bool = True) -> dict:
+    """生成封面 + 章节页（整张设计图）+ 内容页底图（极淡、整篇复用）。返回 {kind: bytes}。"""
     pal = "、".join(str(c) for c in (outline.get("palette") or [])[:4]) or "自定协调配色"
     mood = (outline.get("mood") or "简洁现代的商务风").strip()
     topic = (outline.get("title") or "").strip()
@@ -899,10 +912,16 @@ async def _gen_deck_cover_kit(outline: dict) -> dict:
         or _DECK_ART_FALLBACK["cover"].format(topic=topic or "演示主题"),
         "section": (outline.get("section_image_prompt") or "").strip() or _DECK_ART_FALLBACK["section"],
     }
+    if want_content_bg:
+        plan["content"] = (outline.get("content_image_prompt") or "").strip() or _DECK_ART_FALLBACK["content"]
     kit: dict[str, bytes] = {}
     for kind, body in plan.items():
-        raw = await _gen_image_bytes(f"{body}\n{guard}", "1536x1024", attempts=2, timeout=150)
-        kit[kind] = raw
+        try:
+            kit[kind] = await _gen_image_bytes(f"{body}\n{guard}", "1536x1024", attempts=2, timeout=150)
+        except Exception:
+            if kind in ("cover", "section"):
+                raise  # 封面/章节图必须有
+            # 内容底图失败就算了，用代码画的淡纹
     return kit
 
 
