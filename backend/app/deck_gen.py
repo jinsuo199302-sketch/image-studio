@@ -122,32 +122,31 @@ def _circle(cx, cy, r, *, fill=None, stroke=None, sw=0.0):
 
 # ── 简版线性图标：几笔 line/circle/rect 拼出来，都在 [-1,1] 单位坐标里 ──
 def _icon(name: str, cx: float, cy: float, size: float, color: str) -> list[dict]:
+    """简单线性图标，2~4 笔，坐标在 [-1,1]。size = 图标直径。"""
     s = size / 2
-    L = lambda a, b, cc, d: _line(cx + a * s, cy + b * s, cx + cc * s, cy + d * s, color, max(2, size * 0.06))  # noqa: E731
-    C = lambda a, b, rr: _circle(cx + a * s, cy + b * s, rr * s, stroke=color, sw=max(2, size * 0.06))  # noqa: E731
+    sw = max(2.4, size * 0.08)
+    L = lambda a, b, cc, d: _line(cx + a * s, cy + b * s, cx + cc * s, cy + d * s, color, sw)  # noqa: E731
+    C = lambda a, b, rr: _circle(cx + a * s, cy + b * s, rr * s, stroke=color, sw=sw)  # noqa: E731
     m = {
-        "check": [C(0, 0, 1), L(-0.42, 0.02, -0.12, 0.34), L(-0.12, 0.34, 0.44, -0.34)],
-        "target": [C(0, 0, 1), C(0, 0, 0.55), _circle(cx, cy, s * 0.14, fill=color)],
-        "flag": [L(-0.5, -0.7, -0.5, 0.7), L(-0.5, -0.7, 0.5, -0.4), L(0.5, -0.4, -0.5, -0.1)],
-        "doc": [L(-0.5, -0.7, -0.5, 0.7), L(0.4, -0.7, 0.4, 0.7), L(-0.5, -0.7, 0.4, -0.7),
-                L(-0.5, 0.7, 0.4, 0.7), L(-0.28, -0.3, 0.18, -0.3), L(-0.28, 0.05, 0.18, 0.05)],
-        "bulb": [C(0, -0.2, 0.62), L(-0.24, 0.5, 0.24, 0.5), L(-0.18, 0.72, 0.18, 0.72)],
-        "gear": [C(0, 0, 0.62), _circle(cx, cy, s * 0.18, fill=color),
-                 L(0, -1, 0, -0.62), L(0, 1, 0, 0.62), L(-1, 0, -0.62, 0), L(1, 0, 0.62, 0)],
-        "up": [L(0, 0.7, 0, -0.7), L(0, -0.7, -0.4, -0.28), L(0, -0.7, 0.4, -0.28)],
-        "shield": [L(-0.5, -0.55, 0, -0.75), L(0, -0.75, 0.5, -0.55), L(-0.5, -0.55, -0.5, 0.15),
-                   L(0.5, -0.55, 0.5, 0.15), L(-0.5, 0.15, 0, 0.75), L(0.5, 0.15, 0, 0.75)],
-        "chat": [L(-0.6, -0.5, 0.6, -0.5), L(-0.6, 0.3, 0.6, 0.3), L(-0.6, -0.5, -0.6, 0.3),
-                 L(0.6, -0.5, 0.6, 0.3), L(-0.4, 0.3, -0.4, 0.6), L(-0.4, 0.6, -0.05, 0.3)],
-        "star": [L(0, -0.75, 0.22, -0.1), L(0.22, -0.1, 0.75, -0.1), L(0.75, -0.1, 0.32, 0.28),
-                 L(0.32, 0.28, 0.48, 0.75), L(0.48, 0.75, 0, 0.42), L(0, 0.42, -0.48, 0.75),
-                 L(-0.48, 0.75, -0.32, 0.28), L(-0.32, 0.28, -0.75, -0.1), L(-0.75, -0.1, -0.22, -0.1),
-                 L(-0.22, -0.1, 0, -0.75)],
+        "check": [C(0, 0, 0.92), L(-0.4, 0.02, -0.12, 0.32), L(-0.12, 0.32, 0.42, -0.3)],
+        "target": [C(0, 0, 0.92), _circle(cx, cy, s * 0.3, fill=color)],
+        "flag": [L(-0.42, -0.7, -0.42, 0.72), L(-0.42, -0.62, 0.5, -0.36), L(0.5, -0.36, -0.42, -0.06)],
+        "doc": [L(-0.42, -0.72, -0.42, 0.72), L(0.36, -0.72, 0.36, 0.72), L(-0.42, -0.72, 0.36, -0.72),
+                L(-0.42, 0.72, 0.36, 0.72), L(-0.22, -0.12, 0.16, -0.12), L(-0.22, 0.2, 0.16, 0.2)],
+        "bulb": [C(0, -0.18, 0.62), L(-0.22, 0.52, 0.22, 0.52), L(-0.16, 0.74, 0.16, 0.74)],
+        "gear": [C(0, 0, 0.5), L(0, -0.92, 0, -0.5), L(0, 0.92, 0, 0.5), L(-0.92, 0, -0.5, 0), L(0.92, 0, 0.5, 0)],
+        "up": [L(0, 0.72, 0, -0.72), L(0, -0.72, -0.4, -0.28), L(0, -0.72, 0.4, -0.28)],
+        "shield": [L(-0.5, -0.5, 0, -0.72), L(0, -0.72, 0.5, -0.5), L(-0.5, -0.5, -0.5, 0.14),
+                   L(0.5, -0.5, 0.5, 0.14), L(-0.5, 0.14, 0, 0.74), L(0.5, 0.14, 0, 0.74)],
+        "chat": [L(-0.6, -0.48, 0.6, -0.48), L(-0.6, 0.28, 0.28, 0.28), L(-0.6, -0.48, -0.6, 0.28),
+                 L(0.6, -0.48, 0.6, 0.28), L(-0.4, 0.28, -0.4, 0.6), L(-0.4, 0.6, -0.02, 0.28)],
+        "star": [L(0, -0.7, 0.28, 0.5), L(0.28, 0.5, -0.66, -0.24), L(-0.66, -0.24, 0.66, -0.24),
+                 L(0.66, -0.24, -0.28, 0.5), L(-0.28, 0.5, 0, -0.7)],
     }
     return m.get(name, m["check"])
 
 
-_ICON_CYCLE = ["target", "check", "bulb", "flag", "gear", "shield", "chat", "star"]
+_ICON_CYCLE = ["target", "check", "bulb", "flag", "shield", "up", "chat", "star"]
 
 
 def _bg_layer(t: dict, bg_url: str | None, kind: str) -> list[dict]:
@@ -172,84 +171,100 @@ def _bg_layer(t: dict, bg_url: str | None, kind: str) -> list[dict]:
 
 
 # ── 页型 ─────────────────────────────────────────────────────────
+def _fit_size(text: str, box_w: float, base: float, max_lines: int = 2) -> float:
+    """标题太长就缩字号，尽量控制在 max_lines 行内。"""
+    size = base
+    while size > base * 0.55 and estimate_text_lines(text, box_w, size) > max_lines:
+        size -= 2
+    return size
+
+
 def _cover(t: dict, title: str, subtitle: str, bg: str | None) -> dict:
     on_img = bg is not None
-    tcol = "#ffffff" if (on_img or t["dark"]) else t["primary"]
-    scol = "#f0f0f0" if (on_img or t["dark"]) else t["muted"]
     els = _bg_layer(t, bg, "cover")
-    tlines = estimate_text_lines(title, CW - 60, DISPLAY)
-    title_h = DISPLAY * (1 + 1.15 * (tlines - 1))
+    tsize = _fit_size(title, CW * 0.66, DISPLAY, 2)
+    tlines = estimate_text_lines(title, CW * 0.66, tsize)
+    title_h = tsize * (1 + 1.15 * (tlines - 1))
+    scol = t["muted"]
+    ty = 216 + title_h + 42
+    foot = ty + (46 if subtitle else 0) + 26
+    if on_img:
+        # AI 背景不可控，标题区放一块浅色卡片，深色字压上去，保证能看清
+        els.append(_r(M - 12, 150, CW * 0.70, foot + 64 - 150, "rgba(255,255,255,0.88)", rx=8))
     els += [
-        _t(M, 168, CW, "KEYNOTE PRESENTATION", CAP, t["accent"], bold=True, font=t["kicker_font"], spacing=4),
-        _t(M, 214, CW - 60, title, DISPLAY, tcol, bold=True, font=t["title_font"],
-           stroke="#ffffff" if on_img else None, sw=1.4),
-        _r(M + 4, 214 + title_h + 26, 84, 6, t["accent"]),
+        _t(M + 16, 172, CW * 0.66, "KEYNOTE PRESENTATION", CAP, t["accent"], bold=True, font=t["kicker_font"], spacing=4),
+        _t(M + 16, 216, CW * 0.66, title, tsize, t["primary"], bold=True, font=t["title_font"]),
+        _r(M + 20, 216 + title_h + 22, 84, 6, t["accent"]),
     ]
-    ty = 214 + title_h + 48
     if subtitle:
-        els.append(_t(M, ty, CW, subtitle, H3, scol))
+        els.append(_t(M + 16, ty, CW * 0.66, subtitle, H3, scol))
     els += [
-        _t(M, H - 96, 400, "汇报单位：____________", CAP, scol),
-        _t(M, H - 72, 400, "汇报时间：____________", CAP, scol),
+        _t(M + 16, foot, 400, "汇报单位：____________", CAP, scol),
+        _t(M + 16, foot + 26, 400, "汇报时间：____________", CAP, scol),
     ]
     return {"background": t["paper"], "elements": els, "w": W, "h": H}
 
 
 def _toc(t: dict, sections: list[dict], bg: str | None) -> dict:
     els = _bg_layer(t, bg, "content")
+    hcol = "#ffffff" if t["dark"] else t["primary"]
     els += [
-        _t(M, 76, CW, "目录", H1, t["primary"] if not t["dark"] else "#fff", bold=True, font=t["title_font"]),
-        _t(M + 4, 130, 300, "CONTENTS", CAP, t["accent"], bold=True, font=t["kicker_font"], spacing=3),
-        _r(M + 4, 156, 64, 4, t["accent"]),
+        _t(M + 40, 96, CW, "目录", H1, hcol, bold=True, font=t["title_font"]),
+        _t(M + 44, 150, 300, "CONTENTS", CAP, t["accent"], bold=True, font=t["kicker_font"], spacing=3),
+        _r(M + 44, 176, 64, 4, t["accent"]),
     ]
     rows = sections[:6]
     two_col = len(rows) > 4
-    top, rh = 200, 92 if not two_col else 150
-    col_w = (CW - 40) / 2 if two_col else CW
+    top, rh = 236, 84 if not two_col else 140
+    ox = M + 40
+    aw = CW - 40
+    col_w = (aw - 40) / 2 if two_col else aw
     for i, sec in enumerate(rows):
         col = i % 2 if two_col else 0
         row = i // 2 if two_col else i
-        x = M + col * (col_w + 40)
+        x = ox + col * (col_w + 40)
         y = top + row * rh
         els += [
-            _t(x, y - 10, 70, f"{i + 1:02d}", H1, _mix(t["primary"], t["paper"], 0.35), bold=True, font=t["kicker_font"]),
-            _t(x + 78, y + 6, col_w - 90, sec.get("heading", ""), H3, t["ink"], bold=True),
-            _r(x + 78, y + 40, col_w - 90, 2, _mix(t["ink"], t["paper"], 0.8)),
+            _t(x, y - 10, 70, f"{i + 1:02d}", H1, _mix(t["primary"], t["paper"], 0.3), bold=True, font=t["kicker_font"]),
+            _t(x + 78, y + 4, col_w - 90, sec.get("heading", ""), H3, t["ink"], bold=True),
+            _r(x + 78, y + 40, col_w - 90, 2, _mix(t["ink"], t["paper"], 0.82)),
         ]
     return {"background": t["paper"], "elements": els, "w": W, "h": H}
 
 
 def _section(t: dict, idx: int, total: int, heading: str, en: str, bg: str | None) -> dict:
-    """章节过渡页：深底大色块（就算没 AI 背景也是深色，跟内容页的白形成节奏）。"""
-    els: list[dict]
+    """章节过渡页：深底（AI 背景不可控，标题区一律压一块深色卡片保证可读）。"""
+    dk = t["primary_dk"]
     if bg:
-        els = [_img(0, 0, W, H, bg)]
+        els = [_img(0, 0, W, H, bg),
+               _r(M - 20, 360, CW * 0.62, 220, "rgba(15,18,24,0.55)", rx=10)]
+        px = M + 12
     else:
-        dk = t["primary_dk"]
         els = [
             _r(0, 0, W, H, dk),
             _r(0, 0, W, 6, t["accent"]),
             _r(W - 300, H - 300, 300, 300, _mix(dk, "#ffffff", 0.06)),
+            _t(M, 250, CW + 12, f"{idx:02d}", 168, _mix(t["accent"], dk, 0.62), bold=True, font=t["kicker_font"]),
         ]
+        px = M + 6
     els += [
-        _t(M, 250, CW + 12, f"{idx:02d}", 168, _mix(t["accent"], t["primary_dk"], 0.62), bold=True, font=t["kicker_font"]),
-        _t(M + 6, 232, 400, f"PART {idx:02d} / {total:02d}", H3, t["accent"], bold=True, font=t["kicker_font"], spacing=6),
-        _t(M + 6, 452, CW, heading, H1, "#ffffff", bold=True, font=t["title_font"]),
-        _r(M + 10, 452 + H1 * 1.25 + 16, 72, 4, t["accent"]),
+        _t(px, 392, 420, f"PART {idx:02d} / {total:02d}", H3, t["accent"], bold=True, font=t["kicker_font"], spacing=6),
+        _t(px, 432, CW - 40, heading, _fit_size(heading, CW - 40, H1, 2), "#ffffff", bold=True, font=t["title_font"]),
+        _r(px + 4, 524, 72, 4, t["accent"]),
     ]
     if en:
-        els.append(_t(M + 10, 452 + H1 * 1.25 + 30, CW, en, CAP, "rgba(255,255,255,0.5)",
-                      font=t["kicker_font"], spacing=3))
-    return {"background": t["primary_dk"], "elements": els, "w": W, "h": H}
+        els.append(_t(px + 4, 540, CW - 40, en, CAP, "rgba(255,255,255,0.55)", font=t["kicker_font"], spacing=3))
+    return {"background": dk, "elements": els, "w": W, "h": H}
 
 
 _EN_CAP = ["OVERVIEW", "ANALYSIS", "KEY POINTS", "ACTION PLAN", "SUMMARY", "OUTLOOK"]
 
 
 def _content_head(t: dict, title: str, en: str, page: int, bg: str | None) -> tuple[list[dict], float]:
-    """居中标题 + 两侧短线 + 下方英文小字（模仿主流模板的内容页页眉）。"""
+    """居中标题 + 两侧短线 + 下方英文小字（模仿主流模板的内容页页眉）。
+    内容页的 AI 背景按提示词是接近纯白的，所以正文和标题一律用深色。"""
     els = _bg_layer(t, bg, "content")
-    hcol = "#ffffff" if (bg or t["dark"]) else t["primary"]
+    hcol = "#ffffff" if t["dark"] else t["primary"]
     lcol = t["accent"]
     # 标题居中，两侧各一条短线
     tw = min(CW * 0.7, 120 + len(title) * H2 * 0.9)
@@ -275,9 +290,10 @@ def _content(t: dict, sec_idx: int, title: str, en: str, intro: str, bullets: li
     bottom = H - 60
     n = len(items)
 
-    ink = "#ffffff" if bg else t["ink"]
-    sub = _mix(ink, t["paper"], 0.5) if not bg else "#e6e6e6"
-    rule = _mix(ink, t["paper"], 0.85) if not bg else "rgba(255,255,255,0.25)"
+    # 内容页 AI 背景是浅色的，正文一律深色
+    ink = t["ink"]
+    sub = _mix(ink, t["paper"], 0.5)
+    rule = _mix(ink, t["paper"], 0.85)
 
     if n == 1:
         # 一句话 → 居中引言
@@ -296,8 +312,8 @@ def _content(t: dict, sec_idx: int, title: str, en: str, intro: str, bullets: li
             x = M + i * (cw + gap)
             ic = _ICON_CYCLE[(sec_idx * 2 + i) % len(_ICON_CYCLE)]
             els += [
-                _circle(x + cw / 2, cy, 34, stroke=t["accent"], sw=2),
-                *_icon(ic, x + cw / 2, cy, 34, t["accent"] if not bg else "#fff"),
+                _circle(x + cw / 2, cy, 36, stroke=t["accent"], sw=2.2),
+                *_icon(ic, x + cw / 2, cy, 40, t["accent"]),
                 _t(x + cw / 2 - 30, cy + 46, 60, f"0{i + 1}", CAP, _mix(ink, t["paper"], 0.45), align="center", font=t["kicker_font"], spacing=2),
                 _t(x, cy + 76, cw, b, H3, ink, align="center"),
             ]
@@ -311,8 +327,8 @@ def _content(t: dict, sec_idx: int, title: str, en: str, intro: str, bullets: li
             x = M + i * (cw + gap)
             ic = _ICON_CYCLE[(sec_idx * 3 + i) % len(_ICON_CYCLE)]
             els += [
-                _circle(x + cw / 2, cy, 36, stroke=_mix(t["primary"], t["paper"], 0.1) if not bg else "#fff", sw=2),
-                *_icon(ic, x + cw / 2, cy, 36, t["primary"] if not bg else "#fff"),
+                _circle(x + cw / 2, cy, 38, stroke=_mix(t["primary"], t["paper"], 0.1), sw=2.2),
+                *_icon(ic, x + cw / 2, cy, 42, t["primary"]),
                 _r(x + cw / 2 - 14, cy + 58, 28, 3, t["accent"]),
                 _t(x + 12, cy + 76, cw - 24, b, BODY, ink, align="center"),
             ]
@@ -350,7 +366,7 @@ def _num(v) -> float:
 
 def _chart(t: dict, sec_idx: int, title: str, en: str, kind: str, items: list[dict], page: int, bg: str | None) -> dict:
     els, y = _content_head(t, title, en or "DATA", page, bg)
-    ink = "#ffffff" if bg else t["ink"]
+    ink = t["ink"]
     rows = [it for it in items if it.get("label")][:6]
     bottom = H - 70
     if not rows:
@@ -364,7 +380,7 @@ def _chart(t: dict, sec_idx: int, title: str, en: str, kind: str, items: list[di
         for i, it in enumerate(rows[:4]):
             x = M + i * (cw + gap)
             els += [
-                _t(x, cy, cw, str(it.get("value", "")), 66, t["primary"] if not bg else "#fff",
+                _t(x, cy, cw, str(it.get("value", "")), 66, t["primary"],
                    align="center", bold=True, font=t["kicker_font"]),
                 _r(x + cw / 2 - 16, cy + 84, 32, 3, t["accent"]),
                 _t(x, cy + 100, cw, it.get("label", ""), BODY, ink, align="center"),
@@ -385,21 +401,20 @@ def _chart(t: dict, sec_idx: int, title: str, en: str, kind: str, items: list[di
                 _t(M, ry + rh / 2 - 12, 200, it.get("label", ""), BODY, ink),
                 _r(bx, ry + rh / 2 - 9, bw_max, 18, _mix(t["primary"], t["paper"], 0.9), rx=9),
                 _r(bx, ry + rh / 2 - 9, bw, 18, t["primary"] if i % 2 == 0 else t["accent"], rx=9),
-                _t(bx + bw + 12, ry + rh / 2 - 12, 90, str(it.get("value", "")), BODY, t["primary"] if not bg else "#fff", bold=True, font=t["kicker_font"]),
+                _t(bx + bw + 12, ry + rh / 2 - 12, 90, str(it.get("value", "")), BODY, t["primary"], bold=True, font=t["kicker_font"]),
             ]
     return {"background": t["paper"], "elements": els, "w": W, "h": H}
 
 
 def _closing(t: dict, title: str, bg: str | None) -> dict:
-    on_img = bg is not None
-    tcol = "#ffffff" if (on_img or t["dark"]) else t["primary"]
-    els = _bg_layer(t, bg, "cover")
+    """用内容页那张浅底背景（跟封面的深底不同），文字一律深色居中。"""
+    els = _bg_layer(t, bg, "content")
+    tcol = "#ffffff" if t["dark"] else t["primary"]
     els += [
-        _t(M, 260, CW, "THANK YOU", H3, t["accent"], bold=True, font=t["kicker_font"], spacing=6),
-        _t(M, 300, CW, "感谢观看", DISPLAY, tcol, bold=True, font=t["title_font"],
-           stroke="#ffffff" if on_img else None, sw=1.4),
-        _r(M + 4, 300 + DISPLAY * 1.2 + 20, 84, 6, t["accent"]),
-        _t(M, 300 + DISPLAY * 1.2 + 44, CW, title, H3, "#f0f0f0" if (on_img or t["dark"]) else t["muted"]),
+        _t(M, 262, CW, "THANK YOU", H3, t["accent"], align="center", bold=True, font=t["kicker_font"], spacing=6),
+        _t(M, 302, CW, "感谢观看", DISPLAY, tcol, align="center", bold=True, font=t["title_font"]),
+        _r(W / 2 - 42, 302 + DISPLAY * 1.2 + 20, 84, 6, t["accent"]),
+        _t(M, 302 + DISPLAY * 1.2 + 44, CW, title, H3, t["muted"], align="center"),
     ]
     return {"background": t["paper"], "elements": els, "w": W, "h": H}
 
@@ -534,9 +549,12 @@ def deck_to_pptx(slides: list[dict], theme_key: str = "red", title: str = "演�
                         pass
                 shp.shadow.inherit = False
             elif el["type"] == "text":
-                tb = s.shapes.add_textbox(x, y, Emu(int(el["width"] * ex)), Emu(int(el["fontSize"] * ey * 2.2)))
+                lines = estimate_text_lines(el["text"], el["width"], el["fontSize"])
+                box_h = max(el["fontSize"] * 1.35, el["fontSize"] * 1.3 * lines)
+                tb = s.shapes.add_textbox(x, y, Emu(int(el["width"] * ex)), Emu(int(box_h * ey)))
                 tf = tb.text_frame
                 tf.word_wrap = True
+                tf.margin_left = tf.margin_right = tf.margin_top = tf.margin_bottom = 0
                 p = tf.paragraphs[0]
                 p.text = el["text"]
                 p.alignment = amap.get(el.get("align", "left"), PP_ALIGN.LEFT)
