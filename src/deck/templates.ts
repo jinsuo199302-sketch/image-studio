@@ -221,8 +221,17 @@ function css(t: DeckTheme): string {
   .cbg .b{right:56px;top:52px;width:64px;height:64px;border-radius:50%;background:${t.accent}12}
   .cbg .c{left:52px;bottom:44px;width:52px;height:5px;background:${t.accent}88}
   .cbg .d{left:52px;bottom:44px;width:5px;height:52px;background:${t.accent}88}
-  /* AI 正文底图上压一层白，不管 AI 画得多花都保证正文清晰 */
-  .cwash{position:absolute;inset:0;background:rgba(255,255,255,.74);z-index:0}
+  /* AI 正文底图上压一层白：中间条带（放文字）压得实，上下边缘留通透让科技底纹透出来 */
+  .cwash{position:absolute;inset:0;z-index:0;background:linear-gradient(180deg,
+    rgba(255,255,255,.44) 0%,rgba(255,255,255,.85) 13%,rgba(255,255,255,.86) 62%,rgba(255,255,255,.62) 84%,rgba(255,255,255,.3) 100%)}
+  /* 每张内容页固定的科技角标（不管有没有 AI 底图都画，全篇一致的科技母题） */
+  .ctech{position:absolute;inset:0;z-index:0;pointer-events:none}
+  .ctech i{position:absolute;display:block;background:${t.accent}}
+  .ctech .t1{right:64px;top:58px;width:44px;height:3px}
+  .ctech .t2{right:64px;top:67px;width:24px;height:3px;opacity:.55}
+  .ctech .b1{left:64px;bottom:58px;width:3px;height:44px}
+  .ctech .b2{left:64px;bottom:58px;width:44px;height:3px}
+  .ctech .dot{right:64px;top:82px;width:56px;height:4px;background:repeating-linear-gradient(90deg,${t.primary}66 0 4px,transparent 4px 12px)}
   .body>.z,.s-toc>.z{position:relative;z-index:1}
 
   .ico{display:block}
@@ -401,11 +410,14 @@ function head(sl: DeckSlideIn, en: string): string {
     ${sl.intro ? `<div class="intro">${para(sl.intro)}</div>` : ''}`
 }
 
-/** 内容页底：有 AI 底图就铺图 + 白色蒙层保证正文可读；没有就用代码画的淡纹 */
+/** 每张内容页固定的科技角标（全篇一致的科技母题，AI 底图上也画） */
+const techMark = '<div class="ctech"><i class="t1"></i><i class="t2"></i><i class="dot"></i><i class="b1"></i><i class="b2"></i></div>'
+
+/** 内容页底：有 AI 底图就铺图 + 渐变白蒙层保证正文可读；没有就用代码画的淡纹。都叠一层科技角标 */
 const cbg = (o: DeckOutline) =>
-  o.bg?.content
+  (o.bg?.content
     ? `${bgImg(o.bg.content)}<div class="cwash"></div>`
-    : `<div class="cbg"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i></div>`
+    : `<div class="cbg"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i></div>`) + techMark
 const bodySlide = (o: DeckOutline, inner: string) =>
   `<div class="slide body">${cbg(o)}<div class="z">${inner}</div></div>`
 
