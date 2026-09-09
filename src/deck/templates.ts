@@ -72,6 +72,54 @@ function progRing(t: DeckTheme, pct: number, size = 150): string {
       stroke-dasharray="${circ}" stroke-dashoffset="${off}" transform="rotate(-90 ${c} ${c})"/>
   </svg>`
 }
+/** 放射线爆发（从一个角射出的细线） */
+function rayBurst(t: DeckTheme, size = 380): string {
+  const c = size / 2
+  let lines = ''
+  for (let a = 0; a < 90; a += 7.5) {
+    const rad = (a * Math.PI) / 180
+    lines += `<line x1="${c}" y1="${c}" x2="${c + (c - 6) * Math.cos(rad)}" y2="${c + (c - 6) * Math.sin(rad)}" stroke="${t.primary}12" stroke-width="2"/>`
+  }
+  return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">${lines}<circle cx="${c}" cy="${c}" r="${c - 40}" fill="none" stroke="${t.accent}22" stroke-width="8"/></svg>`
+}
+/** 六边形轮廓组 */
+function hexCluster(t: DeckTheme, size = 300): string {
+  const hex = (cx: number, cy: number, r: number, col: string, w: number) => {
+    const pts = Array.from({ length: 6 }, (_, i) => {
+      const a = (Math.PI / 3) * i - Math.PI / 2
+      return `${(cx + r * Math.cos(a)).toFixed(1)},${(cy + r * Math.sin(a)).toFixed(1)}`
+    }).join(' ')
+    return `<polygon points="${pts}" fill="none" stroke="${col}" stroke-width="${w}"/>`
+  }
+  return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">
+    ${hex(size * 0.6, size * 0.4, size * 0.32, t.primary + '1a', 3)}
+    ${hex(size * 0.3, size * 0.62, size * 0.2, t.accent + '33', 3)}
+    ${hex(size * 0.72, size * 0.78, size * 0.14, t.primary + '22', 3)}
+  </svg>`
+}
+/** 环形/甜甜圈饼图：segs = [{value, color}] */
+function donut(t: DeckTheme, segs: { v: number; c: string }[], size = 180): string {
+  const cx = size / 2
+  const r = size / 2 - 14
+  const total = segs.reduce((s, x) => s + x.v, 0) || 1
+  let acc = -90
+  const circ = 2 * Math.PI * r
+  const arcs = segs
+    .map((s) => {
+      const frac = s.v / total
+      const el = `<circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="${s.c}" stroke-width="22"
+        stroke-dasharray="${(frac * circ).toFixed(1)} ${circ}" stroke-dashoffset="${(-((acc + 90) / 360) * circ).toFixed(1)}"
+        transform="rotate(-90 ${cx} ${cx})"/>`
+      acc += frac * 360
+      return el
+    })
+    .join('')
+  return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}"><circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="${t.primary}12" stroke-width="22"/>${arcs}</svg>`
+}
+/** 六边形图片框（clip-path 在 CSS，这里只给 wrapper） */
+function hexImg(url: string): string {
+  return `<div class="hexf"><div class="hexf-b"></div><img src="${esc(url)}" crossorigin="anonymous"></div>`
+}
 
 export interface DeckCompare {
   left: { heading: string; points: string[] }
@@ -385,10 +433,21 @@ function css(t: DeckTheme): string {
 
   /* ══ 几何风（style:geo）——白底 + 同心圆弧/圆点圈/环形进度 ══ */
   .geo-d{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden}
-  .geo-d .arc{position:absolute;right:-150px;top:-150px}
-  .geo-d .dr{position:absolute;left:-40px;bottom:-40px;opacity:.5}
   .geo-d .gbar{position:absolute;left:0;top:0;width:8px;height:100%;background:${t.primary}}
   .geo-d .gbar::after{content:"";position:absolute;left:0;top:0;width:8px;height:140px;background:${t.accent}}
+  /* 每页轮换的大装饰元素 */
+  .geo-d .v0{position:absolute;right:-150px;top:-150px}
+  .geo-d .v1{position:absolute;right:-140px;bottom:-160px}
+  .geo-d .v2{position:absolute;right:-90px;top:-90px}
+  .geo-d .v3{position:absolute;right:60px;top:-120px}
+  .geo-d .dr{position:absolute;left:-40px;bottom:-40px;opacity:.5}
+
+  /* 六边形图片框 */
+  .hexf{position:relative;width:340px;flex:none;aspect-ratio:1/1.1}
+  .hexf img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);z-index:1}
+  .hexf-b{position:absolute;inset:-8px;background:${t.accent};clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);z-index:0}
+  .imgrow.hex{align-items:center;gap:60px}
+  .imgrow.hex .pic{width:auto;flex:none}
 
   .g-cover{background:#fff}
   .g-cover .ga{position:absolute;right:-160px;top:-180px}
@@ -418,15 +477,31 @@ function css(t: DeckTheme): string {
   .geo .cards .card .ic{background:rgba(255,255,255,.14);color:#fff}
   .geo .cards .card .num{color:${t.accent}}
   .geo .cards .card .ct{color:rgba(255,255,255,.92)}
+  /* geo 风指标页：环形饼图 */
+  .donuts{flex:1;display:flex;align-items:center;justify-content:space-around;margin-top:20px;gap:24px}
+  .donuts .dn{position:relative;display:flex;flex-direction:column;align-items:center;text-align:center}
+  .donuts .dn .dv{position:absolute;top:56px;left:0;right:0;font-size:26px;font-weight:800;color:${t.primary};font-family:"Arial","Microsoft YaHei",sans-serif}
+  .donuts .dn .dl{margin-top:12px;font-size:14px;color:${t.ink};max-width:170px;line-height:1.4}
   `
 }
 
 const bgImg = (url?: string) => (url ? `<img class="bg" src="${esc(url)}" crossorigin="anonymous">` : '')
 
 const isGeo = (o: DeckOutline) => o.theme.style === 'geo'
-/** geo 风内容页装饰：右上同心圆弧 + 左下圆点圈 + 左侧色条 */
-const geoDeco = (t: DeckTheme) =>
-  `<div class="geo-d"><div class="arc">${arcCluster(t, 460)}</div><div class="dr">${dotRing(t, 130)}</div><div class="gbar"></div></div>`
+/** geo 风内容页装饰：左侧色条 + 左下圆点圈 + 每页轮换的大几何元素 */
+function geoDeco(t: DeckTheme, v = 0): string {
+  const m = ((v % 4) + 4) % 4
+  const big =
+    m === 1
+      ? `<div class="v1">${arcCluster(t, 420)}</div>`
+      : m === 2
+        ? `<div class="v2">${rayBurst(t, 400)}</div>`
+        : m === 3
+          ? `<div class="v3">${hexCluster(t, 300)}</div>`
+          : `<div class="v0">${arcCluster(t, 460)}</div>`
+  return `<div class="geo-d">${big}<div class="dr">${dotRing(t, 130)}</div><div class="gbar"></div></div>`
+}
+let _geoIdx = 0
 
 /* ── 页型 ─────────────────────────────────────────────── */
 function gCover(o: DeckOutline): string {
@@ -550,12 +625,15 @@ const techMark = '<div class="ctech"><i class="t1"></i><i class="t2"></i><i clas
 /** 内容页底：geo 风用几何装饰；否则有 AI 底图就铺图+渐变白蒙层，没有就代码淡纹+科技角标 */
 const cbg = (o: DeckOutline) =>
   isGeo(o)
-    ? geoDeco(o.theme)
+    ? geoDeco(o.theme, _geoIdx)
     : (o.bg?.content
         ? `${bgImg(o.bg.content)}<div class="cwash"></div>`
         : `<div class="cbg"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i></div>`) + techMark
-const bodySlide = (o: DeckOutline, inner: string) =>
-  `<div class="slide body${isGeo(o) ? ' geo' : ''}">${cbg(o)}<div class="z">${inner}</div></div>`
+const bodySlide = (o: DeckOutline, inner: string) => {
+  const html = `<div class="slide body${isGeo(o) ? ' geo' : ''}">${cbg(o)}<div class="z">${inner}</div></div>`
+  if (isGeo(o)) _geoIdx++
+  return html
+}
 
 const STEP_RE = /流程|步骤|阶段|环节|顺序|先后|第一步|首先/
 
@@ -568,11 +646,15 @@ function content(sl: DeckSlideIn, en: string, o: DeckOutline, imgFlip = false, l
       .slice(0, 5)
       .map((b) => `<div class="li">${esc(b)}</div>`)
       .join('')
+    const geo = isGeo(o)
+    const picBlock = geo
+      ? `<div class="pic">${hexImg(sl.image)}</div>`
+      : `<div class="pic"><span class="fr"></span><img src="${esc(sl.image)}" crossorigin="anonymous"></div>`
     return bodySlide(
       o,
       `<div class="head"><h2>${esc(sl.title || '')}</h2><div class="fl"></div><div class="en">${esc(sl.en || en)}</div></div>
-      <div class="imgrow${imgFlip ? ' rev' : ''}">
-        <div class="pic"><span class="fr"></span><img src="${esc(sl.image)}" crossorigin="anonymous"></div>
+      <div class="imgrow${imgFlip ? ' rev' : ''}${geo ? ' hex' : ''}">
+        ${picBlock}
         <div class="txt">${sl.intro ? `<div class="lead">${esc(sl.intro)}</div>` : ''}${lis}</div>
       </div>`,
     )
@@ -654,7 +736,17 @@ function chart(sl: DeckSlideIn, t: DeckTheme, en: string, o: DeckOutline): strin
   const d = sl.data!
   const rows = d.items.filter((r) => r.label).slice(0, 6)
   let body: string
-  if (d.kind === 'stat') {
+  if (d.kind === 'stat' && isGeo(o)) {
+    // geo 风把关键指标做成环形饼图
+    body = `<div class="donuts">${rows
+      .slice(0, 4)
+      .map((r, i) => {
+        const n = Math.abs(parseFloat(String(r.value).replace(/[^0-9.\-]/g, '')) || 0)
+        const pct = n > 100 ? 100 : n
+        return `<div class="dn">${donut(t, [{ v: pct, c: i % 2 ? t.accent : t.primary }, { v: 100 - pct, c: t.primary + '14' }], 170)}<div class="dv">${esc(String(r.value))}</div><div class="dl">${esc(r.label)}</div></div>`
+      })
+      .join('')}</div>`
+  } else if (d.kind === 'stat') {
     body = `<div class="kpi">${rows
       .slice(0, 4)
       .map(
@@ -767,6 +859,7 @@ export function resolveLayout(sl: DeckSlideIn): string {
 /** 大纲 → 一组幻灯片 HTML 字符串 + 主题 CSS */
 export function composeDeck(o: DeckOutline): { styleTag: string; slides: string[] } {
   const t = o.theme
+  _geoIdx = 0
   const slides: string[] = [cover(o)]
   if (o.sections.length) slides.push(toc(o))
   let imgFlip = false
