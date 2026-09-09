@@ -40,6 +40,7 @@ const topic = ref('')
 const sections = ref(4)
 const theme = ref('red')
 const extra = ref('')
+const aiBg = ref(false)
 const deck = ref<DeckResult | null>(null)
 const generating = ref(false)
 
@@ -52,7 +53,7 @@ async function genDeck() {
   generating.value = true
   deck.value = null
   try {
-    const r = await generateDeck(t, sections.value, theme.value, extra.value.trim())
+    const r = await generateDeck(t, sections.value, theme.value, extra.value.trim(), aiBg.value)
     await preloadSlideImages(r.slides as unknown as SlideData[])
     deck.value = r
     await nextTick()
@@ -156,6 +157,13 @@ function rmImg(i: number) {
           maxlength="200"
           placeholder="补充要求（可选）：例 面向小学生、突出案例、语气正式"
         />
+        <label class="flex cursor-pointer items-start gap-2 rounded-md border border-gray-200 p-2 text-xs">
+          <el-checkbox v-model="aiBg" class="!h-4" />
+          <span class="text-gray-600">
+            AI 生成整页背景（配色 + 3 张背景图，更精美）<br />
+            <span class="text-[11px] text-gray-400">多花 2~4 分钟；不勾选是代码画的简版，几十秒</span>
+          </span>
+        </label>
         <el-button
           type="primary"
           class="!w-full !bg-violet-500 !border-none"
@@ -163,7 +171,7 @@ function rmImg(i: number) {
           :disabled="!topic.trim()"
           @click="genDeck"
         >
-          {{ generating ? 'AI 排版中…（约 20~40 秒）' : '生成 PPT' }}
+          {{ generating ? (aiBg ? 'AI 生成中…（约 2~4 分钟）' : 'AI 排版中…（约 20~40 秒）') : '生成 PPT' }}
         </el-button>
 
         <template v-if="deck">

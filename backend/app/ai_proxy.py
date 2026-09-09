@@ -777,16 +777,19 @@ async def design_lineart(
 
 
 async def _gen_deck_outline(topic: str, sections: int, extra: str = "") -> dict:
-    """主题 → PPT 大纲 JSON（title/subtitle/sections[heading, slides[title,intro,bullets]]）。"""
+    """主题 → PPT 大纲 JSON（含 title/subtitle/sections + palette 配色 + mood 视觉基调）。"""
     extra_line = f"用户补充要求：{extra}。\n" if extra else ""
     prompt = (
-        f"为主题「{topic}」写一份 PPT（幻灯片）大纲。\n"
+        f"你是资深 PPT 设计师。为主题「{topic}」写一份幻灯片大纲，并给出配套的视觉方案。\n"
         f"{extra_line}"
         "只返回一个严格的 JSON 对象，不要 markdown 代码块、不要多余说明，形如：\n"
-        '{"title":"演示标题","subtitle":"一句副标题","sections":[{"heading":"章节标题",'
-        '"slides":[{"title":"这一页的小标题","intro":"1~2句导语，可为空字符串","bullets":["要点一","要点二"]}]}]}\n'
-        f"要求：sections 生成 {sections} 个；每个 section 下 2~3 个 slides；每个 slide 配 3~5 条 bullets，"
-        "每条 20~45 字，具体、准确、书面语，不要空话套话；title/heading 精炼；涉及事实或数据要可靠。"
+        '{"title":"演示标题","subtitle":"一句副标题",'
+        '"palette":["#主色","#强调色","#主色深","#背景浅色","#正文深灰"],'
+        '"mood":"用一句话描述整体视觉基调，例：庄重大气的党政红金风、简洁现代的科技蓝",'
+        '"sections":[{"heading":"章节标题","slides":[{"title":"小标题","intro":"1~2句导语，可为空字符串","bullets":["要点一","要点二"]}]}]}\n'
+        f"要求：palette 必须是 5 个协调的十六进制色，符合主题气质、对比度足够（正文色要能在背景浅色上看清）；"
+        f"sections 生成 {sections} 个；每个 section 下 2~3 个 slides；每个 slide 配 3~5 条 bullets，"
+        "每条 20~45 字，具体、准确、书面语，不空话套话；title/heading 精炼；涉及事实或数据要可靠。"
     )
     res = await _post_openlux(
         f"{OPENLUX_BASE_URL}/chat/completions",
@@ -806,28 +809,122 @@ async def _gen_deck_outline(topic: str, sections: int, extra: str = "") -> dict:
     return data
 
 
+_DECK_BG_BASE = (
+    "16:9 宽屏 PPT 背景图，{mood}。主色调 {palette}。要求：{spec} "
+    "整体干净、专业、留白充足，像资深平面设计师的作品；不要任何文字、不要logo、不要国徽党徽警徽等国家标志、"
+    "不要边框相框、不要照片写实人物；装饰用简洁的几何形状/色块/线条/淡纹理。"
+)
+_DECK_BG_SPEC = {
+    "cover": "封面用：视觉重一些，左侧或下方有较强的色块/图形，中上部大片留白放大标题。",
+    "content": "内容页用：非常克制，仅左上角和右下角有小面积装饰，中间 80% 是接近纯白的干净区域放文字。",
+    "section": "章节过渡页用：大面积主色背景 + 一个大的半透明数字或几何图形，中间留白放章节标题。",
+}
+
+
+async def _gen_deck_bg_kit(mood: str, palette: list) -> dict:
+    """生成 3 张整页背景（封面/内容/章节），返回 {kind: "/api/ai/generated/xxx.png"}。"""
+    pal = "、".join(str(c) for c in (palette or [])[:4]) or "自定"
+    kit: dict[str, str] = {}
+    for kind, spec in _DECK_BG_SPEC.items():
+        prompt = _DECK_BG_BASE.format(mood=mood or "简洁专业的商务风", palette=pal, spec=spec)
+        raw = await _gen_image_bytes(prompt, "1536x1024", attempts=2, timeout=150)
+        # 存 db 需要 user_id——这里由调用方拿到后再存，先返回字节
+        kit[kind] = raw
+    return kit
+
+
+def _persist_bg_kit(db: Session, user_id: str, raw_kit: dict) -> dict:
+    out = {}
+    for kind, raw in raw_kit.items():
+        a = _persist_asset_bytes(db, user_id, "deck-bg", raw)
+        out[kind] = f"/api/ai/generated/{a.file_name}"
+    return out
+
+
+async def _run_deck_job(job_id, user_id, ticket, topic, n, theme, extra, ai_bg):
+    from app.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        user = db.query(models.User).filter(models.User.id == user_id).first()
+        if user is None:
+            raise RuntimeError("用户不存在")
+        outline = await _gen_deck_outline(topic, n, extra)
+        bg = None
+        if ai_bg:
+            raw_kit = await _gen_deck_bg_kit(outline.get("mood", ""), outline.get("palette") or [])
+            bg = _persist_bg_kit(db, user_id, raw_kit)
+        slides = deck_gen.build_deck(outline, theme, bg)
+        _HANDOUT_JOBS[job_id] = {
+            "status": "done",
+            "result": {"title": outline.get("title") or topic, "theme": theme, "slides": slides},
+            "user_id": user_id,
+        }
+    except HTTPException as e:
+        _refund_safely(user_id, ticket)
+        _HANDOUT_JOBS[job_id] = {"status": "error", "detail": str(e.detail), "user_id": user_id}
+    except Exception as e:  # noqa: BLE001
+        _refund_safely(user_id, ticket)
+        _HANDOUT_JOBS[job_id] = {"status": "error", "detail": f"生成失败：{e}", "user_id": user_id}
+    finally:
+        db.close()
+
+
+def _refund_safely(user_id, ticket):
+    from app.database import SessionLocal
+
+    d2 = SessionLocal()
+    try:
+        u = d2.query(models.User).filter(models.User.id == user_id).first()
+        if u:
+            billing.refund_ticket(d2, u, ticket)
+    except Exception:
+        pass
+    finally:
+        d2.close()
+
+
 @router.post("/design/deck")
 async def design_deck(
     payload: DeckRequest,
     user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(get_db),
 ):
-    """AI 生成 PPT（一期）：主题 → 大纲 → 排成一套幻灯片（每页 elements 数组 + 背景）。
-    前端画缩略图预览、可下载 PPTX。计费「AIPPT」。"""
+    """AI 生成 PPT（一期）：主题 → 大纲(+配色) → 排成一套幻灯片。
+    ai_bg=True 时另外生成 3 张 AI 整页背景，走异步 job（轮询 /design/handout/job/{id}）。
+    计费「AIPPT」。"""
     _require_openlux()
     topic = payload.topic.strip()
     if not topic:
         raise HTTPException(status_code=400, detail="请填写 PPT 主题")
-    await _moderate_text(topic + " " + payload.extra.strip())
+    extra = payload.extra.strip()[:300]
+    await _moderate_text(topic + " " + extra)
     n = min(6, max(2, payload.sections))
     ticket = billing.consume(db, user, "AIPPT")
+
+    if payload.ai_bg:
+        job_id = uuid.uuid4().hex
+        _HANDOUT_JOBS[job_id] = {"status": "pending", "user_id": user.id}
+        _prune_handout_jobs()
+        asyncio.create_task(_run_deck_job(job_id, user.id, ticket, topic, n, payload.theme, extra, True))
+        return {"jobId": job_id}
+
     try:
-        outline = await _gen_deck_outline(topic, n, payload.extra.strip()[:300])
+        outline = await _gen_deck_outline(topic, n, extra)
         slides = deck_gen.build_deck(outline, payload.theme)
         return {"title": (outline.get("title") or topic), "theme": payload.theme, "slides": slides}
     except Exception:
         billing.refund_ticket(db, user, ticket)
         raise
+
+
+def _read_generated_asset(src: str) -> bytes | None:
+    """/api/ai/generated/<name> → 本地文件字节（PPTX 嵌背景图用）。"""
+    name = (src or "").rsplit("/", 1)[-1]
+    if not name or "/" in name or ".." in name:
+        return None
+    p = GENERATED_ASSETS_DIR / name
+    return p.read_bytes() if p.is_file() else None
 
 
 @router.post("/design/deck/pptx")
@@ -838,7 +935,8 @@ async def design_deck_pptx(
     """已生成好的幻灯片数据 → PPTX 文件下载。不重新扣次数（生成时已扣）。"""
     from fastapi.responses import StreamingResponse
 
-    data = deck_gen.deck_to_pptx(payload.slides, payload.theme, payload.title or "演示文稿")
+    data = deck_gen.deck_to_pptx(
+        payload.slides, payload.theme, payload.title or "演示文稿", asset_reader=_read_generated_asset)
     return StreamingResponse(
         io.BytesIO(data),
         media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",

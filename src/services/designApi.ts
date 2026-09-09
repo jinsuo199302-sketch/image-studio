@@ -343,14 +343,31 @@ export interface DeckResult {
   slides: DeckSlide[]
 }
 
-/** AI 生成 PPT（一期）：主题 → 一套幻灯片（每页 elements + 背景）。计费「AIPPT」。 */
+/** AI 生成 PPT：主题 → 一套幻灯片。aiBg=true 时后端另出 3 张整页背景图，走异步轮询。 */
 export async function generateDeck(
   topic: string,
   sections: number,
   theme: string,
   extra = '',
+  aiBg = false,
 ): Promise<DeckResult> {
-  return authPostJson<DeckResult>('/design/deck', { topic, sections, theme, extra }, 'PPT 生成失败')
+  const r = await authPostJson<DeckResult & { jobId?: string }>(
+    '/design/deck',
+    { topic, sections, theme, extra, ai_bg: aiBg },
+    'PPT 生成失败',
+  )
+  if (!r.jobId) return r
+  const deadline = Date.now() + 8 * 60 * 1000
+  while (Date.now() < deadline) {
+    await new Promise((res) => setTimeout(res, 5000))
+    const job = await authGetJson<{ status: string; result?: DeckResult; detail?: string }>(
+      `/design/handout/job/${r.jobId}`,
+      'PPT 生成失败',
+    )
+    if (job.status === 'done' && job.result) return job.result
+    if (job.status === 'error') throw new Error(job.detail || 'PPT 生成失败')
+  }
+  throw new Error('生成超时，请稍后重试')
 }
 
 /** 已生成的幻灯片数据 → 下载 PPTX（不重新扣次数） */

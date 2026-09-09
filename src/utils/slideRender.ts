@@ -18,6 +18,7 @@ export interface SlideElement {
   fontFamily?: string
   stroke?: string
   strokeWidth?: number
+  letterSpacing?: number
   // rect
   fill?: string
   rx?: number
@@ -116,6 +117,11 @@ export function renderSlide(canvas: HTMLCanvasElement, slide: SlideData, targetW
       c.font = `${el.fontWeight === 'bold' ? 'bold ' : ''}${size}px ${el.fontFamily || '"Noto Sans SC", sans-serif'}`
       c.textBaseline = 'top'
       c.textAlign = (el.align as CanvasTextAlign) || 'left'
+      try {
+        ;(c as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = `${el.letterSpacing || 0}px`
+      } catch {
+        /* 老浏览器不支持 letterSpacing，忽略 */
+      }
       const ax = el.align === 'center' ? el.x + el.width / 2 : el.align === 'right' ? el.x + el.width : el.x
       const lines = wrapLines(c, el.text, el.width)
       let ly = el.y
