@@ -28,7 +28,7 @@ const GEO_KEYS = new Set(['geoblue'])
 const theme = computed<DeckTheme>(() => {
   const geo = GEO_KEYS.has(props.themeKey)
   const p =
-    !geo && props.outline.palette && props.outline.palette.length >= 5
+    props.outline.palette && props.outline.palette.length >= 5
       ? props.outline.palette
       : FALLBACK[props.themeKey] || FALLBACK.red
   return {

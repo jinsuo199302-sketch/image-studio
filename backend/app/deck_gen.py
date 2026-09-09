@@ -110,10 +110,13 @@ _FALLBACK = {
 GEO_THEMES = {"geoblue"}
 
 
-def apply_theme_palette(outline: dict, theme_key: str) -> dict:
-    """用户选了具体配色主题（非 auto）时，用固定 palette 覆盖 LLM 给的，让结果可预期。
-    auto / 未知 key 保持 LLM 的 palette 不动。"""
-    if theme_key and theme_key != "auto" and theme_key in _FALLBACK:
+def apply_theme_palette(outline: dict, theme_key: str, override: list | None = None) -> dict:
+    """override（参考图分析出的 5 色）优先；否则用户选了具体配色主题（非 auto）时用固定 palette。
+    auto / 未知 key + 无 override 时保持 LLM 的 palette 不动。"""
+    if override and len(override) == 5:
+        outline = dict(outline)
+        outline["palette"] = list(override)
+    elif theme_key and theme_key != "auto" and theme_key in _FALLBACK:
         outline = dict(outline)
         outline["palette"] = list(_FALLBACK[theme_key])
     return outline

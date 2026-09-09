@@ -940,7 +940,7 @@ def _persist_bg_kit(db: Session, user_id: str, raw_kit: dict) -> dict:
     return out
 
 
-async def _run_deck_job(job_id, user_id, ticket, topic, n, theme, extra, ai_bg, material="", photos=None):
+async def _run_deck_job(job_id, user_id, ticket, topic, n, theme, extra, ai_bg, material="", photos=None, palette=None):
     from app.database import SessionLocal
 
     photos = photos or []
@@ -953,7 +953,7 @@ async def _run_deck_job(job_id, user_id, ticket, topic, n, theme, extra, ai_bg, 
             topic, n, extra, material, [p["tag"] for p in photos] if photos else None
         )
         outline = deck_gen.normalize_outline_text(outline)
-        outline = deck_gen.apply_theme_palette(outline, theme)
+        outline = deck_gen.apply_theme_palette(outline, theme, palette)
         outline = _attach_deck_photos(outline, photos)
         bg = None
         if ai_bg and theme not in deck_gen.GEO_THEMES:
@@ -1006,6 +1006,8 @@ async def design_deck(
     await _moderate_text(topic + " " + extra)
     n = min(6, max(2, payload.sections))
     photos = _clean_deck_photos(payload.photos)
+    ref_pal = [c for c in (payload.palette or []) if re.match(r"^#[0-9a-fA-F]{6}$", str(c))][:5]
+    ref_pal = ref_pal if len(ref_pal) == 5 else None
     ticket = billing.consume(db, user, "AIPPT")
     ai_bg = payload.ai_bg and payload.theme not in deck_gen.GEO_THEMES  # 几何风不生图
 
@@ -1014,14 +1016,14 @@ async def design_deck(
         _HANDOUT_JOBS[job_id] = {"status": "pending", "user_id": user.id}
         _prune_handout_jobs()
         asyncio.create_task(
-            _run_deck_job(job_id, user.id, ticket, topic, n, payload.theme, extra, True, "", photos)
+            _run_deck_job(job_id, user.id, ticket, topic, n, payload.theme, extra, True, "", photos, ref_pal)
         )
         return {"jobId": job_id}
 
     try:
         outline = await _gen_deck_outline(topic, n, extra, "", [p["tag"] for p in photos] if photos else None)
         outline = deck_gen.normalize_outline_text(outline)
-        outline = deck_gen.apply_theme_palette(outline, payload.theme)
+        outline = deck_gen.apply_theme_palette(outline, payload.theme, ref_pal)
         outline = _attach_deck_photos(outline, photos)
         slides = deck_gen.build_deck(outline, payload.theme)
         return {"title": (outline.get("title") or topic), "theme": payload.theme, "slides": slides, "outline": outline}
@@ -1188,6 +1190,71 @@ async def design_deck_photos(
     return {"photos": photos}
 
 
+_DECK_REF_PROMPT = """你在分析一张 PPT 模板/参考图，目的是判断它属于我们系统的哪种风格 + 提取配色气质，用来配置我们自己的模板生成器。绝不复刻参考图的具体版面。
+
+只返回一个 JSON 对象，不要多余说明：
+{"style":"geo 或 photo 或 plain","palette":["#主色","#强调色","#主色深","#背景浅色","#正文深灰"],"mood":"一句话气质描述"}
+
+style 判断：
+- "geo"：白底 / 浅底，靠色块、圆弧、环形图、线条等几何图形做装饰
+- "photo"：用了实景照片或整幅设计大图当背景 / 主视觉
+- "plain"：极简白底，装饰很少
+
+palette：5 个十六进制色，要能代表这套模板的配色气质（不是逐像素取色，是整体感觉）。
+mood：例「沉稳的商务深蓝」「科技感的青色调」「简洁的浅灰商务」。
+
+严禁：描述任何可读文字、精确坐标、精确外形、元素数量。只做风格归类 + 配色气质提取。"""
+
+
+@router.post("/design/deck/reference")
+async def design_deck_reference(
+    image: UploadFile = File(...),
+    user: models.User = Depends(auth.get_current_user),
+    _db: Session = Depends(get_db),
+):
+    """上传一张喜欢的 PPT 模板/参考图 → 判断它属于我们哪种风格 + 提取配色气质。
+    只做「风格归类 + 配色」,不复刻版面。返回 {theme, palette, mood, ai_bg}。"""
+    _require_openlux()
+    raw = await image.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="没读到图片")
+    await _check_not_sensitive_document(raw, image.content_type or "image/png", "参考风格")
+    data, ct = _shrink_jpeg(raw, max_px=1024, quality=82)
+    res = await _post_openlux(
+        f"{OPENLUX_BASE_URL}/chat/completions",
+        timeout=60,
+        headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
+        json={
+            "model": "gemini-3-flash-preview",
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": _DECK_REF_PROMPT},
+                    {"type": "image_url", "image_url": {"url": f"data:{ct};base64,{base64.b64encode(data).decode()}"}},
+                ],
+            }],
+        },
+    )
+    if res.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"参考图分析失败：{res.status_code} {res.text[:160]}")
+    txt = res.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+    m = re.search(r"\{[\s\S]*\}", txt)
+    try:
+        d = json.loads(m.group(0) if m else txt)
+    except Exception:
+        raise HTTPException(status_code=502, detail="参考图分析结果解析失败，请重试")
+    style = str(d.get("style") or "plain").strip().lower()
+    pal = [str(c).strip() for c in (d.get("palette") or []) if re.match(r"^#?[0-9a-fA-F]{6}$", str(c).strip())]
+    pal = [c if c.startswith("#") else "#" + c for c in pal][:5]
+    theme = {"geo": "geoblue", "photo": "techblue"}.get(style, "auto")
+    return {
+        "theme": theme,
+        "palette": pal if len(pal) == 5 else [],
+        "mood": str(d.get("mood") or "").strip()[:40],
+        "ai_bg": style == "photo",
+    }
+
+
 @router.post("/design/deck/material")
 async def design_deck_material(
     file: UploadFile | None = File(None),
@@ -1197,6 +1264,7 @@ async def design_deck_material(
     extra: str = Form(""),
     ai_bg: bool = Form(False),
     photos_json: str = Form(""),
+    palette_json: str = Form(""),
     user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -1234,9 +1302,16 @@ async def design_deck_material(
         photos = _clean_deck_photos(json.loads(photos_json) if photos_json.strip() else [])
     except Exception:
         photos = []
+    try:
+        _p = json.loads(palette_json) if palette_json.strip() else []
+        ref_pal = [c for c in _p if re.match(r"^#[0-9a-fA-F]{6}$", str(c))][:5]
+        ref_pal = ref_pal if len(ref_pal) == 5 else None
+    except Exception:
+        ref_pal = None
 
     await _moderate_text(material[:2000] + " " + extra.strip()[:200])
     n = min(6, max(2, sections))
+    ai_bg2 = bool(ai_bg) and theme not in deck_gen.GEO_THEMES
     ticket = billing.consume(db, user, "AIPPT")
 
     job_id = uuid.uuid4().hex
@@ -1244,7 +1319,7 @@ async def design_deck_material(
     _prune_handout_jobs()
     asyncio.create_task(
         _run_deck_job(
-            job_id, user.id, ticket, "", n, theme, extra.strip()[:300], bool(ai_bg), material, photos
+            job_id, user.id, ticket, "", n, theme, extra.strip()[:300], ai_bg2, material, photos, ref_pal
         )
     )
     return {"jobId": job_id}

@@ -7,9 +7,11 @@ import {
   generateDeck,
   generateDeckFromMaterial,
   uploadDeckPhotos,
+  analyzeDeckReference,
   deckToPptx,
   type DeckResult,
   type DeckPhoto,
+  type DeckRefStyle,
 } from '../../../../services/designApi'
 import { preloadSlideImages, type SlideData } from '../../../../utils/slideRender'
 import { prepareUpload } from '../../../../utils/prepImage'
@@ -58,6 +60,30 @@ const extra = ref('')
 const aiBg = ref(false)
 const deck = ref<DeckResult | null>(null)
 const generating = ref(false)
+
+// 参考风格图：上传一张喜欢的模板 → 判断风格 + 提取配色
+const refInput = ref<HTMLInputElement>()
+const refStyle = ref<DeckRefStyle | null>(null)
+const refBusy = ref(false)
+const REF_LABEL: Record<string, string> = { geoblue: '几何图形风', techblue: '照片背景风', auto: '简约风' }
+async function pickRef(e: Event) {
+  const f = (e.target as HTMLInputElement).files?.[0]
+  ;(e.target as HTMLInputElement).value = ''
+  if (!f) return
+  refBusy.value = true
+  try {
+    const p = await prepareUpload(f)
+    const r = await analyzeDeckReference(p)
+    refStyle.value = r
+    theme.value = r.theme
+    aiBg.value = r.ai_bg
+    ElMessage.success(`已识别：${REF_LABEL[r.theme] || r.theme}${r.mood ? ' · ' + r.mood : ''}`)
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '参考图分析失败')
+  } finally {
+    refBusy.value = false
+  }
+}
 
 // 传资料生成
 const matFile = ref<File | null>(null)
@@ -112,6 +138,7 @@ async function genDeck() {
     if (deckPhotos.value.length) {
       photos = await uploadDeckPhotos(deckPhotos.value.map((p) => p.file))
     }
+    const refPal = refStyle.value?.palette ?? []
     const r = useMaterial
       ? await generateDeckFromMaterial(
           { file: matFile.value ?? undefined, pastedText: matText.value.trim() || undefined },
@@ -120,6 +147,7 @@ async function genDeck() {
           extra.value.trim(),
           aiBg.value,
           photos,
+          refPal,
         )
       : await generateDeck(
           topic.value.trim(),
@@ -128,6 +156,7 @@ async function genDeck() {
           extra.value.trim(),
           aiBg.value,
           photos,
+          refPal,
         )
     await preloadSlideImages(r.slides as unknown as SlideData[])
     deck.value = r
@@ -310,6 +339,24 @@ function rmImg(i: number) {
             >
               {{ th.label }}
             </button>
+          </div>
+          <input ref="refInput" type="file" accept="image/*" class="hidden" @change="pickRef" />
+          <button
+            class="mt-1.5 w-full rounded-md border border-dashed border-gray-300 py-1.5 text-[11px] text-gray-400 transition hover:border-violet-400 hover:text-violet-500 disabled:opacity-50"
+            :disabled="refBusy"
+            @click="refInput?.click()"
+          >
+            {{ refBusy ? '识别中…' : '↑ 上传一张喜欢的模板图，按它的风格生成' }}
+          </button>
+          <div v-if="refStyle" class="mt-1 flex items-center gap-1.5 text-[11px] text-gray-500">
+            <span class="rounded bg-violet-50 px-1.5 py-0.5 text-violet-600">{{ REF_LABEL[refStyle.theme] || refStyle.theme }}</span>
+            <span
+              v-for="c in refStyle.palette.slice(0, 5)"
+              :key="c"
+              class="h-3 w-3 shrink-0 rounded-sm border border-gray-200"
+              :style="{ background: c }"
+            />
+            <span class="ml-auto cursor-pointer text-gray-400 hover:text-red-400" @click="refStyle = null">清除</span>
           </div>
         </div>
         <el-input

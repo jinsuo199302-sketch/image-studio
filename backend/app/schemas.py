@@ -164,6 +164,8 @@ class DeckRequest(BaseModel):
     ai_bg: bool = False
     # AI 配图：/design/deck/photos 返回的 [{url, tag}]，由大纲模型决定哪页用哪张
     photos: list[dict] = []
+    # 参考图分析出来的配色（5 个十六进制色），有则覆盖 LLM 的 palette
+    palette: list[str] = []
 
 
 class DeckPptxRequest(BaseModel):

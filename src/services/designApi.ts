@@ -398,6 +398,20 @@ export async function uploadDeckPhotos(files: File[]): Promise<DeckPhoto[]> {
   return r.photos
 }
 
+export interface DeckRefStyle {
+  theme: string
+  palette: string[]
+  mood: string
+  ai_bg: boolean
+}
+
+/** 上传一张喜欢的 PPT 模板/参考图 → 判断风格类别 + 提取配色气质（不复刻版面） */
+export async function analyzeDeckReference(file: File): Promise<DeckRefStyle> {
+  const form = new FormData()
+  form.append('image', file, file.name || 'ref.jpg')
+  return authPostForm<DeckRefStyle>('/design/deck/reference', form, '参考图分析失败')
+}
+
 /** AI 生成 PPT：主题 → 一套幻灯片。aiBg=true 时后端另出 3 张整页背景图，走异步轮询。 */
 export async function generateDeck(
   topic: string,
@@ -406,10 +420,11 @@ export async function generateDeck(
   extra = '',
   aiBg = false,
   photos: DeckPhoto[] = [],
+  palette: string[] = [],
 ): Promise<DeckResult> {
   const r = await authPostJson<DeckResult & { jobId?: string }>(
     '/design/deck',
-    { topic, sections, theme, extra, ai_bg: aiBg, photos },
+    { topic, sections, theme, extra, ai_bg: aiBg, photos, palette },
     'PPT 生成失败',
   )
   return r.jobId ? pollDeckJob(r.jobId) : r
@@ -426,6 +441,7 @@ export async function generateDeckFromMaterial(
   extra = '',
   aiBg = false,
   photos: DeckPhoto[] = [],
+  palette: string[] = [],
 ): Promise<DeckResult> {
   const form = new FormData()
   if (input.file) form.append('file', input.file, input.file.name || 'material')
@@ -435,6 +451,7 @@ export async function generateDeckFromMaterial(
   form.append('extra', extra)
   form.append('ai_bg', String(aiBg))
   if (photos.length) form.append('photos_json', JSON.stringify(photos))
+  if (palette.length === 5) form.append('palette_json', JSON.stringify(palette))
   const { jobId } = await authPostForm<{ jobId: string }>('/design/deck/material', form, 'PPT 生成失败')
   return pollDeckJob(jobId)
 }
