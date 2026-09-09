@@ -176,95 +176,122 @@ def _toc(t: dict, sections: list[dict], bg: str | None) -> dict:
     return {"background": t["paper"], "elements": els, "w": W, "h": H}
 
 
-def _section(t: dict, idx: int, total: int, heading: str, bg: str | None) -> dict:
-    on_img = bg is not None
-    els = _bg_layer(t, bg, "section")
-    tcol = "#ffffff" if (on_img or t["dark"]) else t["primary"]
+def _section(t: dict, idx: int, total: int, heading: str, en: str, bg: str | None) -> dict:
+    """章节过渡页：深底大色块（就算没 AI 背景也是深色，跟内容页的白形成节奏）。"""
+    els: list[dict]
+    if bg:
+        els = [_img(0, 0, W, H, bg)]
+    else:
+        dk = t["primary_dk"]
+        els = [
+            _r(0, 0, W, H, dk),
+            _r(0, 0, W, 6, t["accent"]),
+            _r(W - 300, H - 300, 300, 300, _mix(dk, "#ffffff", 0.06)),
+        ]
     els += [
-        _t(M, 210, 400, f"PART {idx:02d}", H3, t["accent"], bold=True, font=t["kicker_font"], spacing=6),
-        _t(M, 250, 520, f"共 {total} 个部分", CAP, "#e8e8e8" if (on_img or t["dark"]) else t["muted"]),
-        _t(M - 6, 292, CW + 12, f"{idx:02d}", 150, _mix(t["accent"], t["paper"] if not on_img else "#333333", 0.42),
-           bold=True, font=t["kicker_font"]),
-        _t(M, 452, CW, heading, H1, tcol, bold=True, font=t["title_font"],
-           stroke="#ffffff" if on_img else None, sw=1.2),
+        _t(M, 250, CW + 12, f"{idx:02d}", 168, _mix(t["accent"], t["primary_dk"], 0.62), bold=True, font=t["kicker_font"]),
+        _t(M + 6, 232, 400, f"PART {idx:02d} / {total:02d}", H3, t["accent"], bold=True, font=t["kicker_font"], spacing=6),
+        _t(M + 6, 452, CW, heading, H1, "#ffffff", bold=True, font=t["title_font"]),
+        _r(M + 10, 452 + H1 * 1.25 + 16, 72, 4, t["accent"]),
     ]
-    return {"background": t["paper"], "elements": els, "w": W, "h": H}
+    if en:
+        els.append(_t(M + 10, 452 + H1 * 1.25 + 30, CW, en, CAP, "rgba(255,255,255,0.5)",
+                      font=t["kicker_font"], spacing=3))
+    return {"background": t["primary_dk"], "elements": els, "w": W, "h": H}
 
 
-def _content_head(t: dict, section: str, title: str, page: int, bg: str | None) -> tuple[list[dict], float]:
+_EN_CAP = ["OVERVIEW", "ANALYSIS", "KEY POINTS", "ACTION PLAN", "SUMMARY", "OUTLOOK"]
+
+
+def _content_head(t: dict, title: str, en: str, page: int, bg: str | None) -> tuple[list[dict], float]:
+    """居中标题 + 两侧短线 + 下方英文小字（模仿主流模板的内容页页眉）。"""
     els = _bg_layer(t, bg, "content")
+    hcol = "#ffffff" if (bg or t["dark"]) else t["primary"]
+    lcol = t["accent"]
+    # 标题居中，两侧各一条短线
+    tw = min(CW * 0.7, 120 + len(title) * H2 * 0.9)
+    cx = W / 2
     els += [
-        _r(M, 66, 30, 4, t["accent"]),
-        _t(M + 40, 58, CW - 200, section, CAP, t["muted"], bold=True, spacing=1),
-        _t(W - M - 120, 58, 120, f"{page:02d}", CAP, t["muted"], align="right", font=t["kicker_font"]),
-        _t(M, 92, CW, title, H2, t["primary"] if not t["dark"] else "#fff", bold=True, font=t["title_font"]),
-        _r(M, 92 + H2 * 1.2 + 8, 60, 4, t["accent"]),
+        _t(M, 52, CW, title, H2, hcol, align="center", bold=True, font=t["title_font"]),
+        _r(cx - tw / 2 - 46, 52 + H2 * 0.6, 32, 3, lcol),
+        _r(cx + tw / 2 + 14, 52 + H2 * 0.6, 32, 3, lcol),
+        _t(M, 52 + H2 * 1.25 + 6, CW, en or "", CAP, _mix(hcol, t["paper"], 0.35), align="center",
+           font=t["kicker_font"], spacing=3),
+        _t(W - M - 60, 44, 60, f"{page:02d}", CAP, _mix(hcol, t["paper"], 0.4), align="right", font=t["kicker_font"]),
     ]
-    return els, 92 + H2 * 1.2 + 28
+    return els, 52 + H2 * 1.25 + 34
 
 
-def _content(t: dict, section: str, title: str, intro: str, bullets: list[str], page: int, bg: str | None) -> dict:
-    els, y = _content_head(t, section, title, page, bg)
+def _content(t: dict, sec_idx: int, title: str, en: str, intro: str, bullets: list[str], page: int, bg: str | None) -> dict:
+    els, y = _content_head(t, title, en or _EN_CAP[sec_idx % len(_EN_CAP)], page, bg)
     items = [b for b in bullets if b][:5]
     if intro:
-        ih = estimate_text_height(intro, CW, BODY)
-        els.append(_t(M, y, CW, intro, BODY, t["muted"]))
-        y += ih + 24
+        ih = estimate_text_height(intro, CW - 120, BODY)
+        els.append(_t(M + 60, y, CW - 120, intro, BODY, t["muted"], align="center"))
+        y += ih + 26
     bottom = H - 60
     n = len(items)
 
+    ink = "#ffffff" if bg else t["ink"]
+    sub = _mix(ink, t["paper"], 0.5) if not bg else "#e6e6e6"
+    rule = _mix(ink, t["paper"], 0.85) if not bg else "rgba(255,255,255,0.25)"
+
     if n == 1:
-        # 一句话 → 引言块
+        # 一句话 → 居中引言
         b = items[0]
+        my = y + (bottom - y) / 2 - 60
         els += [
-            _r(M, y + 6, 8, min(bottom - y - 12, 200), t["accent"]),
-            _t(M + 32, y - 8, 60, "“", 64, _mix(t["primary"], t["paper"], 0.4), bold=True, font=t["title_font"]),
-            _t(M + 34, y + 46, CW - 60, b, H3, t["ink"]),
+            _t(W / 2 - 40, my - 40, 80, "“", 80, t["accent"], align="center", bold=True, font=t["title_font"]),
+            _t(M + 100, my + 40, CW - 200, b, H3, ink, align="center"),
+            _r(W / 2 - 28, my + 40 + estimate_text_height(b, CW - 200, H3) + 24, 56, 3, t["accent"]),
         ]
     elif n == 2:
-        # 两张大卡片
-        gap = 32
+        gap = 60
         cw = (CW - gap) / 2
-        ch = bottom - y - 8
+        cy = y + 40
         for i, b in enumerate(items):
             x = M + i * (cw + gap)
             els += [
-                _r(x, y, cw, ch, t["panel"], rx=14, stroke=t["soft"], sw=1.5),
-                _r(x, y, cw, 8, t["primary"] if i == 0 else t["accent"]),
-                _t(x + 28, y + 34, 48, f"{i + 1:02d}", H1, _mix(t["primary"], t["panel"], 0.3), bold=True, font=t["kicker_font"]),
-                _t(x + 28, y + 108, cw - 56, b, H3, t["ink"]),
+                _r(x + cw / 2 - 30, cy, 60, 60, "none", rx=30, stroke=t["accent"], sw=2),
+                _t(x + cw / 2 - 30, cy + 15, 60, f"{i + 1:02d}", H3, t["accent"], align="center", bold=True, font=t["kicker_font"]),
+                _t(x, cy + 92, cw, b, H3, ink, align="center"),
             ]
+            if i == 0:
+                els.append(_r(M + cw + gap / 2 - 1, y + 20, 2, bottom - y - 60, rule))
     elif n == 3:
-        # 三栏
-        gap = 28
+        gap = 40
         cw = (CW - 2 * gap) / 3
-        ch = bottom - y - 8
+        cy = y + 30
         for i, b in enumerate(items):
             x = M + i * (cw + gap)
             els += [
-                _r(x, y, cw, ch, t["panel"], rx=12, stroke=t["soft"], sw=1.5),
-                _r(x + cw / 2 - 22, y + 26, 44, 44, t["primary"], rx=22),
-                _t(x + cw / 2 - 22, y + 34, 44, f"{i + 1}", H3, "#ffffff", align="center", bold=True),
-                _t(x + 20, y + 92, cw - 40, b, BODY, t["ink"], align="center"),
+                _r(x + cw / 2 - 32, cy, 64, 64, "none", rx=32, stroke=_mix(t["primary"], t["paper"], 0.15), sw=2),
+                _t(x + cw / 2 - 32, cy + 16, 64, f"{i + 1}", H2, t["primary"] if not bg else "#fff", align="center", bold=True, font=t["kicker_font"]),
+                _r(x + cw / 2 - 14, cy + 82, 28, 3, t["accent"]),
+                _t(x + 12, cy + 100, cw - 24, b, BODY, ink, align="center"),
             ]
     else:
-        # 4~5 条 → 竖排清单（不用重框，靠留白和分隔线）
-        avail = bottom - y
+        # 4~5 条 → 竖排清单，圆圈序号 + 分隔线，留白足
+        avail = bottom - y - 10
         size = BODY
         for _ in range(3):
-            hs = [estimate_text_height(b, CW - 84, size) for b in items]
-            if sum(h + 28 for h in hs) <= avail or size <= 13:
+            hs = [estimate_text_height(b, CW - 110, size) for b in items]
+            if sum(h + 34 for h in hs) <= avail or size <= 13:
                 break
             size -= 1
-        hs = [estimate_text_height(b, CW - 84, size) for b in items]
+        hs = [estimate_text_height(b, CW - 110, size) for b in items]
+        y += 6
         for i, b in enumerate(items):
             row_h = hs[i]
+            cyy = y + max(row_h, 40) / 2
             els += [
-                _r(M, y + 2, 34, 34, t["primary"], rx=8),
-                _t(M, y + 8, 34, f"{i + 1:02d}", CAP + 1, "#ffffff", align="center", bold=True),
-                _t(M + 52, y + max(0, (34 - row_h) / 2), CW - 84, b, size, t["ink"]),
+                _r(M, cyy - 19, 38, 38, "none", rx=19, stroke=t["accent"], sw=2),
+                _t(M, cyy - 11, 38, f"{i + 1:02d}", CAP + 1, t["accent"], align="center", bold=True, font=t["kicker_font"]),
+                _t(M + 66, cyy - row_h / 2, CW - 110, b, size, ink),
             ]
-            y += max(row_h, 34) + 28
+            y += max(row_h, 40) + 34
+            if i < n - 1:
+                els.append(_r(M + 66, y - 20, CW - 110, 1, rule))
             if i < len(items) - 1:
                 els.append(_r(M + 52, y - 16, CW - 84, 1, _mix(t["ink"], t["paper"], 0.86)))
     return {"background": t["paper"], "elements": els, "w": W, "h": H}
@@ -298,11 +325,12 @@ def build_deck(outline: dict, theme_key: str = "red", bg: dict | None = None) ->
         slides.append(_toc(t, sections, bg.get("content")))
     page = len(slides) + 1
     for i, sec in enumerate(sections):
-        slides.append(_section(t, i + 1, total, sec["heading"], bg.get("section")))
+        slides.append(_section(t, i + 1, total, sec["heading"], (sec.get("en") or "").strip(), bg.get("section")))
         page += 1
         for sl in (sec.get("slides") or [])[:4]:
             slides.append(_content(
-                t, sec["heading"], (sl.get("title") or "").strip(), (sl.get("intro") or "").strip(),
+                t, i, (sl.get("title") or "").strip(), (sl.get("en") or "").strip(),
+                (sl.get("intro") or "").strip(),
                 [str(x).strip() for x in (sl.get("bullets") or []) if str(x).strip()],
                 page, bg.get("content"),
             ))
@@ -333,7 +361,15 @@ def deck_to_pptx(slides: list[dict], theme_key: str = "red", title: str = "演�
     body_font = "微软雅黑"
 
     def rgb(c: str) -> RGBColor:
-        r, g, b = _hex(c if c and c.startswith("#") else "#333333")
+        c = c or "#333333"
+        if c.startswith("rgba"):
+            m = c[c.find("(") + 1:c.find(")")].split(",")
+            try:
+                r, g, b, a = float(m[0]), float(m[1]), float(m[2]), float(m[3])
+                return RGBColor(*(round(v * a + 255 * (1 - a)) for v in (r, g, b)))
+            except Exception:
+                return RGBColor(0x33, 0x33, 0x33)
+        r, g, b = _hex(c if c.startswith("#") else "#333333")
         return RGBColor(r, g, b)
 
     amap = {"left": PP_ALIGN.LEFT, "center": PP_ALIGN.CENTER, "right": PP_ALIGN.RIGHT}
@@ -357,8 +393,11 @@ def deck_to_pptx(slides: list[dict], theme_key: str = "red", title: str = "演�
                 w, hh = Emu(int(el["width"] * ex)), Emu(int(el["height"] * ey))
                 rnd = (el.get("rx") or 0) > 1
                 shp = s.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE if rnd else MSO_SHAPE.RECTANGLE, x, y, w, hh)
-                shp.fill.solid()
-                shp.fill.fore_color.rgb = rgb(el["fill"])
+                if el.get("fill") == "none":
+                    shp.fill.background()
+                else:
+                    shp.fill.solid()
+                    shp.fill.fore_color.rgb = rgb(el["fill"])
                 if el.get("stroke"):
                     shp.line.color.rgb = rgb(el["stroke"])
                     shp.line.width = Pt(max(0.5, el.get("strokeWidth", 1)))

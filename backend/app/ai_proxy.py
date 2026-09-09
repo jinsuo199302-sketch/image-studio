@@ -786,10 +786,12 @@ async def _gen_deck_outline(topic: str, sections: int, extra: str = "") -> dict:
         '{"title":"演示标题","subtitle":"一句副标题",'
         '"palette":["#主色","#强调色","#主色深","#背景浅色","#正文深灰"],'
         '"mood":"用一句话描述整体视觉基调，例：庄重大气的党政红金风、简洁现代的科技蓝",'
-        '"sections":[{"heading":"章节标题","slides":[{"title":"小标题","intro":"1~2句导语，可为空字符串","bullets":["要点一","要点二"]}]}]}\n'
+        '"sections":[{"heading":"章节标题","en":"章节英文短标题(全大写,2~4词)",'
+        '"slides":[{"title":"小标题","en":"这一页的英文短标题(全大写,1~3词)","intro":"1~2句导语，可为空字符串","bullets":["要点一","要点二"]}]}]}\n'
         f"要求：palette 必须是 5 个协调的十六进制色，符合主题气质、对比度足够（正文色要能在背景浅色上看清）；"
         f"sections 生成 {sections} 个；每个 section 下 2~3 个 slides；每个 slide 配 3~5 条 bullets，"
-        "每条 20~45 字，具体、准确、书面语，不空话套话；title/heading 精炼；涉及事实或数据要可靠。"
+        "每条 20~45 字，具体、准确、书面语，不空话套话；title/heading 精炼；en 字段是给版式当装饰小字用的英文，"
+        "要贴切、地道；涉及事实或数据要可靠。"
     )
     res = await _post_openlux(
         f"{OPENLUX_BASE_URL}/chat/completions",

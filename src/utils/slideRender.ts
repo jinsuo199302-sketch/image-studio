@@ -101,7 +101,7 @@ export function renderSlide(canvas: HTMLCanvasElement, slide: SlideData, targetW
   for (const el of slide.elements) {
     if (el.type === 'rect') {
       roundRectPath(c, el.x, el.y, el.width, el.height || 0, el.rx || 0)
-      if (el.fill) {
+      if (el.fill && el.fill !== 'none') {
         c.fillStyle = el.fill
         c.fill()
       }
