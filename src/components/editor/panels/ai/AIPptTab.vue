@@ -3,7 +3,12 @@ import { nextTick, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { UploadFilled, Close, ArrowUp, ArrowDown } from '@element-plus/icons-vue'
 import { textToPptx, imagesToPptx } from '../../../../services/pdfApi'
-import { generateDeck, deckToPptx, type DeckResult } from '../../../../services/designApi'
+import {
+  generateDeck,
+  generateDeckFromMaterial,
+  deckToPptx,
+  type DeckResult,
+} from '../../../../services/designApi'
 import { preloadSlideImages, type SlideData } from '../../../../utils/slideRender'
 import { prepareUpload } from '../../../../utils/prepImage'
 import { saveFile } from '../../../../utils/saveFile'
@@ -41,6 +46,7 @@ const THEMES = [
   { key: 'slate', label: '沉稳蓝灰' },
   { key: 'teal', label: '青碧' },
 ]
+const aiSource = ref<'topic' | 'material'>('topic')
 const topic = ref('')
 const sections = ref(4)
 const theme = ref('auto')
@@ -49,16 +55,44 @@ const aiBg = ref(false)
 const deck = ref<DeckResult | null>(null)
 const generating = ref(false)
 
+// 传资料生成
+const matFile = ref<File | null>(null)
+const matFileInput = ref<HTMLInputElement>()
+const matText = ref('')
+function pickMatFile(e: Event) {
+  const f = (e.target as HTMLInputElement).files?.[0]
+  ;(e.target as HTMLInputElement).value = ''
+  if (!f) return
+  if (f.size > 20 * 1024 * 1024) {
+    ElMessage.warning('文件最大 20MB')
+    return
+  }
+  matFile.value = f
+}
+
 async function genDeck() {
-  const t = topic.value.trim()
-  if (!t) {
+  const useMaterial = aiSource.value === 'material'
+  if (useMaterial) {
+    if (!matFile.value && matText.value.trim().length < 20) {
+      ElMessage.warning('上传资料文件，或粘贴至少几句文字')
+      return
+    }
+  } else if (!topic.value.trim()) {
     ElMessage.warning('先填 PPT 主题')
     return
   }
   generating.value = true
   deck.value = null
   try {
-    const r = await generateDeck(t, sections.value, theme.value, extra.value.trim(), aiBg.value)
+    const r = useMaterial
+      ? await generateDeckFromMaterial(
+          { file: matFile.value ?? undefined, pastedText: matText.value.trim() || undefined },
+          sections.value,
+          theme.value,
+          extra.value.trim(),
+          aiBg.value,
+        )
+      : await generateDeck(topic.value.trim(), sections.value, theme.value, extra.value.trim(), aiBg.value)
     await preloadSlideImages(r.slides as unknown as SlideData[])
     deck.value = r
     await nextTick()
@@ -129,12 +163,72 @@ function rmImg(i: number) {
       <!-- ============ AI 生成 ============ -->
       <template v-if="mode === 'ai'">
         <el-alert
-          :title="authStore.isAuthenticated ? '填主题 → AI 排一套幻灯片，可下载 PPTX 在 PowerPoint 里改' : '演示模式：登录后使用'"
+          :title="
+            !authStore.isAuthenticated
+              ? '演示模式：登录后使用'
+              : aiSource === 'material'
+                ? '传资料 / 粘长文 → AI 提炼主题并重组成幻灯片，内容来自你的资料'
+                : '填主题 → AI 排一套幻灯片，可下载 PPTX 在 PowerPoint 里改'
+          "
           :type="authStore.isAuthenticated ? 'success' : 'info'"
           :closable="false"
           show-icon
         />
-        <el-input v-model="topic" size="small" placeholder="PPT 主题，例：中小学消防安全教育" maxlength="40" />
+
+        <div class="flex gap-1.5">
+          <button
+            v-for="s in (['topic', 'material'] as const)"
+            :key="s"
+            class="flex-1 rounded-md border px-2 py-1 text-[11px] transition"
+            :class="aiSource === s ? 'border-violet-500 bg-violet-50 text-violet-600' : 'border-gray-200 text-gray-500'"
+            @click="aiSource = s"
+          >
+            {{ s === 'topic' ? '填主题' : '传资料 / 粘长文' }}
+          </button>
+        </div>
+
+        <el-input
+          v-if="aiSource === 'topic'"
+          v-model="topic"
+          size="small"
+          placeholder="PPT 主题，例：中小学消防安全教育"
+          maxlength="40"
+        />
+
+        <template v-else>
+          <input
+            ref="matFileInput"
+            type="file"
+            accept=".docx,.pdf,.txt,.md,image/*"
+            class="hidden"
+            @change="pickMatFile"
+          />
+          <div
+            v-if="!matFile"
+            class="flex h-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-gray-300 text-gray-400 transition hover:border-violet-400 hover:text-violet-500"
+            @click="matFileInput?.click()"
+          >
+            <el-icon :size="20"><UploadFilled /></el-icon>
+            <span class="text-[11px]">上传 Word / PDF / txt / 图片（拍照或截图）</span>
+          </div>
+          <div
+            v-else
+            class="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-2 text-xs"
+          >
+            <span class="truncate text-gray-600">{{ matFile.name }}</span>
+            <button class="ml-2 shrink-0 text-gray-400 hover:text-red-400" @click="matFile = null">
+              <el-icon :size="13"><Close /></el-icon>
+            </button>
+          </div>
+          <el-input
+            v-model="matText"
+            type="textarea"
+            :rows="4"
+            size="small"
+            maxlength="12000"
+            :placeholder="matFile ? '（已选文件，这里可留空）也可以直接粘贴补充文字' : '或直接把备课稿 / 讲话稿 / 材料粘贴进来'"
+          />
+        </template>
         <div class="flex items-center gap-3">
           <span class="shrink-0 text-xs text-gray-500">章节数</span>
           <el-slider v-model="sections" :min="2" :max="6" :step="1" show-stops :show-tooltip="false" class="!flex-1" />
@@ -160,7 +254,11 @@ function rmImg(i: number) {
           :rows="2"
           size="small"
           maxlength="200"
-          placeholder="补充要求（可选）：例 面向小学生、突出案例、语气正式"
+          :placeholder="
+            aiSource === 'material'
+              ? '补充要求（可选）：例 面向家长、控制在 10 页内、语气正式'
+              : '补充要求（可选）：例 面向小学生、突出案例、语气正式'
+          "
         />
         <label class="flex cursor-pointer items-start gap-2 rounded-md border border-gray-200 p-2 text-xs">
           <el-checkbox v-model="aiBg" class="!h-4" />
@@ -173,10 +271,18 @@ function rmImg(i: number) {
           type="primary"
           class="!w-full !bg-violet-500 !border-none"
           :loading="generating"
-          :disabled="!topic.trim()"
+          :disabled="aiSource === 'topic' ? !topic.trim() : !matFile && matText.trim().length < 20"
           @click="genDeck"
         >
-          {{ generating ? (aiBg ? 'AI 生成中…（约 2~4 分钟）' : 'AI 排版中…（约 20~40 秒）') : '生成 PPT' }}
+          {{
+            generating
+              ? aiBg
+                ? 'AI 生成中…（约 2~4 分钟）'
+                : aiSource === 'material'
+                  ? 'AI 提炼重组中…（约 1~3 分钟）'
+                  : 'AI 排版中…（约 20~40 秒）'
+              : '生成 PPT'
+          }}
         </el-button>
 
         <template v-if="deck">

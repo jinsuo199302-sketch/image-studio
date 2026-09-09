@@ -776,31 +776,51 @@ async def design_lineart(
         raise
 
 
-async def _gen_deck_outline(topic: str, sections: int, extra: str = "") -> dict:
-    """主题 → PPT 大纲 JSON（含 title/subtitle/sections + palette 配色 + mood 视觉基调）。"""
+# 大纲 JSON 结构 + 版式规则（"填主题"和"传资料"两条链路共用）
+_DECK_JSON_SPEC = (
+    "只返回一个严格的 JSON 对象，不要 markdown 代码块、不要多余说明，形如：\n"
+    '{"title":"演示标题","subtitle":"一句副标题",'
+    '"palette":["#主色","#强调色","#主色深","#背景浅色","#正文深灰"],'
+    '"mood":"用一句话描述整体视觉基调，例：庄重大气的党政红金风、简洁现代的科技蓝",'
+    '"sections":[{"heading":"章节标题","en":"章节英文短标题(全大写,2~4词)",'
+    '"slides":[{"title":"小标题","en":"这一页的英文短标题(全大写,1~3词)","intro":"1~2句导语，可为空字符串","bullets":["要点一","要点二"]}]}]}\n'
+    "当某一页内容本身是量化的（占比、数量、几个关键指标），可以把这一页改成图表页——"
+    '把该 slide 写成 {"title":"...","en":"...","data":{"kind":"bar 或 stat","items":[{"label":"标签","value":85}]}}，'
+    "bar 用于多项数值对比、stat 用于 2~4 个关键指标；此时不需要 bullets。data 里的数字要真实合理，编不出准确数就不要用图表页。\n"
+    "当某一页是两个对象/方案/时期的对照（如「传统做法 vs 新做法」「优点 vs 缺点」），"
+    '写成对比页 {"title":"...","en":"...","compare":{"left":{"heading":"左栏标题","points":["要点","要点"]},"right":{"heading":"右栏标题","points":["要点","要点"]}}}，每栏 3~4 条、每条 12~28 字，不要 bullets。\n'
+    "当某一页适合做 SWOT 态势分析时，"
+    '写成 {"title":"...","en":"...","swot":{"s":["优势要点"],"w":["劣势要点"],"o":["机会要点"],"t":["威胁要点"]}}，每个象限 2~4 条、每条 10~22 字，不要 bullets。\n'
+    "对比页 / SWOT 页整份大纲里最多各 1 页，只在内容确实契合时才用，不要硬套。\n"
+    "palette 必须是 5 个协调的十六进制色，符合主题气质、对比度足够（正文色要能在背景浅色上看清）；"
+    "en 字段是给版式当装饰小字用的英文，要贴切、地道。"
+)
+
+
+async def _gen_deck_outline(topic: str, sections: int, extra: str = "", material: str = "") -> dict:
+    """主题（或整份资料）→ PPT 大纲 JSON（含 title/subtitle/sections + palette + mood）。
+    material 非空时走"重组资料"模式：标题/内容全部从资料提炼，不新增资料里没有的信息。"""
     extra_line = f"用户补充要求：{extra}。\n" if extra else ""
-    prompt = (
-        f"你是资深 PPT 设计师。为主题「{topic}」写一份幻灯片大纲，并给出配套的视觉方案。\n"
-        f"{extra_line}"
-        "只返回一个严格的 JSON 对象，不要 markdown 代码块、不要多余说明，形如：\n"
-        '{"title":"演示标题","subtitle":"一句副标题",'
-        '"palette":["#主色","#强调色","#主色深","#背景浅色","#正文深灰"],'
-        '"mood":"用一句话描述整体视觉基调，例：庄重大气的党政红金风、简洁现代的科技蓝",'
-        '"sections":[{"heading":"章节标题","en":"章节英文短标题(全大写,2~4词)",'
-        '"slides":[{"title":"小标题","en":"这一页的英文短标题(全大写,1~3词)","intro":"1~2句导语，可为空字符串","bullets":["要点一","要点二"]}]}]}\n'
-        "当某一页内容本身是量化的（占比、数量、几个关键指标），可以把这一页改成图表页——"
-        '把该 slide 写成 {"title":"...","en":"...","data":{"kind":"bar 或 stat","items":[{"label":"标签","value":85}]}}，'
-        "bar 用于多项数值对比、stat 用于 2~4 个关键指标；此时不需要 bullets。data 里的数字要真实合理，编不出准确数就不要用图表页。\n"
-        "当某一页是两个对象/方案/时期的对照（如「传统做法 vs 新做法」「优点 vs 缺点」），"
-        '写成对比页 {"title":"...","en":"...","compare":{"left":{"heading":"左栏标题","points":["要点","要点"]},"right":{"heading":"右栏标题","points":["要点","要点"]}}}，每栏 3~4 条、每条 12~28 字，不要 bullets。\n'
-        "当某一页适合做 SWOT 态势分析时，"
-        '写成 {"title":"...","en":"...","swot":{"s":["优势要点"],"w":["劣势要点"],"o":["机会要点"],"t":["威胁要点"]}}，每个象限 2~4 条、每条 10~22 字，不要 bullets。\n'
-        "对比页 / SWOT 页整份大纲里最多各 1 页，只在内容确实契合时才用，不要硬套。\n"
-        f"要求：palette 必须是 5 个协调的十六进制色，符合主题气质、对比度足够（正文色要能在背景浅色上看清）；"
-        f"sections 生成 {sections} 个；每个 section 下 2~3 个 slides；普通 slide 配 3~5 条 bullets，"
-        "每条 20~45 字，具体、准确、书面语，不空话套话；title/heading 精炼；en 字段是给版式当装饰小字用的英文，"
-        "要贴切、地道；涉及事实或数据要可靠。"
-    )
+    if material:
+        prompt = (
+            "你是资深 PPT 设计师。下面【资料原文】是用户准备好的素材，请把它重组成一份逻辑清晰的幻灯片大纲，"
+            "并给出配套视觉方案。\n"
+            "硬性要求：标题、章节、要点全部从资料里提炼和归纳，可以精简、改写得更书面、合并同类项，"
+            "但不得新增资料里没有的事实、数据或观点，不要脑补。资料里出现的数字/占比要保留并可做成图表页。\n"
+            f"章节数：资料结构清晰就按它自然的段落数（2~6 个）来；否则归纳成约 {sections} 个章节。"
+            "每个 section 下 2~4 个 slides，普通 slide 3~5 条 bullets、每条 15~45 字。\n"
+            f"{extra_line}"
+            f"{_DECK_JSON_SPEC}\n"
+            f"【资料原文】\n{material}"
+        )
+    else:
+        prompt = (
+            f"你是资深 PPT 设计师。为主题「{topic}」写一份幻灯片大纲，并给出配套的视觉方案。\n"
+            f"{extra_line}"
+            f"{_DECK_JSON_SPEC}\n"
+            f"要求：sections 生成 {sections} 个；每个 section 下 2~3 个 slides；普通 slide 配 3~5 条 bullets，"
+            "每条 20~45 字，具体、准确、书面语，不空话套话；title/heading 精炼；涉及事实或数据要可靠。"
+        )
     res = await _post_openlux(
         f"{OPENLUX_BASE_URL}/chat/completions",
         timeout=90,
@@ -866,7 +886,7 @@ def _persist_bg_kit(db: Session, user_id: str, raw_kit: dict) -> dict:
     return out
 
 
-async def _run_deck_job(job_id, user_id, ticket, topic, n, theme, extra, ai_bg):
+async def _run_deck_job(job_id, user_id, ticket, topic, n, theme, extra, ai_bg, material=""):
     from app.database import SessionLocal
 
     db = SessionLocal()
@@ -874,7 +894,7 @@ async def _run_deck_job(job_id, user_id, ticket, topic, n, theme, extra, ai_bg):
         user = db.query(models.User).filter(models.User.id == user_id).first()
         if user is None:
             raise RuntimeError("用户不存在")
-        outline = await _gen_deck_outline(topic, n, extra)
+        outline = await _gen_deck_outline(topic, n, extra, material)
         outline = deck_gen.apply_theme_palette(outline, theme)
         bg = None
         if ai_bg:
@@ -883,7 +903,7 @@ async def _run_deck_job(job_id, user_id, ticket, topic, n, theme, extra, ai_bg):
         slides = deck_gen.build_deck(outline, theme, bg)
         _HANDOUT_JOBS[job_id] = {
             "status": "done",
-            "result": {"title": outline.get("title") or topic, "theme": theme, "slides": slides, "outline": outline, "bg": bg},
+            "result": {"title": outline.get("title") or topic or "演示文稿", "theme": theme, "slides": slides, "outline": outline, "bg": bg},
             "user_id": user_id,
         }
     except HTTPException as e:
@@ -943,6 +963,89 @@ async def design_deck(
     except Exception:
         billing.refund_ticket(db, user, ticket)
         raise
+
+
+async def _transcribe_image_text(image_bytes: bytes, media_type: str) -> str:
+    """图片（拍照/截图的备课资料）→ 逐字转录的纯文本，交给大纲模型重组。"""
+    b64 = base64.b64encode(image_bytes).decode()
+    res = await _post_openlux(
+        f"{OPENLUX_BASE_URL}/chat/completions",
+        timeout=120,
+        headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
+        json={
+            "model": "gemini-3-flash-preview",
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": (
+                        "把这张图片里的所有文字完整、逐字转录出来，保留原有的分段和条目结构。"
+                        "不要翻译、不要总结、不要补充说明，只输出文字本身。"
+                    )},
+                    {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{b64}"}},
+                ],
+            }],
+        },
+    )
+    if res.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"图片识别失败：{res.status_code} {res.text[:160]}")
+    text = (res.json().get("choices", [{}])[0].get("message", {}).get("content") or "").strip()
+    if len(text) < 20:
+        raise HTTPException(status_code=422, detail="没能从图片里读到足够的文字，换张更清晰的试试")
+    return text[:12000]
+
+
+@router.post("/design/deck/material")
+async def design_deck_material(
+    file: UploadFile | None = File(None),
+    text: str = Form(""),
+    sections: int = Form(4),
+    theme: str = Form("auto"),
+    extra: str = Form(""),
+    ai_bg: bool = Form(False),
+    user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """「传资料生成 PPT」：上传 Word/PDF/txt/图片，或直接粘贴长文本 → AI 重组成大纲 →
+    排成一套幻灯片。内容全部来自用户资料，不脑补。始终走异步 job（轮询 /design/handout/job/{id}）。
+    计费「AIPPT」，跟填主题那条链路一样。"""
+    from app import material_extract
+
+    _require_openlux()
+    pasted = (text or "").strip()
+    material = ""
+    if file is not None and (file.filename or ""):
+        raw = await file.read()
+        if len(raw) > 20 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="文件太大（上限 20MB）")
+        ct = (file.content_type or "").lower()
+        if ct.startswith("image/") or (file.filename or "").lower().endswith(
+            (".png", ".jpg", ".jpeg", ".webp", ".bmp")
+        ):
+            await _check_not_sensitive_document(raw, ct or "image/png", "生成 PPT")
+            material = await _transcribe_image_text(raw, ct or "image/png")
+        else:
+            try:
+                material = material_extract.extract_material(file.filename or "", ct, raw)
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
+    elif pasted:
+        if len(pasted) < 20:
+            raise HTTPException(status_code=400, detail="粘贴的内容太短，至少写几句")
+        material = pasted[: material_extract.MAX_CHARS]
+    else:
+        raise HTTPException(status_code=400, detail="请上传资料文件或粘贴文字")
+
+    await _moderate_text(material[:2000] + " " + extra.strip()[:200])
+    n = min(6, max(2, sections))
+    ticket = billing.consume(db, user, "AIPPT")
+
+    job_id = uuid.uuid4().hex
+    _HANDOUT_JOBS[job_id] = {"status": "pending", "user_id": user.id}
+    _prune_handout_jobs()
+    asyncio.create_task(
+        _run_deck_job(job_id, user.id, ticket, "", n, theme, extra.strip()[:300], bool(ai_bg), material)
+    )
+    return {"jobId": job_id}
 
 
 def _read_generated_asset(src: str) -> bytes | None:

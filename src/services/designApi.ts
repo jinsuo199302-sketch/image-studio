@@ -364,6 +364,20 @@ export interface DeckResult {
   bg?: { cover?: string; content?: string; section?: string } | null
 }
 
+async function pollDeckJob(jobId: string): Promise<DeckResult> {
+  const deadline = Date.now() + 8 * 60 * 1000
+  while (Date.now() < deadline) {
+    await new Promise((res) => setTimeout(res, 5000))
+    const job = await authGetJson<{ status: string; result?: DeckResult; detail?: string }>(
+      `/design/handout/job/${jobId}`,
+      'PPT 生成失败',
+    )
+    if (job.status === 'done' && job.result) return job.result
+    if (job.status === 'error') throw new Error(job.detail || 'PPT 生成失败')
+  }
+  throw new Error('生成超时，请稍后重试')
+}
+
 /** AI 生成 PPT：主题 → 一套幻灯片。aiBg=true 时后端另出 3 张整页背景图，走异步轮询。 */
 export async function generateDeck(
   topic: string,
@@ -377,18 +391,29 @@ export async function generateDeck(
     { topic, sections, theme, extra, ai_bg: aiBg },
     'PPT 生成失败',
   )
-  if (!r.jobId) return r
-  const deadline = Date.now() + 8 * 60 * 1000
-  while (Date.now() < deadline) {
-    await new Promise((res) => setTimeout(res, 5000))
-    const job = await authGetJson<{ status: string; result?: DeckResult; detail?: string }>(
-      `/design/handout/job/${r.jobId}`,
-      'PPT 生成失败',
-    )
-    if (job.status === 'done' && job.result) return job.result
-    if (job.status === 'error') throw new Error(job.detail || 'PPT 生成失败')
-  }
-  throw new Error('生成超时，请稍后重试')
+  return r.jobId ? pollDeckJob(r.jobId) : r
+}
+
+/**
+ * 传资料生成 PPT：上传 Word/PDF/txt/图片，或直接粘贴长文本 → AI 重组成大纲 → 一套幻灯片。
+ * 内容全部来自用户资料。始终异步。file 与 pastedText 二选一。
+ */
+export async function generateDeckFromMaterial(
+  input: { file?: File; pastedText?: string },
+  sections: number,
+  theme: string,
+  extra = '',
+  aiBg = false,
+): Promise<DeckResult> {
+  const form = new FormData()
+  if (input.file) form.append('file', input.file, input.file.name || 'material')
+  if (input.pastedText) form.append('text', input.pastedText)
+  form.append('sections', String(sections))
+  form.append('theme', theme)
+  form.append('extra', extra)
+  form.append('ai_bg', String(aiBg))
+  const { jobId } = await authPostForm<{ jobId: string }>('/design/deck/material', form, 'PPT 生成失败')
+  return pollDeckJob(jobId)
 }
 
 /** 已生成的幻灯片数据 → 下载 PPTX（不重新扣次数） */
