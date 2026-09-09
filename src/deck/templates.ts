@@ -72,28 +72,37 @@ function css(t: DeckTheme): string {
   .en{font-size:12px;letter-spacing:3px;color:#a9adb6;font-weight:700}
 
   /* 封面 */
-  .s-cover{background:#fff}
-  .s-cover .side{position:absolute;left:0;top:0;width:16px;height:100%;background:${t.primary};z-index:2}
-  .s-cover .side::after{content:"";position:absolute;left:0;top:0;width:16px;height:128px;background:${t.accent}}
-  .s-cover .panel{position:absolute;left:76px;top:150px;width:760px;padding:44px 44px 40px;background:rgba(255,255,255,.9);border-radius:8px;z-index:2}
-  .s-cover .kick{font-size:13px;letter-spacing:4px;color:${t.accent};font-weight:800}
-  .s-cover h1{font-size:52px;line-height:1.18;color:${t.primaryDk};font-weight:800;margin:14px 0 20px}
-  .s-cover .sub{font-size:19px;color:#7c7c7c;margin-top:20px}
-  .s-cover .meta{margin-top:36px;font-size:13px;color:#9a9a9a;line-height:2}
+  .s-cover{background:#f4f5f7}
+  .s-cover .side{position:absolute;left:0;top:0;width:16px;height:100%;background:${t.primary};z-index:3}
+  .s-cover .side::after{content:"";position:absolute;left:0;top:0;width:16px;height:150px;background:${t.accent}}
+  /* 角落造型装饰（代码画，无 AI 背景时用） */
+  .s-cover .cn1{position:absolute;right:0;top:0;width:360px;height:360px;background:${t.primary};z-index:0}
+  .s-cover .cn2{position:absolute;right:0;top:0;width:150px;height:150px;background:${t.accent};z-index:1}
+  .s-cover .cn3{position:absolute;right:250px;top:-60px;width:180px;height:180px;background:${t.primaryDk};z-index:0}
+  .s-cover .ring{position:absolute;left:-120px;bottom:-120px;width:340px;height:340px;border:34px solid ${t.primary}1f;border-radius:50%;z-index:0}
+  .s-cover .panel{position:absolute;left:110px;top:206px;width:720px;z-index:2}
+  .s-cover.on-bg .panel{left:76px;top:150px;width:760px;padding:44px 46px 40px;background:rgba(255,255,255,.92);border-radius:8px}
+  .s-cover .kbar{width:64px;height:8px;background:${t.accent};margin-bottom:22px}
+  .s-cover .kick{font-size:13px;letter-spacing:5px;color:${t.accent};font-weight:800}
+  .s-cover h1{font-size:56px;line-height:1.16;color:${t.primaryDk};font-weight:800;margin:12px 0 22px}
+  .s-cover .tick{width:96px;height:6px;background:${t.accent}}
+  .s-cover .sub{font-size:20px;color:#6f7378;margin-top:22px;line-height:1.5}
+  .s-cover .meta{margin-top:46px;font-size:13px;color:#9a9a9a;line-height:2.1}
   /* 封面带用户照片：右 46% 放图，左侧留白放标题 */
-  .s-cover.has-pic .panel{background:transparent;left:76px;width:600px;padding:0}
-  .s-cover .cpic{position:absolute;right:0;top:0;width:46%;height:100%;object-fit:cover;z-index:1}
-  .s-cover.has-pic h1{color:${t.primaryDk}}
+  .s-cover.has-pic .cpic{position:absolute;right:0;top:0;width:46%;height:100%;object-fit:cover;z-index:1}
+  .s-cover.has-pic .cn1,.s-cover.has-pic .cn2,.s-cover.has-pic .cn3,.s-cover.has-pic .ring{display:none}
 
   /* 图文分栏内容页 */
-  .imgrow{flex:1;display:flex;gap:46px;margin-top:30px;align-items:stretch}
+  .imgrow{flex:1;display:flex;gap:54px;margin-top:24px;margin-bottom:12px;align-items:stretch}
   .imgrow.rev{flex-direction:row-reverse}
-  .imgrow .pic{width:44%;flex:none;border-radius:14px;overflow:hidden;background:#eef0f3}
-  .imgrow .pic img{width:100%;height:100%;object-fit:cover;display:block}
-  .imgrow .txt{flex:1;display:flex;flex-direction:column;justify-content:center;gap:16px}
-  .imgrow .lead{font-size:15px;line-height:1.6;color:#8b8b8b}
-  .imgrow .li{font-size:16px;line-height:1.6;padding-left:18px;position:relative}
-  .imgrow .li::before{content:"";position:absolute;left:0;top:9px;width:7px;height:7px;border-radius:50%;background:${t.accent}}
+  .imgrow .pic{position:relative;width:50%;flex:none}
+  .imgrow .pic .fr{position:absolute;left:16px;top:16px;width:100%;height:calc(100% - 4px);background:${t.accent};z-index:0}
+  .imgrow.rev .pic .fr{left:auto;right:16px}
+  .imgrow .pic img{position:relative;z-index:1;width:100%;height:100%;object-fit:cover;display:block;background:#eef0f3}
+  .imgrow .txt{flex:1;display:flex;flex-direction:column;justify-content:center;gap:18px;padding:8px 0}
+  .imgrow .lead{font-size:16px;line-height:1.64;color:#7d7d7d;padding-left:16px;border-left:3px solid ${t.accent}}
+  .imgrow .li{font-size:17px;line-height:1.62;padding-left:22px;position:relative;font-weight:500}
+  .imgrow .li::before{content:"";position:absolute;left:0;top:10px;width:9px;height:9px;border-radius:50%;background:${t.accent}}
 
   /* 目录 */
   .s-toc{padding:76px 116px}
@@ -107,20 +116,25 @@ function css(t: DeckTheme): string {
 
   /* 章节过渡 */
   .s-sec{background:${t.primaryDk};color:#fff}
-  .s-sec .big{position:absolute;left:64px;top:210px;font-size:190px;font-weight:800;color:rgba(255,255,255,.09);line-height:.9}
-  .s-sec .box{position:absolute;left:96px;top:404px;width:920px}
-  .s-sec .part{font-size:18px;letter-spacing:6px;color:${t.accent};font-weight:800}
-  .s-sec h2{font-size:42px;font-weight:800;margin:12px 0 14px}
-  .s-sec .en{color:rgba(255,255,255,.5)}
+  .s-sec .sbar{position:absolute;left:0;top:0;width:14px;height:100%;background:${t.accent};z-index:3}
+  .s-sec .blk{position:absolute;right:0;top:0;width:44%;height:100%;background:rgba(255,255,255,.05);z-index:0}
+  .s-sec .big{position:absolute;right:36px;top:96px;font-size:330px;font-weight:800;color:rgba(255,255,255,.08);line-height:.72;z-index:1;font-family:"Arial Black","Arial",sans-serif}
+  .s-sec .box{position:absolute;left:120px;top:256px;width:660px;z-index:2}
+  .s-sec .part{font-size:15px;letter-spacing:6px;color:${t.accent};font-weight:800}
+  .s-sec .pnx{font-size:13px;letter-spacing:3px;font-weight:700;color:rgba(255,255,255,.42);margin-top:8px}
+  .s-sec h2{font-size:48px;font-weight:800;margin:14px 0 22px;line-height:1.22}
+  .s-sec .rule{width:520px;height:1px;background:rgba(255,255,255,.22)}
+  .s-sec .en{margin-top:18px;color:rgba(255,255,255,.4);letter-spacing:2px;font-size:12px;font-weight:700}
 
-  /* 内容页骨架 */
-  .body{padding:50px 96px;height:100%;display:flex;flex-direction:column}
+  /* 内容页骨架。注意：用绝对定位铺满 .slide，不要 height:100% —— 导出用的隐藏舞台
+     没有父级高度，height:100% 会塌成内容高度，整页排版全乱（踩过） */
+  .body{position:absolute;inset:0;padding:54px 96px;display:flex;flex-direction:column}
   .head{text-align:center}
-  .head h2{font-size:25px;color:${t.primary};font-weight:800}
-  .head .fl{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:8px}
-  .head .fl::before,.head .fl::after{content:"";width:28px;height:3px;background:${t.accent}}
+  .head h2{font-size:28px;color:${t.primary};font-weight:800;letter-spacing:.5px}
+  .head .fl{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:10px}
+  .head .fl::before,.head .fl::after{content:"";width:30px;height:3px;background:${t.accent}}
   .head .en{margin-top:8px}
-  .intro{text-align:center;color:#8b8b8b;font-size:15px;line-height:1.6;margin:20px auto 0;max-width:880px}
+  .intro{text-align:center;color:#8b8b8b;font-size:15px;line-height:1.62;margin:22px auto 0;max-width:860px}
 
   /* 卡片（2~3 条） */
   .cards{display:grid;gap:30px;flex:1;margin-top:42px;align-content:center}
@@ -193,10 +207,15 @@ function css(t: DeckTheme): string {
   .swot .qt .qh{color:#47566f}
 
   /* 结尾 */
-  .closing{background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center}
+  .closing{background:#f4f5f7;display:flex;align-items:center;justify-content:center;text-align:center}
+  .closing .cn{position:absolute;left:0;top:0;width:230px;height:230px;background:${t.primary};z-index:0}
+  .closing .cn.b{left:auto;right:0;top:auto;bottom:0}
+  .closing .cn.s{width:96px;height:96px;background:${t.accent};z-index:1}
+  .closing .inner{position:relative;z-index:2;width:780px;display:flex;flex-direction:column;align-items:center;gap:18px}
   .closing .ty{font-size:13px;letter-spacing:6px;color:${t.accent};font-weight:800}
-  .closing h1{font-size:54px;font-weight:800;color:${t.primary}}
-  .closing .sub{font-size:17px;color:#8a8a8a}
+  .closing h1{font-size:58px;font-weight:800;color:${t.primary}}
+  .closing .tick{width:96px;height:6px;background:${t.accent}}
+  .closing .sub{font-size:17px;color:#8a8a8a;line-height:1.5}
   `
 }
 
@@ -206,9 +225,13 @@ const bgImg = (url?: string) => (url ? `<img class="bg" src="${esc(url)}" crosso
 function cover(o: DeckOutline): string {
   const b = o.bg?.cover
   const pic = !b && o.coverImage
-  return `<div class="slide s-cover${pic ? ' has-pic' : ''}">${bgImg(b)}<div class="side"></div>
+  const cls = b ? 's-cover on-bg' : pic ? 's-cover has-pic' : 's-cover'
+  const deco =
+    !b && !pic ? `<div class="cn3"></div><div class="cn1"></div><div class="cn2"></div><div class="ring"></div>` : ''
+  return `<div class="slide ${cls}">${bgImg(b)}${deco}<div class="side"></div>
     ${pic ? `<img class="cpic" src="${esc(o.coverImage!)}" crossorigin="anonymous">` : ''}
     <div class="panel">
+      <div class="kbar"></div>
       <div class="kick">KEYNOTE PRESENTATION</div>
       <h1>${esc(o.title)}</h1><div class="tick"></div>
       ${o.subtitle ? `<div class="sub">${esc(o.subtitle)}</div>` : ''}
@@ -231,12 +254,16 @@ function toc(o: DeckOutline): string {
 }
 
 function section(s: DeckSection, idx: number, total: number, o: DeckOutline): string {
+  const withBg = !!o.bg?.section
   return `<div class="slide s-sec">${bgImg(o.bg?.section)}
+    ${withBg ? '' : '<div class="blk"></div><div class="sbar"></div>'}
     <div class="big">${pad2(idx)}</div>
     <div class="box">
-      <div class="part">PART ${pad2(idx)} / ${pad2(total)}</div>
-      <h2>${esc(s.heading)}</h2><div class="tick"></div>
-      ${s.en ? `<div class="en" style="margin-top:14px">${esc(s.en)}</div>` : ''}
+      <div class="part">PART ${pad2(idx)}</div>
+      <div class="pnx">${pad2(idx)} / ${pad2(total)}</div>
+      <h2>${esc(s.heading)}</h2>
+      <div class="rule"></div>
+      ${s.en ? `<div class="en">${esc(s.en)}</div>` : ''}
     </div></div>`
 }
 
@@ -259,7 +286,7 @@ function content(sl: DeckSlideIn, en: string, o: DeckOutline, imgFlip = false): 
     return `<div class="slide body">${bgImg(o.bg?.content)}<div class="z">
       <div class="head"><h2>${esc(sl.title || '')}</h2><div class="fl"></div><div class="en">${esc(sl.en || en)}</div></div>
       <div class="imgrow${imgFlip ? ' rev' : ''}">
-        <div class="pic"><img src="${esc(sl.image)}" crossorigin="anonymous"></div>
+        <div class="pic"><span class="fr"></span><img src="${esc(sl.image)}" crossorigin="anonymous"></div>
         <div class="txt">${sl.intro ? `<div class="lead">${esc(sl.intro)}</div>` : ''}${lis}</div>
       </div></div></div>`
   }
@@ -350,9 +377,12 @@ function swot(sl: DeckSlideIn, en: string, o: DeckOutline): string {
 }
 
 function closing(o: DeckOutline): string {
-  return `<div class="slide closing">${bgImg(o.bg?.content)}<div class="z" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px">
-    <div class="ty">THANK YOU</div><h1>感谢观看</h1><div class="tick"></div>
-    <div class="sub">${esc(o.title)}</div></div></div>`
+  const deco = o.bg?.content ? '' : '<div class="cn s"></div><div class="cn"></div><div class="cn b"></div>'
+  return `<div class="slide closing">${bgImg(o.bg?.content)}${deco}
+    <div class="inner">
+      <div class="ty">THANK YOU</div><h1>感谢观看</h1><div class="tick"></div>
+      <div class="sub">${esc(o.title)}</div>
+    </div></div>`
 }
 
 const EN = ['OVERVIEW', 'ANALYSIS', 'KEY POINTS', 'ACTION PLAN', 'SUMMARY', 'OUTLOOK']

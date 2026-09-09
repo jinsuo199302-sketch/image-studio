@@ -26,22 +26,42 @@ export interface Prim {
   font?: string
   lineHeight?: number
   letterSpacing?: number
+  wrap?: boolean
   // image
   src?: string
 }
 
-function toRgb(c: string): string | null {
+const hex2 = (n: number) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0')
+
+/** 把 CSS 颜色解析成不透明 RGB 三元组，遇到半透明就混到 `bg` 上（PPTX 形状不支持半透明）。
+ * bg 默认为白 —— 但深色章节页上的浅色装饰必须混到深底上，否则会变成刺眼的纯白。 */
+function toRgb(c: string, bg: [number, number, number] = [255, 255, 255]): string | null {
   if (!c || c === 'transparent') return null
   const m = c.match(/rgba?\(([^)]+)\)/)
   if (!m) return c.startsWith('#') ? c : null
   const [r, g, b, a] = m[1].split(',').map((s) => parseFloat(s))
-  if (a !== undefined && a < 0.06) return null
-  const hex = (n: number) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0')
-  // 有透明度就近似混到白底上（PPTX 形状不好做半透明）
+  if (a !== undefined && a < 0.02) return null
   if (a !== undefined && a < 1) {
-    return '#' + [r, g, b].map((v) => hex(v * a + 255 * (1 - a))).join('')
+    return '#' + [r, g, b].map((v, i) => hex2(v * a + bg[i] * (1 - a))).join('')
   }
-  return '#' + [r, g, b].map((v) => hex(v)).join('')
+  return '#' + [r, g, b].map((v) => hex2(v)).join('')
+}
+
+/** 只取 rgb() / rgba(a=1) / #hex 的不透明三元组，用来往下传背景色 */
+function solidTriple(c: string): [number, number, number] | null {
+  if (!c) return null
+  const m = c.match(/rgba?\(([^)]+)\)/)
+  if (m) {
+    const [r, g, b, a] = m[1].split(',').map((s) => parseFloat(s))
+    if (a !== undefined && a < 0.5) return null
+    return [r, g, b]
+  }
+  if (c.startsWith('#')) {
+    const h = c.slice(1)
+    const s = h.length === 3 ? h.replace(/./g, (x) => x + x) : h
+    return [parseInt(s.slice(0, 2), 16), parseInt(s.slice(2, 4), 16), parseInt(s.slice(4, 6), 16)]
+  }
+  return null
 }
 
 function firstFont(family: string): string {
@@ -62,7 +82,7 @@ export function measureSlide(root: HTMLElement): { w: number; h: number; prims: 
   const base = root.getBoundingClientRect()
   const prims: Prim[] = []
 
-  const walk = (el: HTMLElement) => {
+  const walk = (el: HTMLElement, bg: [number, number, number]) => {
     const cs = getComputedStyle(el)
     if (cs.display === 'none' || cs.visibility === 'hidden' || parseFloat(cs.opacity) < 0.05) return
     const r = el.getBoundingClientRect()
@@ -71,13 +91,15 @@ export function measureSlide(root: HTMLElement): { w: number; h: number; prims: 
     const w = r.width
     const h = r.height
     if (w < 0.5 || h < 0.5) {
-      Array.from(el.children).forEach((c) => walk(c as HTMLElement))
+      Array.from(el.children).forEach((c) => walk(c as HTMLElement, bg))
       return
     }
 
-    const fill = el === root ? toRgb(cs.backgroundColor) : toRgb(cs.backgroundColor)
+    const fill = toRgb(cs.backgroundColor, bg)
+    // 这个元素有实底色时，它的后代就以此为背景往下混
+    const childBg = solidTriple(cs.backgroundColor) || bg
     const bw = parseFloat(cs.borderTopWidth) || 0
-    const bcol = toRgb(cs.borderTopColor)
+    const bcol = toRgb(cs.borderTopColor, bg)
     const radius = parseFloat(cs.borderTopLeftRadius) || 0
     const ellipse = radius >= Math.min(w, h) / 2 - 1
 
@@ -101,24 +123,30 @@ export function measureSlide(root: HTMLElement): { w: number; h: number; prims: 
       // innerText 会把 <br> 变成换行、去掉多余空白
       const t = (el.innerText || el.textContent || '').replace(/[ \t]+/g, ' ').replace(/\n{2,}/g, '\n').trim()
       if (t) {
+        const fs = parseFloat(cs.fontSize)
+        const lh = parseFloat(cs.lineHeight) / fs || 1.2
+        // 浏览器里就一行的文字（标题/大数字/装饰英文）→ 导出时禁止换行，
+        // 否则 PPT 字体更宽会折行、撑高文本框、压到下一个元素
+        const oneLine = !t.includes('\n') && r.height <= fs * lh * 1.6
         prims.push({
           kind: 'text', x, y, w, h,
           text: t,
-          fontSize: parseFloat(cs.fontSize),
+          fontSize: fs,
           bold: parseInt(cs.fontWeight, 10) >= 600 || cs.fontWeight === 'bold',
           italic: cs.fontStyle === 'italic',
-          color: toRgb(cs.color) || '#222222',
+          color: toRgb(cs.color, bg) || '#222222',
           align: (cs.textAlign === 'center' || cs.textAlign === 'right' ? cs.textAlign : 'left') as Prim['align'],
           font: firstFont(cs.fontFamily),
-          lineHeight: parseFloat(cs.lineHeight) / parseFloat(cs.fontSize) || 1.2,
+          lineHeight: lh,
           letterSpacing: parseFloat(cs.letterSpacing) || 0,
+          wrap: !oneLine,
         })
       }
       return
     }
-    Array.from(el.children).forEach((c) => walk(c as HTMLElement))
+    Array.from(el.children).forEach((c) => walk(c as HTMLElement, childBg))
   }
 
-  walk(root)
+  walk(root, solidTriple(getComputedStyle(root).backgroundColor) || [255, 255, 255])
   return { w: base.width, h: base.height, prims }
 }

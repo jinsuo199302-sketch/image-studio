@@ -49,19 +49,34 @@ function addPrim(slide: PptxGenJS.Slide, p: Prim, pptx: PptxGenJS, imgCache: Map
   }
 
   if (p.kind === 'text' && p.text) {
+    const fs = p.fontSize || 16
+    const lh = p.lineHeight || 1.2
+    const wrap = p.wrap !== false
+    // 不换行的文字（标题/大数字/装饰英文）：给足横向余量，PPT 字体更宽也不会被框逼折行
+    let tx = x
+    let tw = w
+    if (!wrap) {
+      const extra = (fs * (p.text.length > 6 ? 0.5 : 0.9)) * IN_PER_PX_W
+      tw = w + extra
+      if (p.align === 'center') tx = x - extra / 2
+      else if (p.align === 'right') tx = x - extra
+    }
     slide.addText(p.text, {
-      x, y, w, h: Math.max(h, (p.fontSize || 16) * IN_PER_PX_H * 1.4),
-      fontSize: (p.fontSize || 16) * 0.75,
+      x: tx,
+      y,
+      w: tw,
+      h: wrap ? Math.max(h, fs * lh * IN_PER_PX_H * 1.3) : fs * lh * IN_PER_PX_H * 1.35,
+      fontSize: fs * 0.75,
       bold: p.bold,
       italic: p.italic,
       color: (p.color || '#222222').replace('#', ''),
       align: p.align || 'left',
       valign: 'top',
       fontFace: p.font || 'Microsoft YaHei',
-      lineSpacingMultiple: p.lineHeight || 1.2,
+      lineSpacingMultiple: lh,
       charSpacing: p.letterSpacing ? p.letterSpacing * 0.75 : undefined,
       margin: 0,
-      wrap: true,
+      wrap,
       autoFit: false,
     })
   }
