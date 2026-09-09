@@ -140,28 +140,33 @@ function chevronStrip(items: string[], t: DeckTheme): string {
     )
     .join('')}</div>`
 }
-/** 中心辐射（hub-and-spoke）：中心圆 + 四周条目 */
+/** 中心辐射（hub-and-spoke）：中心圆 + 四周条目。坐标用百分比，铺满整个内容区 */
 function spokeDiagram(t: DeckTheme, center: string, items: string[]): string {
   const n = Math.min(items.length, 6)
-  const R = 210
-  const nodes = items
-    .slice(0, n)
-    .map((b, i) => {
-      const a = (2 * Math.PI * i) / n - Math.PI / 2
-      const x = 320 + R * Math.cos(a)
-      const y = 220 + R * Math.sin(a) * 0.82
-      return { b, x, y }
-    })
+  // viewBox 1000×520，中心 (500,255)，椭圆半径拉大到接近整宽
+  const cx = 500
+  const cy = 255
+  const rx = 372
+  const ry = 210
+  const nodes = items.slice(0, n).map((b, i) => {
+    const a = (2 * Math.PI * i) / n - Math.PI / 2
+    return { b, x: cx + rx * Math.cos(a), y: cy + ry * Math.sin(a) }
+  })
   const lines = nodes
-    .map((nd) => `<line x1="320" y1="220" x2="${nd.x.toFixed(0)}" y2="${nd.y.toFixed(0)}" stroke="${t.primary}33" stroke-width="2"/>`)
+    .map(
+      (nd) =>
+        `<line x1="${cx}" y1="${cy}" x2="${nd.x.toFixed(0)}" y2="${nd.y.toFixed(0)}" stroke="${t.primary}3a" stroke-width="2"/>`,
+    )
     .join('')
   const dots = nodes
     .map(
       (nd) =>
-        `<div class="spn" style="left:${nd.x.toFixed(0)}px;top:${nd.y.toFixed(0)}px"><span class="spd"></span><span class="spt">${esc(nd.b)}</span></div>`,
+        `<div class="spn" style="left:${((nd.x / 1000) * 100).toFixed(2)}%;top:${((nd.y / 520) * 100).toFixed(2)}%"><span class="spd"></span><span class="spt">${esc(
+          nd.b,
+        )}</span></div>`,
     )
     .join('')
-  return `<div class="spoke"><svg viewBox="0 0 640 440" width="640" height="440">${lines}</svg>
+  return `<div class="spoke"><svg viewBox="0 0 1000 520" preserveAspectRatio="none">${lines}</svg>
     <div class="spc">${esc(center)}</div>${dots}</div>`
 }
 /** 斜向叠放的方块阶梯（参考模板 #2） */
@@ -193,7 +198,7 @@ function numRail(items: string[], t: DeckTheme): string {
 function triImg(url: string): string {
   return `<div class="trif"><div class="trif-b"></div><img src="${esc(url)}" crossorigin="anonymous"></div>`
 }
-/** 蜂窝六边形群 + 图标（参考模板 #7） */
+/** 蜂窝六边形群 + 图标（参考模板 #7）。百分比定位，铺满内容区 */
 function hexHive(t: DeckTheme, center: string, items: string[]): string {
   const n = Math.min(items.length, 6)
   const pos: [number, number][] = [
@@ -204,24 +209,31 @@ function hexHive(t: DeckTheme, center: string, items: string[]): string {
     [-0.92, 0.52],
     [-0.92, -0.52],
   ]
-  const R = 128
+  // viewBox 1000×480，中心 (500,240)
+  const rx = 300
+  const ry = 172
   const cells = items
     .slice(0, n)
     .map((b, i) => {
       const [dx, dy] = pos[i]
-      return `<div class="hvc" style="left:${(320 + dx * R).toFixed(0)}px;top:${(210 + dy * R).toFixed(0)}px;background:${
-        i % 2 ? t.primary : t.primaryDk
-      }"><span class="hvi">${icon(pickIcon(b, i), 22)}</span><span class="hvt">${esc(b)}</span></div>`
+      return `<div class="hvc" style="left:${(((500 + dx * rx) / 1000) * 100).toFixed(2)}%;top:${(
+        ((240 + dy * ry) / 480) *
+        100
+      ).toFixed(2)}%;background:${i % 2 ? t.primary : t.primaryDk}"><span class="hvi">${icon(
+        pickIcon(b, i),
+        24,
+      )}</span><span class="hvt">${esc(b)}</span></div>`
     })
     .join('')
   return `<div class="hive"><div class="hvc mid">${esc(center)}</div>${cells}</div>`
 }
-/** 弧形箭头循环（参考模板 #9） */
+/** 弧形箭头循环（参考模板 #9）。圆形保持等比，居中，标签在四周 */
 function arrowRing(t: DeckTheme, center: string, items: string[]): string {
   const n = Math.min(Math.max(items.length, 3), 5)
-  const cx = 320
-  const cy = 205
-  const R = 140
+  const VB = 900
+  const cx = VB / 2
+  const cy = VB / 2
+  const R = 250
   const seg = 360 / n
   const g = 18
   const pt = (a: number, r = R) =>
@@ -233,28 +245,27 @@ function arrowRing(t: DeckTheme, center: string, items: string[]): string {
     const a1 = -90 + (i + 1) * seg - g / 2
     const large = a1 - a0 > 180 ? 1 : 0
     const col = i % 2 ? t.primary : t.accent
-    arcs += `<path d="M ${pt(a0)} A ${R} ${R} 0 ${large} 1 ${pt(a1)}" fill="none" stroke="${col}" stroke-width="11" stroke-linecap="round"/>`
+    arcs += `<path d="M ${pt(a0)} A ${R} ${R} 0 ${large} 1 ${pt(a1)}" fill="none" stroke="${col}" stroke-width="16" stroke-linecap="round"/>`
     const rad = (a1 * Math.PI) / 180
     const bx = cx + R * Math.cos(rad)
     const by = cy + R * Math.sin(rad)
     const td = rad + Math.PI / 2
-    const s = 12
+    const s = 18
     arcs += `<polygon points="${(bx + s * Math.cos(td)).toFixed(1)},${(by + s * Math.sin(td)).toFixed(1)} ${(
       bx -
       s * Math.cos(td) +
-      s * 1.1 * Math.cos(rad)
-    ).toFixed(1)},${(by - s * Math.sin(td) + s * 1.1 * Math.sin(rad)).toFixed(1)} ${(bx - s * Math.cos(td) - s * 1.1 * Math.cos(rad)).toFixed(
+      s * 1.15 * Math.cos(rad)
+    ).toFixed(1)},${(by - s * Math.sin(td) + s * 1.15 * Math.sin(rad)).toFixed(1)} ${(bx - s * Math.cos(td) - s * 1.15 * Math.cos(rad)).toFixed(
       1,
-    )},${(by - s * Math.sin(td) - s * 1.1 * Math.sin(rad)).toFixed(1)}" fill="${col}"/>`
+    )},${(by - s * Math.sin(td) - s * 1.15 * Math.sin(rad)).toFixed(1)}" fill="${col}"/>`
     const am = (a0 + a1) / 2
-    nodes += `<div class="arn" style="left:${(cx + (R + 52) * Math.cos((am * Math.PI) / 180)).toFixed(0)}px;top:${(
-      cy +
-      (R + 52) * Math.sin((am * Math.PI) / 180)
-    ).toFixed(0)}px"><span class="arnn">${pad2(i + 1)}</span><span class="arnt">${esc(items[i] || '')}</span></div>`
+    nodes += `<div class="arn" style="left:${(((cx + (R + 78) * Math.cos((am * Math.PI) / 180)) / VB) * 100).toFixed(
+      2,
+    )}%;top:${(((cy + (R + 78) * Math.sin((am * Math.PI) / 180)) / VB) * 100).toFixed(2)}%"><span class="arnn">${pad2(
+      i + 1,
+    )}</span><span class="arnt">${esc(items[i] || '')}</span></div>`
   }
-  return `<div class="aring"><svg viewBox="0 0 640 410" width="640" height="410">${arcs}</svg><div class="arc-c">${esc(
-    center,
-  )}</div>${nodes}</div>`
+  return `<div class="aring"><svg viewBox="0 0 ${VB} ${VB}">${arcs}</svg><div class="arc-c">${esc(center)}</div>${nodes}</div>`
 }
 /** 占比象形图：两段百分比 + 小人图标条（参考模板 #4） */
 function pictoSplit(t: DeckTheme, rows: { label: string; value: number }[]): string {
@@ -538,6 +549,14 @@ function css(t: DeckTheme): string {
   .row .ic{width:44px;height:44px;flex:none;border-radius:12px;background:${t.primary}0f;color:${t.primary};display:flex;align-items:center;justify-content:center}
   .row .n{font-size:12px;font-weight:800;color:${t.accent};letter-spacing:1px;flex:none;width:24px}
   .row .rt{font-size:16px;line-height:1.55;color:${t.ink}}
+  /* geo 风清单：整条撑满 + 交替底色 + 粗色左条 + 大号序号 */
+  .geo .list{margin-top:24px;gap:14px;justify-content:space-evenly}
+  .geo .list .row{border-bottom:0;padding:18px 26px;gap:22px;background:${t.primary}0c;border-left:5px solid ${t.primary};border-radius:0 12px 12px 0}
+  .geo .list .row:nth-child(even){background:${t.accent}14;border-left-color:${t.accent}}
+  .geo .list .row .n{width:auto;font-size:22px;color:${t.primary};font-family:"Arial","Microsoft YaHei",sans-serif;opacity:.9}
+  .geo .list .row:nth-child(even) .n{color:${t.primaryDk}}
+  .geo .list .row .ic{background:#fff;box-shadow:0 0 0 1px ${t.primary}22;border-radius:12px}
+  .geo .list .row .rt{font-weight:600}
 
   /* 引言（1 句） */
   .quote{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:20px}
@@ -657,12 +676,12 @@ function css(t: DeckTheme): string {
   .chv .cht{font-size:14px;line-height:1.45}
 
   /* 中心辐射图 */
-  .spoke{flex:1;position:relative;margin-top:16px;align-self:center;width:640px;height:440px}
-  .spoke svg{position:absolute;inset:0}
-  .spoke .spc{position:absolute;left:320px;top:220px;transform:translate(-50%,-50%);width:118px;height:118px;border-radius:50%;background:${t.primary};color:#fff;display:flex;align-items:center;justify-content:center;text-align:center;font-size:15px;font-weight:800;padding:10px;line-height:1.3}
-  .spoke .spn{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:6px;width:150px;text-align:center}
-  .spoke .spn .spd{width:14px;height:14px;border-radius:50%;background:${t.accent};box-shadow:0 0 0 5px ${t.accent}22}
-  .spoke .spn .spt{font-size:13px;color:${t.ink};line-height:1.4}
+  .spoke{flex:1;position:relative;margin-top:14px;align-self:stretch;width:100%}
+  .spoke svg{position:absolute;inset:0;width:100%;height:100%}
+  .spoke .spc{position:absolute;left:50%;top:49%;transform:translate(-50%,-50%);width:150px;height:150px;border-radius:50%;background:${t.primary};color:#fff;display:flex;align-items:center;justify-content:center;text-align:center;font-size:17px;font-weight:800;padding:12px;line-height:1.3;box-shadow:0 0 0 10px ${t.primary}12}
+  .spoke .spn{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:8px;width:172px;text-align:center}
+  .spoke .spn .spd{width:16px;height:16px;border-radius:50%;background:${t.accent};box-shadow:0 0 0 6px ${t.accent}22}
+  .spoke .spn .spt{font-size:14px;color:${t.ink};line-height:1.45;font-weight:600}
 
   /* 六边形图片框 */
   .hexf{position:relative;width:340px;flex:none;aspect-ratio:1/1.1}
@@ -693,12 +712,15 @@ function css(t: DeckTheme): string {
   .rings .rw .rv{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:800;color:${t.primary};font-family:"Arial","Microsoft YaHei",sans-serif}
   .rings .rw .rl{margin-top:14px;font-size:15px;color:${t.ink};max-width:180px;line-height:1.4}
 
-  /* geo 风：白底 + 实心导航块卡片（参考模板那种） */
+  /* geo 风：白底 + 实心导航块卡片（参考模板那种），撑满整页高度 + 大号数字水印 */
   .body.geo,.s-toc.geo{background:#fff}
-  .geo .cards .card{background:${t.primary};border:0;color:#fff}
-  .geo .cards .card .ic{background:rgba(255,255,255,.14);color:#fff}
-  .geo .cards .card .num{color:${t.accent}}
-  .geo .cards .card .ct{color:rgba(255,255,255,.92)}
+  .geo .cards{align-content:stretch;grid-auto-rows:1fr;margin-top:26px;gap:24px}
+  .geo .cards .card{background:${t.primary};border:0;color:#fff;justify-content:flex-start;gap:18px;padding:34px 28px;position:relative;overflow:hidden}
+  .geo .cards .card:nth-child(even){background:${t.primaryDk}}
+  .geo .cards .card .ic{width:64px;height:64px;background:rgba(255,255,255,.14);color:#fff}
+  .geo .cards .card .num{color:${t.accent};font-size:11px}
+  .geo .cards .card .ct{color:rgba(255,255,255,.94);font-size:16px}
+  .geo .cards .card .bn{position:absolute;right:16px;bottom:-24px;font-size:118px;line-height:1;font-weight:800;color:rgba(255,255,255,.10);font-family:"Arial","Microsoft YaHei",sans-serif}
   /* geo 风指标页：环形饼图 */
   .donuts{flex:1;display:flex;align-items:center;justify-content:space-around;margin-top:20px;gap:24px}
   .donuts .dn{position:relative;display:flex;flex-direction:column;align-items:center;text-align:center}
@@ -744,17 +766,17 @@ function css(t: DeckTheme): string {
   .gallery .gcell .gph img{width:100%;height:100%;object-fit:cover}
   .gallery .gcell .gcap{font-size:13.5px;color:${t.ink};text-align:center;line-height:1.5;max-width:260px}
   /* 蜂窝六边形群 */
-  .hive{flex:1;position:relative;align-self:center;width:640px;height:440px;margin-top:8px}
-  .hive .hvc{position:absolute;transform:translate(-50%,-50%);width:130px;height:148px;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;padding:12px;font-size:12px;line-height:1.3}
-  .hive .hvc.mid{left:320px;top:210px;background:${t.accent};font-size:15px;font-weight:800}
+  .hive{flex:1;position:relative;align-self:stretch;width:100%;margin-top:8px}
+  .hive .hvc{position:absolute;transform:translate(-50%,-50%);width:158px;height:180px;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:14px;font-size:13px;font-weight:600;line-height:1.3}
+  .hive .hvc.mid{left:50%;top:50%;background:${t.accent};font-size:16px;font-weight:800}
   .hive .hvc .hvi{opacity:.92}
   /* 弧形箭头循环 */
-  .aring{flex:1;position:relative;align-self:center;width:640px;height:410px;margin-top:8px}
-  .aring svg{position:absolute;inset:0}
-  .aring .arc-c{position:absolute;left:320px;top:205px;transform:translate(-50%,-50%);width:120px;height:120px;border-radius:50%;background:${t.primaryDk};color:#fff;display:flex;align-items:center;justify-content:center;text-align:center;font-size:15px;font-weight:800;padding:12px;line-height:1.3}
-  .aring .arn{position:absolute;transform:translate(-50%,-50%);width:150px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:4px}
-  .aring .arn .arnn{font-size:12px;font-weight:800;color:${t.accent};letter-spacing:1px}
-  .aring .arn .arnt{font-size:13px;color:${t.ink};line-height:1.4}
+  .aring{position:relative;align-self:center;width:512px;height:512px;margin:auto}
+  .aring svg{position:absolute;inset:0;width:100%;height:100%}
+  .aring .arc-c{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:150px;height:150px;border-radius:50%;background:${t.primaryDk};color:#fff;display:flex;align-items:center;justify-content:center;text-align:center;font-size:17px;font-weight:800;padding:14px;line-height:1.3}
+  .aring .arn{position:absolute;transform:translate(-50%,-50%);width:172px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:5px}
+  .aring .arn .arnn{font-size:13px;font-weight:800;color:${t.accent};letter-spacing:1px}
+  .aring .arn .arnt{font-size:14px;color:${t.ink};line-height:1.45;font-weight:600}
   /* 占比象形图 */
   .picto{flex:1;display:flex;align-items:center;gap:60px;margin-top:16px;padding-left:20px}
   .picto .pcpie{position:relative;flex:none}
@@ -1014,10 +1036,13 @@ function content(sl: DeckSlideIn, en: string, o: DeckOutline, imgFlip = false, l
     body = `<div class="quote"><div class="q">"</div><div class="qt">${esc(items[0] || '')}</div><div class="tick"></div></div>`
   } else if (branch === 'cards') {
     const cards = items.slice(0, 3)
+    const geo = isGeo(o)
     body = `<div class="cards" style="grid-template-columns:repeat(${Math.max(cards.length, 1)},1fr)">${cards
       .map(
         (b, i) =>
-          `<div class="card"><div class="ic">${ic(b, i, 30)}</div><div class="num">${pad2(i + 1)}</div><div class="ct">${para(b)}</div></div>`,
+          `<div class="card"><div class="ic">${ic(b, i, geo ? 34 : 30)}</div><div class="num">POINT ${pad2(
+            i + 1,
+          )}</div><div class="ct">${para(b)}</div>${geo ? `<div class="bn">${pad2(i + 1)}</div>` : ''}</div>`,
       )
       .join('')}</div>`
   } else {
