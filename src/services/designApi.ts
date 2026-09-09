@@ -410,7 +410,26 @@ export interface DeckRefStyle {
 export async function analyzeDeckReference(file: File): Promise<DeckRefStyle> {
   const form = new FormData()
   form.append('image', file, file.name || 'ref.jpg')
-  return authPostForm<DeckRefStyle>('/design/deck/reference', form, '参考图分析失败')
+  const r = await authPostForm<DeckRefStyle & { jobId?: string }>(
+    '/design/deck/reference',
+    form,
+    '参考图分析失败',
+  )
+  return r.jobId ? pollRefJob(r.jobId) : r
+}
+
+async function pollRefJob(jobId: string): Promise<DeckRefStyle> {
+  const deadline = Date.now() + 3 * 60 * 1000
+  while (Date.now() < deadline) {
+    await new Promise((res) => setTimeout(res, 2000))
+    const job = await authGetJson<{ status: string; result?: DeckRefStyle; detail?: string }>(
+      `/design/handout/job/${jobId}`,
+      '参考图分析失败',
+    )
+    if (job.status === 'done' && job.result) return job.result
+    if (job.status === 'error') throw new Error(job.detail || '参考图分析失败')
+  }
+  throw new Error('识别超时，请重试')
 }
 
 /** AI 生成 PPT：主题 → 一套幻灯片。aiBg=true 时后端另出 3 张整页背景图，走异步轮询。 */

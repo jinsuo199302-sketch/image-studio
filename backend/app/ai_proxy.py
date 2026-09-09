@@ -1257,46 +1257,70 @@ async def design_deck_reference(
     _db: Session = Depends(get_db),
 ):
     """上传一张喜欢的 PPT 模板/参考图 → 判断它属于我们哪种风格 + 提取配色气质。
-    只做「风格归类 + 配色」,不复刻版面。返回 {theme, palette, mood, ai_bg}。"""
+    只做「风格归类 + 配色」,不复刻版面。异步 job（轮询 /design/handout/job/{id}），
+    结果 {theme, palette, mood, ai_bg}。"""
     _require_openlux()
     raw = await image.read()
     if not raw:
         raise HTTPException(status_code=400, detail="没读到图片")
-    await _check_not_sensitive_document(raw, image.content_type or "image/png", "参考风格")
-    data, ct = _shrink_jpeg(raw, max_px=1024, quality=82)
-    res = await _post_openlux(
-        f"{OPENLUX_BASE_URL}/chat/completions",
-        timeout=60,
-        headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
-        json={
-            "model": "gemini-3-flash-preview",
-            "messages": [{
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": _DECK_REF_PROMPT},
-                    {"type": "image_url", "image_url": {"url": f"data:{ct};base64,{base64.b64encode(data).decode()}"}},
-                ],
-            }],
-        },
-    )
-    if res.status_code >= 400:
-        raise HTTPException(status_code=502, detail=f"参考图分析失败：{res.status_code} {res.text[:160]}")
-    txt = res.json().get("choices", [{}])[0].get("message", {}).get("content", "")
-    m = re.search(r"\{[\s\S]*\}", txt)
+    ct = image.content_type or "image/png"
+    job_id = uuid.uuid4().hex
+    _HANDOUT_JOBS[job_id] = {"status": "pending", "user_id": user.id}
+    _prune_handout_jobs()
+    asyncio.create_task(_run_deck_ref_job(job_id, user.id, raw, ct))
+    return {"jobId": job_id}
+
+
+async def _run_deck_ref_job(job_id, user_id, raw: bytes, ct: str):
+    """敏感检查 + 风格分析并行跑，都是视觉调用，串行要 15~40s 常被网关掐断。"""
     try:
+        data, ict = _shrink_jpeg(raw, max_px=1024, quality=82)
+        b64 = base64.b64encode(data).decode()
+        analyze = _post_openlux(
+            f"{OPENLUX_BASE_URL}/chat/completions",
+            timeout=120,
+            headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
+            json={
+                "model": "gemini-3-flash-preview",
+                "messages": [{
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": _DECK_REF_PROMPT},
+                        {"type": "image_url", "image_url": {"url": f"data:{ict};base64,{b64}"}},
+                    ],
+                }],
+            },
+        )
+        check_res, res = await asyncio.gather(
+            _check_not_sensitive_document(raw, ct, "参考风格"), analyze, return_exceptions=True
+        )
+        if isinstance(check_res, BaseException):
+            raise check_res
+        if isinstance(res, BaseException):
+            raise res
+        if res.status_code >= 400:
+            raise HTTPException(status_code=502, detail=f"参考图分析失败：{res.status_code} {res.text[:160]}")
+        txt = res.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+        m = re.search(r"\{[\s\S]*\}", txt)
         d = json.loads(m.group(0) if m else txt)
-    except Exception:
-        raise HTTPException(status_code=502, detail="参考图分析结果解析失败，请重试")
-    style = str(d.get("style") or "plain").strip().lower()
-    pal = [str(c).strip() for c in (d.get("palette") or []) if re.match(r"^#?[0-9a-fA-F]{6}$", str(c).strip())]
-    pal = [c if c.startswith("#") else "#" + c for c in pal][:5]
-    theme = {"geo": "geoblue", "photo": "techblue"}.get(style, "auto")
-    return {
-        "theme": theme,
-        "palette": pal if len(pal) == 5 else [],
-        "mood": str(d.get("mood") or "").strip()[:40],
-        "ai_bg": style == "photo",
-    }
+        style = str(d.get("style") or "plain").strip().lower()
+        pal = [str(c).strip() for c in (d.get("palette") or []) if re.match(r"^#?[0-9a-fA-F]{6}$", str(c).strip())]
+        pal = [c if c.startswith("#") else "#" + c for c in pal][:5]
+        theme = {"geo": "geoblue", "photo": "techblue"}.get(style, "auto")
+        _HANDOUT_JOBS[job_id] = {
+            "status": "done",
+            "user_id": user_id,
+            "result": {
+                "theme": theme,
+                "palette": pal if len(pal) == 5 else [],
+                "mood": str(d.get("mood") or "").strip()[:40],
+                "ai_bg": style == "photo",
+            },
+        }
+    except HTTPException as e:
+        _HANDOUT_JOBS[job_id] = {"status": "error", "detail": str(e.detail), "user_id": user_id}
+    except Exception as e:  # noqa: BLE001
+        _HANDOUT_JOBS[job_id] = {"status": "error", "detail": f"参考图分析失败：{e}", "user_id": user_id}
 
 
 @router.post("/design/deck/material")
