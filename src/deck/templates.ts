@@ -164,6 +164,155 @@ function spokeDiagram(t: DeckTheme, center: string, items: string[]): string {
   return `<div class="spoke"><svg viewBox="0 0 640 440" width="640" height="440">${lines}</svg>
     <div class="spc">${esc(center)}</div>${dots}</div>`
 }
+/** 斜向叠放的方块阶梯（参考模板 #2） */
+function stackBlocks(items: string[], t: DeckTheme): string {
+  const n = Math.min(items.length, 5)
+  return `<div class="stk">${items
+    .slice(0, n)
+    .map(
+      (b, i) =>
+        `<div class="stki" style="margin-left:${i * 78}px;background:${i % 2 ? t.primaryDk : t.primary}"><span class="skn">${pad2(
+          i + 1,
+        )}</span><span class="skt">${esc(b)}</span></div>`,
+    )
+    .join('')}</div>`
+}
+/** 横向编号圆点轴，标签上下交替（参考模板 #3） */
+function numRail(items: string[], t: DeckTheme): string {
+  const n = Math.min(items.length, 6)
+  void t
+  return `<div class="nrail"><div class="nrl"></div>${items
+    .slice(0, n)
+    .map(
+      (b, i) =>
+        `<div class="nr ${i % 2 ? 'dn' : 'up'}"><div class="nrt">${esc(b)}</div><div class="nrc">${pad2(i + 1)}</div></div>`,
+    )
+    .join('')}</div>`
+}
+/** 倒三角形图片框（参考模板 #8） */
+function triImg(url: string): string {
+  return `<div class="trif"><div class="trif-b"></div><img src="${esc(url)}" crossorigin="anonymous"></div>`
+}
+/** 蜂窝六边形群 + 图标（参考模板 #7） */
+function hexHive(t: DeckTheme, center: string, items: string[]): string {
+  const n = Math.min(items.length, 6)
+  const pos: [number, number][] = [
+    [0, -1.05],
+    [0.92, -0.52],
+    [0.92, 0.52],
+    [0, 1.05],
+    [-0.92, 0.52],
+    [-0.92, -0.52],
+  ]
+  const R = 128
+  const cells = items
+    .slice(0, n)
+    .map((b, i) => {
+      const [dx, dy] = pos[i]
+      return `<div class="hvc" style="left:${(320 + dx * R).toFixed(0)}px;top:${(210 + dy * R).toFixed(0)}px;background:${
+        i % 2 ? t.primary : t.primaryDk
+      }"><span class="hvi">${icon(pickIcon(b, i), 22)}</span><span class="hvt">${esc(b)}</span></div>`
+    })
+    .join('')
+  return `<div class="hive"><div class="hvc mid">${esc(center)}</div>${cells}</div>`
+}
+/** 弧形箭头循环（参考模板 #9） */
+function arrowRing(t: DeckTheme, center: string, items: string[]): string {
+  const n = Math.min(Math.max(items.length, 3), 5)
+  const cx = 320
+  const cy = 205
+  const R = 140
+  const seg = 360 / n
+  const g = 18
+  const pt = (a: number, r = R) =>
+    `${(cx + r * Math.cos((a * Math.PI) / 180)).toFixed(1)} ${(cy + r * Math.sin((a * Math.PI) / 180)).toFixed(1)}`
+  let arcs = ''
+  let nodes = ''
+  for (let i = 0; i < n; i++) {
+    const a0 = -90 + i * seg + g / 2
+    const a1 = -90 + (i + 1) * seg - g / 2
+    const large = a1 - a0 > 180 ? 1 : 0
+    const col = i % 2 ? t.primary : t.accent
+    arcs += `<path d="M ${pt(a0)} A ${R} ${R} 0 ${large} 1 ${pt(a1)}" fill="none" stroke="${col}" stroke-width="11" stroke-linecap="round"/>`
+    const rad = (a1 * Math.PI) / 180
+    const bx = cx + R * Math.cos(rad)
+    const by = cy + R * Math.sin(rad)
+    const td = rad + Math.PI / 2
+    const s = 12
+    arcs += `<polygon points="${(bx + s * Math.cos(td)).toFixed(1)},${(by + s * Math.sin(td)).toFixed(1)} ${(
+      bx -
+      s * Math.cos(td) +
+      s * 1.1 * Math.cos(rad)
+    ).toFixed(1)},${(by - s * Math.sin(td) + s * 1.1 * Math.sin(rad)).toFixed(1)} ${(bx - s * Math.cos(td) - s * 1.1 * Math.cos(rad)).toFixed(
+      1,
+    )},${(by - s * Math.sin(td) - s * 1.1 * Math.sin(rad)).toFixed(1)}" fill="${col}"/>`
+    const am = (a0 + a1) / 2
+    nodes += `<div class="arn" style="left:${(cx + (R + 52) * Math.cos((am * Math.PI) / 180)).toFixed(0)}px;top:${(
+      cy +
+      (R + 52) * Math.sin((am * Math.PI) / 180)
+    ).toFixed(0)}px"><span class="arnn">${pad2(i + 1)}</span><span class="arnt">${esc(items[i] || '')}</span></div>`
+  }
+  return `<div class="aring"><svg viewBox="0 0 640 410" width="640" height="410">${arcs}</svg><div class="arc-c">${esc(
+    center,
+  )}</div>${nodes}</div>`
+}
+/** 占比象形图：两段百分比 + 小人图标条（参考模板 #4） */
+function pictoSplit(t: DeckTheme, rows: { label: string; value: number }[]): string {
+  const total = rows.reduce((s, r) => s + (Number(r.value) || 0), 0) || 1
+  const segs = [
+    { v: Number(rows[0].value) || 1, c: t.primary },
+    { v: Number(rows[1].value) || 1, c: t.accent },
+  ]
+  const p0 = Math.round(((Number(rows[0].value) || 0) / total) * 100)
+  const legend = rows
+    .slice(0, 2)
+    .map((r, i) => {
+      const pct = Math.round(((Number(r.value) || 0) / total) * 100)
+      const filled = Math.max(1, Math.round(pct / 10))
+      const ppl = Array.from({ length: 10 }, (_, k) => `<span class="pcp${k < filled ? ' on' : ''}">${icon('user', 16)}</span>`).join('')
+      return `<div class="pcr"><div class="pch"><span class="pcd" style="background:${i ? t.accent : t.primary}"></span>${esc(
+        r.label,
+      )} · <b>${pct}%</b></div><div class="pcpr">${ppl}</div></div>`
+    })
+    .join('')
+  return `<div class="picto"><div class="pcpie">${donut(t, segs, 250)}<div class="pcv">${p0}%</div></div><div class="pcrs">${legend}</div></div>`
+}
+/** 小几何母题：齿轮 / 灯泡 / 花瓣（参考模板 #5 #11 #6，只做角落淡装饰不做主图） */
+function motif(t: DeckTheme, kind: 'gear' | 'bulb' | 'petal', size = 240): string {
+  const c = size / 2
+  if (kind === 'gear') {
+    const teeth = Array.from({ length: 12 }, (_, i) => {
+      const a = (i * 30 * Math.PI) / 180
+      const r0 = c - 30
+      const r1 = c - 8
+      return `<line x1="${(c + r0 * Math.cos(a)).toFixed(1)}" y1="${(c + r0 * Math.sin(a)).toFixed(1)}" x2="${(
+        c +
+        r1 * Math.cos(a)
+      ).toFixed(1)}" y2="${(c + r1 * Math.sin(a)).toFixed(1)}" stroke="${t.primary}12" stroke-width="10" stroke-linecap="round"/>`
+    }).join('')
+    return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">${teeth}<circle cx="${c}" cy="${c}" r="${
+      c - 40
+    }" fill="none" stroke="${t.primary}12" stroke-width="10"/><circle cx="${c}" cy="${c}" r="${c - 70}" fill="none" stroke="${
+      t.accent
+    }1f" stroke-width="6"/></svg>`
+  }
+  if (kind === 'bulb') {
+    return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}"><circle cx="${c}" cy="${c - 16}" r="${
+      c - 46
+    }" fill="none" stroke="${t.primary}12" stroke-width="10"/><rect x="${c - 22}" y="${size - 74}" width="44" height="30" rx="6" fill="none" stroke="${
+      t.primary
+    }12" stroke-width="10"/><path d="M ${c} ${size - 40} v 16" stroke="${t.accent}22" stroke-width="8" stroke-linecap="round"/></svg>`
+  }
+  const petals = Array.from({ length: 8 }, (_, i) => {
+    const a = i * 45
+    return `<ellipse cx="${c}" cy="${c - c * 0.42}" rx="${c * 0.16}" ry="${c * 0.4}" fill="${
+      i % 2 ? t.accent + '14' : t.primary + '12'
+    }" transform="rotate(${a} ${c} ${c})"/>`
+  }).join('')
+  return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">${petals}<circle cx="${c}" cy="${c}" r="${
+    c * 0.16
+  }" fill="${t.accent}22"/></svg>`
+}
 
 export interface DeckCompare {
   left: { heading: string; points: string[] }
@@ -199,6 +348,8 @@ export type DeckLayout =
   | 'image_text'
   | 'rings'
   | 'spoke'
+  | 'hive'
+  | 'cycle'
 export interface DeckSlideIn {
   /** LLM 判断的版式类型；缺失时按内容推断 */
   layout?: DeckLayout | string
@@ -550,6 +701,56 @@ function css(t: DeckTheme): string {
   .donuts .dn{position:relative;display:flex;flex-direction:column;align-items:center;text-align:center}
   .donuts .dn .dv{position:absolute;top:56px;left:0;right:0;font-size:26px;font-weight:800;color:${t.primary};font-family:"Arial","Microsoft YaHei",sans-serif}
   .donuts .dn .dl{margin-top:12px;font-size:14px;color:${t.ink};max-width:170px;line-height:1.4}
+
+  /* 斜叠方块阶梯 */
+  .stk{flex:1;display:flex;flex-direction:column;justify-content:center;gap:14px;margin-top:20px}
+  .stki{width:600px;padding:16px 26px;color:#fff;display:flex;align-items:center;gap:18px;clip-path:polygon(26px 0,100% 0,calc(100% - 26px) 100%,0 100%)}
+  .stki .skn{font-size:20px;font-weight:800;color:${t.accent};font-family:"Arial","Microsoft YaHei",sans-serif;flex:none}
+  .stki .skt{font-size:15px;line-height:1.45}
+  /* 横向编号圆点轴 */
+  .nrail{flex:1;position:relative;display:flex;align-items:center;justify-content:space-between;margin:20px 76px 0}
+  .nrail .nrl{position:absolute;left:10px;right:10px;top:50%;height:2px;background:${t.primary}26}
+  .nrail .nr{position:relative;height:100%;display:flex;align-items:center;flex:none}
+  .nrail .nrc{width:46px;height:46px;border-radius:50%;background:${t.primary};color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;border:4px solid #fff;box-shadow:0 0 0 1px ${t.primary}30;font-family:"Arial","Microsoft YaHei",sans-serif}
+  .nrail .nrt{position:absolute;left:50%;transform:translateX(-50%);width:132px;text-align:center;font-size:13px;color:${t.ink};line-height:1.4}
+  .nrail .nr:first-child .nrt{left:-8px;transform:none;text-align:left}
+  .nrail .nr:last-child .nrt{left:auto;right:-8px;transform:none;text-align:right}
+  .nrail .nr.up .nrt{bottom:calc(50% + 40px)}
+  .nrail .nr.dn .nrt{top:calc(50% + 40px)}
+  /* 倒三角图片框 */
+  .trif{position:relative;width:390px;flex:none;aspect-ratio:1/0.9}
+  .trif img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;clip-path:polygon(0 0,100% 0,50% 100%);z-index:1}
+  .trif-b{position:absolute;inset:-10px;background:${t.accent};clip-path:polygon(0 0,100% 0,50% 100%);z-index:0}
+  .imgrow.tri{align-items:center;gap:56px}
+  .imgrow.tri .pic{width:auto;flex:none}
+  /* 蜂窝六边形群 */
+  .hive{flex:1;position:relative;align-self:center;width:640px;height:440px;margin-top:8px}
+  .hive .hvc{position:absolute;transform:translate(-50%,-50%);width:130px;height:148px;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;padding:12px;font-size:12px;line-height:1.3}
+  .hive .hvc.mid{left:320px;top:210px;background:${t.accent};font-size:15px;font-weight:800}
+  .hive .hvc .hvi{opacity:.92}
+  /* 弧形箭头循环 */
+  .aring{flex:1;position:relative;align-self:center;width:640px;height:410px;margin-top:8px}
+  .aring svg{position:absolute;inset:0}
+  .aring .arc-c{position:absolute;left:320px;top:205px;transform:translate(-50%,-50%);width:120px;height:120px;border-radius:50%;background:${t.primaryDk};color:#fff;display:flex;align-items:center;justify-content:center;text-align:center;font-size:15px;font-weight:800;padding:12px;line-height:1.3}
+  .aring .arn{position:absolute;transform:translate(-50%,-50%);width:150px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:4px}
+  .aring .arn .arnn{font-size:12px;font-weight:800;color:${t.accent};letter-spacing:1px}
+  .aring .arn .arnt{font-size:13px;color:${t.ink};line-height:1.4}
+  /* 占比象形图 */
+  .picto{flex:1;display:flex;align-items:center;gap:60px;margin-top:16px;padding-left:20px}
+  .picto .pcpie{position:relative;flex:none}
+  .picto .pcpie .pcv{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:34px;font-weight:800;color:${t.primary};font-family:"Arial","Microsoft YaHei",sans-serif}
+  .picto .pcrs{flex:1;display:flex;flex-direction:column;gap:26px}
+  .picto .pch{font-size:15px;color:${t.ink};display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  .picto .pch b{color:${t.primaryDk};font-size:17px}
+  .picto .pcd{width:12px;height:12px;border-radius:3px;flex:none}
+  .picto .pcpr{display:flex;gap:5px;color:${t.primary}2e}
+  .picto .pcp{display:flex}
+  .picto .pcp.on{color:${t.primary}}
+  .picto .pcp.on ~ .pcp{color:${t.primary}2e}
+  /* 小母题装饰位 */
+  .geo-d .v6{position:absolute;right:-60px;bottom:-70px;opacity:.9}
+  .geo-d .v7{position:absolute;right:40px;top:-90px;opacity:.9}
+  .geo-d .v8{position:absolute;right:-70px;top:-70px;opacity:.9}
   `
 }
 
@@ -558,7 +759,7 @@ const bgImg = (url?: string) => (url ? `<img class="bg" src="${esc(url)}" crosso
 const isGeo = (o: DeckOutline) => o.theme.style === 'geo'
 /** geo 风内容页装饰：左侧色条 + 左下圆点圈 + 每页轮换的大几何元素 */
 function geoDeco(t: DeckTheme, v = 0): string {
-  const m = ((v % 6) + 6) % 6
+  const m = ((v % 9) + 9) % 9
   const big = [
     `<div class="v0">${arcCluster(t, 460)}</div>`,
     `<div class="v1">${arcCluster(t, 420)}</div>`,
@@ -566,6 +767,9 @@ function geoDeco(t: DeckTheme, v = 0): string {
     `<div class="v3">${hexCluster(t, 300)}</div>`,
     `<div class="v4">${quarter(t, 300)}</div>`,
     `<div class="v5">${arcCluster(t, 380)}</div>`,
+    `<div class="v6">${motif(t, 'gear', 240)}</div>`,
+    `<div class="v7">${motif(t, 'bulb', 230)}</div>`,
+    `<div class="v8">${motif(t, 'petal', 240)}</div>`,
   ][m]
   return `<div class="geo-d">${big}<div class="dr">${dotRing(t, 130)}</div><div class="gbar"></div></div>`
 }
@@ -721,13 +925,14 @@ function content(sl: DeckSlideIn, en: string, o: DeckOutline, imgFlip = false, l
       .map((b) => `<div class="li">${esc(b)}</div>`)
       .join('')
     const geo = isGeo(o)
+    const tri = geo && _geoIdx % 2 === 1
     const picBlock = geo
-      ? `<div class="pic">${hexImg(sl.image)}</div>`
+      ? `<div class="pic">${tri ? triImg(sl.image) : hexImg(sl.image)}</div>`
       : `<div class="pic"><span class="fr"></span><img src="${esc(sl.image)}" crossorigin="anonymous"></div>`
     return bodySlide(
       o,
       `<div class="head"><h2>${esc(sl.title || '')}</h2><div class="fl"></div><div class="en">${esc(sl.en || en)}</div></div>
-      <div class="imgrow${imgFlip ? ' rev' : ''}${geo ? ' hex' : ''}">
+      <div class="imgrow${imgFlip ? ' rev' : ''}${geo ? (tri ? ' tri' : ' hex') : ''}">
         ${picBlock}
         <div class="txt">${sl.intro ? `<div class="lead">${esc(sl.intro)}</div>` : ''}${lis}</div>
       </div>`,
@@ -746,8 +951,11 @@ function content(sl: DeckSlideIn, en: string, o: DeckOutline, imgFlip = false, l
 
   let body: string
   if (branch === 'timeline' && isGeo(o)) {
-    // geo 风流程 → V 形箭头条
-    body = chevronStrip(items, o.theme)
+    // geo 风流程 → V 形箭头条 / 横向编号轴 交替
+    body = _geoIdx % 2 === 1 ? numRail(items, o.theme) : chevronStrip(items, o.theme)
+  } else if (branch === 'list' && isGeo(o) && _geoIdx % 2 === 1) {
+    // geo 风清单 → 斜叠方块阶梯（隔页换）
+    body = stackBlocks(items, o.theme)
   } else if (branch === 'timeline') {
     body = `<div class="steps"><div class="track">${items
       .map(
@@ -813,7 +1021,14 @@ function chart(sl: DeckSlideIn, t: DeckTheme, en: string, o: DeckOutline): strin
   const d = sl.data!
   const rows = d.items.filter((r) => r.label).slice(0, 6)
   let body: string
-  if (d.kind === 'stat' && isGeo(o)) {
+  const statNums = rows.map((r) => Math.abs(parseFloat(String(r.value).replace(/[^0-9.\-]/g, '')) || 0))
+  if (d.kind === 'stat' && isGeo(o) && rows.length === 2 && statNums.every((n) => n > 0 && n <= 100)) {
+    // geo 风两项占比 → 饼图 + 小人象形图
+    body = pictoSplit(t, [
+      { label: rows[0].label, value: statNums[0] },
+      { label: rows[1].label, value: statNums[1] },
+    ])
+  } else if (d.kind === 'stat' && isGeo(o)) {
     // geo 风把关键指标做成环形饼图
     body = `<div class="donuts">${rows
       .slice(0, 4)
@@ -908,12 +1123,28 @@ const CONTENT_LAYOUTS = new Set([
   'image_text',
   'rings',
   'spoke',
+  'hive',
+  'cycle',
 ])
 
 function spokeLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
   const items = (sl.bullets || []).map((s) => s.trim()).filter(Boolean).slice(0, 6)
   const center = (sl.title || '核心').trim()
   return bodySlide(o, `${head(sl, en, o)}${spokeDiagram(o.theme, center, items)}`)
+}
+
+function hiveLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
+  const items = (sl.bullets || []).map((s) => s.trim()).filter(Boolean).slice(0, 6)
+  const center = (sl.title || '核心').trim()
+  if (!isGeo(o)) return content({ ...sl, layout: 'list' }, en, o, false, 'list')
+  return bodySlide(o, `${head(sl, en, o)}${hexHive(o.theme, center, items)}`)
+}
+
+function cycleLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
+  const items = (sl.bullets || []).map((s) => s.trim()).filter(Boolean).slice(0, 5)
+  const center = (sl.title || '循环').trim()
+  if (!isGeo(o)) return content({ ...sl, layout: 'timeline' }, en, o, false, 'timeline')
+  return bodySlide(o, `${head(sl, en, o)}${arrowRing(o.theme, center, items)}`)
 }
 
 /** LLM 给的 layout 优先，缺失/对不上数据就按 payload 推断 */
@@ -927,7 +1158,8 @@ export function resolveLayout(sl: DeckSlideIn): string {
   }
   if (lay in need && (sl[need[lay]] == null || typeof sl[need[lay]] !== 'object')) lay = ''
   if ((lay === 'bar' || lay === 'stats' || lay === 'rings') && !sl.data?.items?.length) lay = ''
-  if (lay === 'spoke' && (sl.bullets || []).filter((b) => b && b.trim()).length < 3) lay = ''
+  if ((lay === 'spoke' || lay === 'hive' || lay === 'cycle') && (sl.bullets || []).filter((b) => b && b.trim()).length < 3)
+    lay = ''
   if (CONTENT_LAYOUTS.has(lay)) return lay
   if (sl.data?.kind === 'ring' && sl.data.items?.length) return 'rings'
   if (sl.swot && (sl.swot.s?.length || sl.swot.w?.length || sl.swot.o?.length || sl.swot.t?.length))
@@ -958,6 +1190,8 @@ export function composeDeck(o: DeckOutline): { styleTag: string; slides: string[
       else if (lay === 'compare') slides.push(compare(sl, en, o))
       else if (lay === 'rings') slides.push(ringStats(sl, en, o))
       else if (lay === 'spoke') slides.push(spokeLayout(sl, en, o))
+      else if (lay === 'hive') slides.push(hiveLayout(sl, en, o))
+      else if (lay === 'cycle') slides.push(cycleLayout(sl, en, o))
       else if (lay === 'bar' || lay === 'stats') slides.push(chart(sl, t, en, o))
       else if (lay === 'big_number') slides.push(bigNumber(sl, en, o))
       else if (lay === 'image_text') {
