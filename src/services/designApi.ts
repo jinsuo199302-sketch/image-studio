@@ -347,6 +347,7 @@ export interface DeckOutlineRaw {
     heading: string
     en?: string
     slides: {
+      layout?: string
       title?: string
       en?: string
       intro?: string
@@ -354,6 +355,8 @@ export interface DeckOutlineRaw {
       data?: { kind: 'bar' | 'stat'; items: { label: string; value: string | number }[] }
       compare?: { left: { heading: string; points: string[] }; right: { heading: string; points: string[] } }
       swot?: { s: string[]; w: string[]; o: string[]; t: string[] }
+      big_number?: { value: string; label?: string; note?: string }
+      matrix?: { xLabel?: string; yLabel?: string; cells: { title: string; items: string[] }[] }
       image?: string
     }[]
   }[]

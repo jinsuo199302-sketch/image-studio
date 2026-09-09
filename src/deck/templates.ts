@@ -27,7 +27,31 @@ export interface DeckSwot {
   o: string[]
   t: string[]
 }
+export interface DeckBigNumber {
+  value: string
+  label?: string
+  note?: string
+}
+export interface DeckMatrix {
+  xLabel?: string
+  yLabel?: string
+  cells: { title: string; items: string[] }[]
+}
+export type DeckLayout =
+  | 'cards'
+  | 'list'
+  | 'quote'
+  | 'timeline'
+  | 'big_number'
+  | 'stats'
+  | 'bar'
+  | 'compare'
+  | 'matrix'
+  | 'swot'
+  | 'image_text'
 export interface DeckSlideIn {
+  /** LLM 判断的版式类型；缺失时按内容推断 */
+  layout?: DeckLayout | string
   title?: string
   en?: string
   intro?: string
@@ -37,6 +61,10 @@ export interface DeckSlideIn {
   compare?: DeckCompare
   /** SWOT 四象限 */
   swot?: DeckSwot
+  /** 单个核心大数字 */
+  big_number?: DeckBigNumber
+  /** 通用四象限 */
+  matrix?: DeckMatrix
   /** 用户上传的真实照片 URL——有则这一页排成「图文分栏」 */
   image?: string
 }
@@ -214,6 +242,29 @@ function css(t: DeckTheme): string {
   .swot .qt{background:#5b6b8210;border-color:#5b6b823a}
   .swot .qt .qh{color:#47566f}
 
+  /* 单个大数字 */
+  .bignum{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:14px}
+  .bignum .bar{width:220px;height:8px;background:${t.accent}}
+  .bignum .v{font-size:150px;font-weight:800;color:${t.primary};line-height:1;font-family:"Arial Black","Arial",sans-serif}
+  .bignum .lb{font-size:24px;font-weight:800;color:${t.ink}}
+  .bignum .nt{font-size:16px;color:#8b8b8b;max-width:760px;line-height:1.6}
+
+  /* 通用四象限 */
+  .mtx{flex:1;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:20px;margin-top:36px;position:relative}
+  .mtx .q{border-radius:14px;padding:22px 26px;display:flex;flex-direction:column;gap:9px;border:1px solid #e6e8ee}
+  .mtx .q .qh{font-size:16px;font-weight:800}
+  .mtx .q .qi{font-size:13.5px;line-height:1.55}
+  .mtx .q0{background:${t.primary}12;border-color:${t.primary}40}
+  .mtx .q0 .qh{color:${t.primaryDk}}
+  .mtx .q1{background:${t.accent}18;border-color:${t.accent}50}
+  .mtx .q1 .qh{color:${t.primaryDk}}
+  .mtx .q2{background:${t.primaryDk}10;border-color:${t.primaryDk}33}
+  .mtx .q2 .qh{color:${t.primaryDk}}
+  .mtx .q3{background:#5b6b8210;border-color:#5b6b8236}
+  .mtx .q3 .qh{color:#47566f}
+  .mtx .xl{position:absolute;left:0;right:0;top:-24px;text-align:center;font-size:12px;letter-spacing:2px;font-weight:700;color:#9aa0ab}
+  .mtx .yl{position:absolute;left:-30px;top:50%;transform:translateY(-50%) rotate(-90deg);font-size:12px;letter-spacing:2px;font-weight:700;color:#9aa0ab;white-space:nowrap}
+
   /* 结尾 */
   .closing{background:#f4f5f7;display:flex;align-items:center;justify-content:center;text-align:center}
   .closing .cn{position:absolute;left:0;top:0;width:230px;height:230px;background:${t.primary};z-index:0}
@@ -285,7 +336,7 @@ function head(sl: DeckSlideIn, en: string): string {
 
 const STEP_RE = /流程|步骤|阶段|环节|顺序|先后|第一步|首先/
 
-function content(sl: DeckSlideIn, en: string, o: DeckOutline, imgFlip = false): string {
+function content(sl: DeckSlideIn, en: string, o: DeckOutline, imgFlip = false, layout = ''): string {
   if (sl.image) {
     const lis = (sl.bullets || [])
       .map((s) => s.trim())
@@ -302,17 +353,25 @@ function content(sl: DeckSlideIn, en: string, o: DeckOutline, imgFlip = false): 
   }
   const items = (sl.bullets || []).map((s) => s.trim()).filter(Boolean).slice(0, 6)
   const n = items.length
-  let body: string
   const asSteps = n >= 3 && STEP_RE.test((sl.title || '') + (sl.intro || ''))
+  let branch: string
+  if (layout === 'quote') branch = 'quote'
+  else if (layout === 'timeline' && n >= 2) branch = 'timeline'
+  else if (layout === 'list') branch = 'list'
+  else if (layout === 'cards') branch = 'cards'
+  else if (asSteps) branch = 'timeline'
+  else branch = n <= 1 ? 'quote' : n <= 3 ? 'cards' : 'list'
 
-  if (asSteps) {
+  let body: string
+  if (branch === 'timeline') {
     body = `<div class="steps"><div class="track">${items
       .map((b, i) => `<div class="st"><div class="dot">${i + 1}</div><div class="sl">${esc(b)}</div></div>`)
       .join('')}</div></div>`
-  } else if (n === 1) {
-    body = `<div class="quote"><div class="q">"</div><div class="qt">${esc(items[0])}</div><div class="tick"></div></div>`
-  } else if (n === 2 || n === 3) {
-    body = `<div class="cards" style="grid-template-columns:repeat(${n},1fr)">${items
+  } else if (branch === 'quote') {
+    body = `<div class="quote"><div class="q">"</div><div class="qt">${esc(items[0] || '')}</div><div class="tick"></div></div>`
+  } else if (branch === 'cards') {
+    const cards = items.slice(0, 3)
+    body = `<div class="cards" style="grid-template-columns:repeat(${Math.max(cards.length, 1)},1fr)">${cards
       .map(
         (b, i) =>
           `<div class="card"><div class="ring">${i + 1}</div><div class="bd"></div><div class="ct">${para(b)}</div></div>`,
@@ -326,6 +385,34 @@ function content(sl: DeckSlideIn, en: string, o: DeckOutline, imgFlip = false): 
       .join('')}</div>`
   }
   return `<div class="slide body">${bgImg(o.bg?.content)}<div class="z">${head(sl, en)}${body}</div></div>`
+}
+
+function bigNumber(sl: DeckSlideIn, en: string, o: DeckOutline): string {
+  const b = sl.big_number || { value: '' }
+  return `<div class="slide body">${bgImg(o.bg?.content)}<div class="z">${head(sl, en)}
+    <div class="bignum">
+      <div class="bar"></div>
+      <div class="v">${esc(b.value || '—')}</div>
+      ${b.label ? `<div class="lb">${esc(b.label)}</div>` : ''}
+      ${b.note ? `<div class="nt">${esc(b.note)}</div>` : ''}
+    </div></div></div>`
+}
+
+function matrix(sl: DeckSlideIn, en: string, o: DeckOutline): string {
+  const m = sl.matrix || { cells: [] }
+  const cells = (m.cells || []).slice(0, 4)
+  const q = cells
+    .map(
+      (c, i) =>
+        `<div class="q q${i}"><div class="qh">${esc(c.title || '')}</div>${(c.items || [])
+          .slice(0, 4)
+          .map((x) => `<div class="qi">· ${esc(x)}</div>`)
+          .join('')}</div>`,
+    )
+    .join('')
+  return `<div class="slide body">${bgImg(o.bg?.content)}<div class="z">${head(sl, en)}
+    <div class="mtx">${m.xLabel ? `<div class="xl">${esc(m.xLabel)}</div>` : ''}${m.yLabel ? `<div class="yl">${esc(m.yLabel)}</div>` : ''}${q}</div>
+    </div></div>`
 }
 
 function chart(sl: DeckSlideIn, t: DeckTheme, en: string, o: DeckOutline): string {
@@ -397,6 +484,43 @@ function closing(o: DeckOutline): string {
 
 const EN = ['OVERVIEW', 'ANALYSIS', 'KEY POINTS', 'ACTION PLAN', 'SUMMARY', 'OUTLOOK']
 
+const CONTENT_LAYOUTS = new Set([
+  'cards',
+  'list',
+  'quote',
+  'timeline',
+  'big_number',
+  'stats',
+  'bar',
+  'compare',
+  'matrix',
+  'swot',
+  'image_text',
+])
+
+/** LLM 给的 layout 优先，缺失/对不上数据就按 payload 推断 */
+export function resolveLayout(sl: DeckSlideIn): string {
+  let lay = String(sl.layout || '').trim().toLowerCase()
+  const need: Record<string, keyof DeckSlideIn> = {
+    swot: 'swot',
+    matrix: 'matrix',
+    compare: 'compare',
+    big_number: 'big_number',
+  }
+  if (lay in need && (sl[need[lay]] == null || typeof sl[need[lay]] !== 'object')) lay = ''
+  if ((lay === 'bar' || lay === 'stats') && !sl.data?.items?.length) lay = ''
+  if (CONTENT_LAYOUTS.has(lay)) return lay
+  if (sl.swot && (sl.swot.s?.length || sl.swot.w?.length || sl.swot.o?.length || sl.swot.t?.length))
+    return 'swot'
+  if (sl.matrix?.cells?.length) return 'matrix'
+  if (sl.compare && (sl.compare.left || sl.compare.right)) return 'compare'
+  if (sl.big_number?.value) return 'big_number'
+  if (sl.data?.items?.length) return sl.data.kind === 'bar' ? 'bar' : 'stats'
+  if (sl.image) return 'image_text'
+  const bl = (sl.bullets || []).filter((b) => b && b.trim())
+  return bl.length <= 1 ? 'quote' : bl.length >= 4 ? 'list' : 'cards'
+}
+
 /** 大纲 → 一组幻灯片 HTML 字符串 + 主题 CSS */
 export function composeDeck(o: DeckOutline): { styleTag: string; slides: string[] } {
   const t = o.theme
@@ -407,19 +531,17 @@ export function composeDeck(o: DeckOutline): { styleTag: string; slides: string[
     slides.push(section(sec, si + 1, o.sections.length, o))
     sec.slides.forEach((sl) => {
       const en = EN[si % EN.length]
-      if (sl.image && !sl.swot && !sl.compare && !sl.data?.items?.length) {
+      const lay = resolveLayout(sl)
+      if (lay === 'swot') slides.push(swot(sl, en, o))
+      else if (lay === 'matrix') slides.push(matrix(sl, en, o))
+      else if (lay === 'compare') slides.push(compare(sl, en, o))
+      else if (lay === 'bar' || lay === 'stats') slides.push(chart(sl, t, en, o))
+      else if (lay === 'big_number') slides.push(bigNumber(sl, en, o))
+      else if (lay === 'image_text') {
         slides.push(content(sl, en, o, imgFlip))
         imgFlip = !imgFlip
       } else {
-        slides.push(
-          sl.swot
-            ? swot(sl, en, o)
-            : sl.compare
-              ? compare(sl, en, o)
-              : sl.data?.items?.length
-                ? chart(sl, t, en, o)
-                : content(sl, en, o),
-        )
+        slides.push(content(sl, en, o, false, lay))
       }
     })
   })

@@ -785,15 +785,21 @@ _DECK_JSON_SPEC = (
     '"cover_image_prompt":"给封面配一张 16:9 专业 PPT 封面设计图的英文或中文提示词",'
     '"section_image_prompt":"给章节过渡页配一张 16:9 氛围图的提示词，风格跟封面一致",'
     '"sections":[{"heading":"章节标题","en":"章节英文短标题(全大写,2~4词)",'
-    '"slides":[{"title":"小标题","en":"这一页的英文短标题(全大写,1~3词)","intro":"1~2句导语，可为空字符串","bullets":["要点一","要点二"]}]}]}\n'
-    "当某一页内容本身是量化的（占比、数量、几个关键指标），可以把这一页改成图表页——"
-    '把该 slide 写成 {"title":"...","en":"...","data":{"kind":"bar 或 stat","items":[{"label":"标签","value":85}]}}，'
-    "bar 用于多项数值对比、stat 用于 2~4 个关键指标；此时不需要 bullets。data 里的数字要真实合理，编不出准确数就不要用图表页。\n"
-    "当某一页是两个对象/方案/时期的对照（如「传统做法 vs 新做法」「优点 vs 缺点」），"
-    '写成对比页 {"title":"...","en":"...","compare":{"left":{"heading":"左栏标题","points":["要点","要点"]},"right":{"heading":"右栏标题","points":["要点","要点"]}}}，每栏 3~4 条、每条 12~28 字，不要 bullets。\n'
-    "当某一页适合做 SWOT 态势分析时，"
-    '写成 {"title":"...","en":"...","swot":{"s":["优势要点"],"w":["劣势要点"],"o":["机会要点"],"t":["威胁要点"]}}，每个象限 2~4 条、每条 10~22 字，不要 bullets。\n'
-    "对比页 / SWOT 页整份大纲里最多各 1 页，只在内容确实契合时才用，不要硬套。\n"
+    '"slides":[{"layout":"版式类型","title":"小标题","en":"英文短标题(全大写,1~3词)","intro":"1~2句导语,可空","bullets":["要点一","要点二"]}]}]}\n'
+    "\n【关键】每个 slide 必须先判断内容最适合哪种版式,填 layout 字段(只做这道选择题,不要输出坐标/字号)。"
+    "可选 layout 及对应要填的数据字段:\n"
+    '- "cards"：2~3 个并列要点(最常用)。填 bullets(2~3 条,每条 12~40 字)\n'
+    '- "list"：4~6 个要点,逻辑并列或递进。填 bullets(4~6 条)\n'
+    '- "quote"：一句核心观点/口号/金句,需要留白强调。填 bullets(正好 1 条)\n'
+    '- "timeline"：有时间/阶段/步骤先后顺序。填 bullets(3~5 步,按顺序)\n'
+    '- "big_number"：这一页核心就是一个关键数字。填 big_number:{"value":"85%","label":"客户满意度","note":"一句补充说明"}\n'
+    '- "stats"：2~4 个并列的关键指标。填 data:{"kind":"stat","items":[{"label":"标签","value":85}]}\n'
+    '- "bar"：多项数值需要横向对比。填 data:{"kind":"bar","items":[{"label":"标签","value":85}]}(数字要真实,编不出别用)\n'
+    '- "compare"：两个对象/方案/时期的对照。填 compare:{"left":{"heading":"左栏标题","points":["要点"]},"right":{"heading":"右栏标题","points":["要点"]}}(每栏 3~4 条)\n'
+    '- "matrix"：按两个维度分成四类。填 matrix:{"xLabel":"横轴","yLabel":"纵轴","cells":[{"title":"象限名","items":["要点"]}]}(正好 4 个 cell)\n'
+    '- "swot"：专门的 SWOT 态势分析。填 swot:{"s":[],"w":[],"o":[],"t":[]}(每项 2~4 条)\n'
+    "cover / section_divider / closing 由系统自动排,不用你选。\n"
+    "分布要求:同一份大纲里 layout 至少出现 4 种以上,不要每页都是 cards;compare/matrix/swot/big_number 各最多 1~2 页,只在真契合时用。\n"
     "palette 必须是 5 个协调的十六进制色，符合主题气质、对比度足够（正文色要能在背景浅色上看清）；"
     "en 字段是给版式当装饰小字用的英文，要贴切、地道。\n"
     "cover_image_prompt：描述一张能直接当商业 PPT 封面的完整设计图，要有跟主题贴切的主视觉"

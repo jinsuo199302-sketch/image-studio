@@ -394,9 +394,9 @@ def _content_head(t: dict, title: str, en: str, page: int, bg: str | None) -> tu
 
 
 def _content(t: dict, sec_idx: int, title: str, en: str, intro: str, bullets: list[str], page: int,
-             bg: str | None, image: str | None = None) -> dict:
+             bg: str | None, image: str | None = None, layout: str = "") -> dict:
     els, y = _content_head(t, title, en or _EN_CAP[sec_idx % len(_EN_CAP)], page, bg)
-    items = [b for b in bullets if b][:5]
+    items = [b for b in bullets if b][:6]
 
     if image:
         # 图文分栏：一侧放用户照片，另一侧标题下的要点。左右按章节奇偶交替
@@ -425,7 +425,7 @@ def _content(t: dict, sec_idx: int, title: str, en: str, intro: str, bullets: li
 
     if intro:
         ih = estimate_text_height(intro, CW - 120, BODY)
-        els.append(_t(M + 60, y, CW - 120, intro, BODY, t["muted"], align="center"))
+        els.append(_t(M + 60, y, CW - 120, "　　" + intro, BODY, t["muted"]))
         y += ih + 26
     bottom = H - 60
     n = len(items)
@@ -435,20 +435,46 @@ def _content(t: dict, sec_idx: int, title: str, en: str, intro: str, bullets: li
     sub = _mix(ink, t["paper"], 0.5)
     rule = _mix(ink, t["paper"], 0.85)
 
-    if n == 1:
-        # 一句话 → 居中引言
-        b = items[0]
+    # 版式：优先用 LLM 给的 layout，缺省按条数
+    if layout == "quote":
+        branch = "quote"
+    elif layout == "timeline" and n >= 2:
+        branch = "timeline"
+    elif layout == "list":
+        branch = "list"
+    elif layout == "cards":
+        branch = "cards2" if n <= 2 else "cards3"
+    else:
+        branch = {0: "quote", 1: "quote", 2: "cards2", 3: "cards3"}.get(n, "list")
+
+    if branch == "timeline":
+        gap = 0
+        cw = CW / max(1, n)
+        cy = y + (bottom - y) / 2 - 30
+        els.append(_line(M + cw * 0.5, cy, M + CW - cw * 0.5, cy, _mix(ink, t["paper"], 0.8), 2))
+        for i, b in enumerate(items):
+            cx0 = M + cw * (i + 0.5)
+            els += [
+                _circle(cx0, cy, 20, fill=t["primary"]),
+                _t(cx0 - 20, cy - 10, 40, str(i + 1), CAP + 1, "#ffffff", align="center", bold=True, font=t["kicker_font"]),
+                _t(cx0 - cw / 2 + 10, cy + 40, cw - 20, b, CAP + 1, ink, align="center"),
+            ]
+        return {"background": t["paper"], "elements": els, "w": W, "h": H}
+
+    if branch == "quote":
+        b = items[0] if items else ""
         my = y + (bottom - y) / 2 - 60
         els += [
             _t(W / 2 - 40, my - 40, 80, "“", 80, t["accent"], align="center", bold=True, font=t["title_font"]),
             _t(M + 100, my + 40, CW - 200, b, H3, ink, align="center"),
             _r(W / 2 - 28, my + 40 + estimate_text_height(b, CW - 200, H3) + 24, 56, 3, t["accent"]),
         ]
-    elif n == 2:
+    elif branch == "cards2":
+        cards = items[:2] or [""]
         gap = 60
         cw = (CW - gap) / 2
         cy = y + 56
-        for i, b in enumerate(items):
+        for i, b in enumerate(cards):
             x = M + i * (cw + gap)
             ic = _ICON_CYCLE[(sec_idx * 2 + i) % len(_ICON_CYCLE)]
             els += [
@@ -457,13 +483,14 @@ def _content(t: dict, sec_idx: int, title: str, en: str, intro: str, bullets: li
                 _t(x + cw / 2 - 30, cy + 46, 60, f"0{i + 1}", CAP, _mix(ink, t["paper"], 0.45), align="center", font=t["kicker_font"], spacing=2),
                 _t(x, cy + 76, cw, b, H3, ink, align="center"),
             ]
-            if i == 0:
+            if i == 0 and len(cards) == 2:
                 els.append(_r(M + cw + gap / 2 - 1, y + 24, 2, bottom - y - 70, rule))
-    elif n == 3:
+    elif branch == "cards3":
+        cards = items[:3]
         gap = 40
         cw = (CW - 2 * gap) / 3
         cy = y + 48
-        for i, b in enumerate(items):
+        for i, b in enumerate(cards):
             x = M + i * (cw + gap)
             ic = _ICON_CYCLE[(sec_idx * 3 + i) % len(_ICON_CYCLE)]
             els += [
@@ -606,6 +633,61 @@ def _swot(t: dict, sec_idx: int, title: str, en: str, sw: dict, page: int, bg: s
     return {"background": t["paper"], "elements": els, "w": W, "h": H}
 
 
+def _big_number(t: dict, sec_idx: int, title: str, en: str, bn: dict, page: int, bg: str | None) -> dict:
+    """单个核心大数字 + 标签 + 一句说明，整页聚焦。"""
+    els, y = _content_head(t, title, en or _EN_CAP[sec_idx % len(_EN_CAP)], page, bg)
+    ink = t["ink"]
+    value = str(bn.get("value") or "").strip() or "—"
+    label = str(bn.get("label") or "").strip()
+    note = str(bn.get("note") or "").strip()
+    cy = y + (H - 70 - y) / 2 - 40
+    els += [
+        _r(W / 2 - 120, cy - 30, 240, 8, t["accent"]),
+        _t(M, cy, CW, value, 150, t["primary"], align="center", bold=True, font=t["kicker_font"]),
+    ]
+    yy = cy + 150 * 1.05
+    if label:
+        els.append(_t(M, yy, CW, label, H2, ink, align="center", bold=True))
+        yy += H2 * 1.4 + 8
+    if note:
+        els.append(_t(M + 160, yy, CW - 320, note, BODY, t["muted"], align="center"))
+    return {"background": t["paper"], "elements": els, "w": W, "h": H}
+
+
+def _matrix(t: dict, sec_idx: int, title: str, en: str, mx: dict, page: int, bg: str | None) -> dict:
+    """通用四象限（按两个维度分类）。跟 SWOT 同款视觉，但带横纵轴标签、配色中性。"""
+    els, y = _content_head(t, title, en or "MATRIX", page, bg)
+    ink = t["ink"]
+    gap = 22
+    top = y + 30
+    cw = (CW - gap) / 2
+    chh = ((H - 58) - top - gap) / 2
+    x_label = str(mx.get("xLabel") or "").strip()
+    y_label = str(mx.get("yLabel") or "").strip()
+    if x_label:
+        els.append(_t(M, top - 24, CW, x_label, CAP, _mix(ink, t["paper"], 0.45), align="center",
+                      font=t["kicker_font"], spacing=2))
+    if y_label:
+        els.append(_t(M - 6, top + (chh * 2 + gap) / 2 - 8, 0, y_label, CAP, _mix(ink, t["paper"], 0.45),
+                      font=t["kicker_font"], spacing=2))
+    cells = [c for c in (mx.get("cells") or []) if isinstance(c, dict)][:4]
+    tints = [t["primary"], t["accent"], t["primary_dk"], "#5b6b82"]
+    for idx, c in enumerate(cells):
+        accent = tints[idx % 4]
+        x = M + (idx % 2) * (cw + gap)
+        yy0 = top + (idx // 2) * (chh + gap)
+        els += [
+            _r(x, yy0, cw, chh, _mix(accent, t["paper"], 0.9), rx=14, stroke=_mix(accent, t["paper"], 0.6), sw=1),
+            _t(x + 24, yy0 + 18, cw - 48, str(c.get("title") or "").strip(), H3, accent, bold=True),
+        ]
+        yy = yy0 + 22 + H3 * 1.3
+        for p in [str(s).strip() for s in (c.get("items") or []) if str(s).strip()][:4]:
+            line = "· " + p
+            els.append(_t(x + 24, yy, cw - 48, line, CAP + 1, ink))
+            yy += estimate_text_height(line, cw - 48, CAP + 1) + 8
+    return {"background": t["paper"], "elements": els, "w": W, "h": H}
+
+
 def _closing(t: dict, title: str, bg: str | None) -> dict:
     """用内容页那张浅底背景（跟封面的深底不同），文字一律深色居中。"""
     els = _bg_layer(t, bg, "content")
@@ -640,26 +722,79 @@ def build_deck(outline: dict, theme_key: str = "red", bg: dict | None = None) ->
             d = sl.get("data") if isinstance(sl.get("data"), dict) else None
             cmp = sl.get("compare") if isinstance(sl.get("compare"), dict) else None
             sw = sl.get("swot") if isinstance(sl.get("swot"), dict) else None
+            mx = sl.get("matrix") if isinstance(sl.get("matrix"), dict) else None
+            bn = sl.get("big_number") if isinstance(sl.get("big_number"), dict) else None
+            img = sl.get("image") if isinstance(sl.get("image"), str) else None
             ttl = (sl.get("title") or "").strip()
             en = (sl.get("en") or "").strip()
-            if sw and any(sw.get(k) for k in ("s", "w", "o", "t")):
-                slides.append(_swot(t, i, ttl, en, sw, page, bg.get("content")))
-            elif cmp and (cmp.get("left") or cmp.get("right")):
-                slides.append(_compare(t, i, ttl, en, cmp, page, bg.get("content")))
-            elif d and d.get("items"):
-                slides.append(_chart(
-                    t, i, ttl, en, d.get("kind", "bar"), d.get("items") or [], page, bg.get("content"),
-                ))
+            lay = resolve_layout(sl)
+            cbg = bg.get("content")
+            if lay == "swot" and sw:
+                slides.append(_swot(t, i, ttl, en, sw, page, cbg))
+            elif lay == "matrix" and mx:
+                slides.append(_matrix(t, i, ttl, en, mx, page, cbg))
+            elif lay == "compare" and cmp:
+                slides.append(_compare(t, i, ttl, en, cmp, page, cbg))
+            elif lay in ("bar", "stats") and d and d.get("items"):
+                slides.append(_chart(t, i, ttl, en, d.get("kind", "bar"), d.get("items") or [], page, cbg))
+            elif lay == "big_number" and bn:
+                slides.append(_big_number(t, i, ttl, en, bn, page, cbg))
             else:
                 slides.append(_content(
                     t, i, ttl, en, (sl.get("intro") or "").strip(),
                     [str(x).strip() for x in (sl.get("bullets") or []) if str(x).strip()],
-                    page, bg.get("content"),
-                    sl.get("image") if isinstance(sl.get("image"), str) else None,
+                    page, cbg, img, lay if lay in ("quote", "cards", "list", "timeline") else "",
                 ))
             page += 1
     slides.append(_closing(t, title, bg.get("content")))
     return slides
+
+
+_CONTENT_LAYOUTS = {
+    "cards", "list", "quote", "timeline", "big_number", "stats", "bar", "compare", "matrix", "swot", "image_text",
+}
+
+
+def resolve_layout(sl: dict) -> str:
+    """LLM 给的 layout 优先，缺失/对不上数据就按 payload 推断。返回 _CONTENT_LAYOUTS 里的一种。"""
+    lay = str(sl.get("layout") or "").strip().lower()
+    _need = {"swot": "swot", "matrix": "matrix", "compare": "compare", "big_number": "big_number"}
+    if lay in _need and not isinstance(sl.get(_need[lay]), dict):
+        lay = ""
+    if lay in ("bar", "stats") and not (isinstance(sl.get("data"), dict) and sl["data"].get("items")):
+        lay = ""
+    if lay in _CONTENT_LAYOUTS:
+        return lay
+    # 兜底推断（老数据 / 模型没给 layout）
+    if isinstance(sl.get("swot"), dict) and any(sl["swot"].get(k) for k in ("s", "w", "o", "t")):
+        return "swot"
+    if isinstance(sl.get("matrix"), dict) and sl["matrix"].get("cells"):
+        return "matrix"
+    if isinstance(sl.get("compare"), dict) and (sl["compare"].get("left") or sl["compare"].get("right")):
+        return "compare"
+    if isinstance(sl.get("big_number"), dict) and sl["big_number"].get("value"):
+        return "big_number"
+    d = sl.get("data")
+    if isinstance(d, dict) and d.get("items"):
+        return "bar" if d.get("kind") == "bar" else "stats"
+    if isinstance(sl.get("image"), str) and sl["image"]:
+        return "image_text"
+    bl = [b for b in (sl.get("bullets") or []) if str(b).strip()]
+    return "quote" if len(bl) <= 1 else "list" if len(bl) >= 4 else "cards"
+
+
+def deck_layout_stats(outline: dict) -> dict:
+    """验收用：统计一份大纲会用到的版式种类（含系统页）。"""
+    kinds: list[str] = ["cover", "closing"]
+    if outline.get("sections"):
+        kinds.append("toc")
+    for sec in outline.get("sections") or []:
+        if sec.get("heading"):
+            kinds.append("section_divider")
+        for sl in sec.get("slides") or []:
+            kinds.append(resolve_layout(sl))
+    uniq = sorted(set(kinds))
+    return {"types": uniq, "count": len(uniq), "content_types": sorted(set(kinds) - {"cover", "closing", "toc", "section_divider"})}
 
 
 # ── PPTX 导出（原生形状）──────────────────────────────────────────
@@ -757,15 +892,20 @@ def deck_to_pptx(slides: list[dict], theme_key: str = "red", title: str = "演�
                         pass
                 shp.shadow.inherit = False
             elif el["type"] == "text":
-                lines = estimate_text_lines(el["text"], el["width"], el["fontSize"])
+                txt = str(el.get("text") or "")
+                if not txt.strip():
+                    continue
+                lines = estimate_text_lines(txt, el["width"], el["fontSize"])
                 box_h = max(el["fontSize"] * 1.35, el["fontSize"] * 1.3 * lines)
                 tb = s.shapes.add_textbox(x, y, Emu(int(el["width"] * ex)), Emu(int(box_h * ey)))
                 tf = tb.text_frame
                 tf.word_wrap = True
                 tf.margin_left = tf.margin_right = tf.margin_top = tf.margin_bottom = 0
                 p = tf.paragraphs[0]
-                p.text = el["text"]
+                p.text = txt
                 p.alignment = amap.get(el.get("align", "left"), PP_ALIGN.LEFT)
+                if not p.runs:
+                    continue
                 run = p.runs[0]
                 run.font.size = Pt(el["fontSize"] * 0.75)
                 run.font.color.rgb = rgb(el["color"])
