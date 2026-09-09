@@ -120,6 +120,50 @@ function donut(t: DeckTheme, segs: { v: number; c: string }[], size = 180): stri
 function hexImg(url: string): string {
   return `<div class="hexf"><div class="hexf-b"></div><img src="${esc(url)}" crossorigin="anonymous"></div>`
 }
+/** 四分之一圆环（角落装饰） */
+function quarter(t: DeckTheme, size = 300): string {
+  const s = size
+  return `<svg viewBox="0 0 ${s} ${s}" width="${s}" height="${s}">
+    <path d="M ${s} 0 A ${s} ${s} 0 0 1 0 ${s} L 0 ${s - 46} A ${s - 46} ${s - 46} 0 0 0 ${s - 46} 0 Z" fill="${t.primary}10"/>
+    <path d="M ${s} ${s * 0.42} A ${s * 0.58} ${s * 0.58} 0 0 1 ${s * 0.42} ${s}" fill="none" stroke="${t.accent}" stroke-width="7" stroke-linecap="round"/>
+  </svg>`
+}
+/** V 形箭头条（流程） */
+function chevronStrip(items: string[], t: DeckTheme): string {
+  const n = items.length
+  return `<div class="chvs">${items
+    .map(
+      (b, i) =>
+        `<div class="chv${i === 0 ? ' first' : ''}${i === n - 1 ? ' last' : ''}" style="background:${
+          i % 2 ? t.primaryDk : t.primary
+        }"><span class="chn">${pad2(i + 1)}</span><span class="cht">${esc(b)}</span></div>`,
+    )
+    .join('')}</div>`
+}
+/** 中心辐射（hub-and-spoke）：中心圆 + 四周条目 */
+function spokeDiagram(t: DeckTheme, center: string, items: string[]): string {
+  const n = Math.min(items.length, 6)
+  const R = 210
+  const nodes = items
+    .slice(0, n)
+    .map((b, i) => {
+      const a = (2 * Math.PI * i) / n - Math.PI / 2
+      const x = 320 + R * Math.cos(a)
+      const y = 220 + R * Math.sin(a) * 0.82
+      return { b, x, y }
+    })
+  const lines = nodes
+    .map((nd) => `<line x1="320" y1="220" x2="${nd.x.toFixed(0)}" y2="${nd.y.toFixed(0)}" stroke="${t.primary}33" stroke-width="2"/>`)
+    .join('')
+  const dots = nodes
+    .map(
+      (nd) =>
+        `<div class="spn" style="left:${nd.x.toFixed(0)}px;top:${nd.y.toFixed(0)}px"><span class="spd"></span><span class="spt">${esc(nd.b)}</span></div>`,
+    )
+    .join('')
+  return `<div class="spoke"><svg viewBox="0 0 640 440" width="640" height="440">${lines}</svg>
+    <div class="spc">${esc(center)}</div>${dots}</div>`
+}
 
 export interface DeckCompare {
   left: { heading: string; points: string[] }
@@ -154,6 +198,7 @@ export type DeckLayout =
   | 'swot'
   | 'image_text'
   | 'rings'
+  | 'spoke'
 export interface DeckSlideIn {
   /** LLM 判断的版式类型；缺失时按内容推断 */
   layout?: DeckLayout | string
@@ -440,7 +485,30 @@ function css(t: DeckTheme): string {
   .geo-d .v1{position:absolute;right:-140px;bottom:-160px}
   .geo-d .v2{position:absolute;right:-90px;top:-90px}
   .geo-d .v3{position:absolute;right:60px;top:-120px}
+  .geo-d .v4{position:absolute;right:0;bottom:0}
+  .geo-d .v5{position:absolute;left:-110px;top:-110px}
   .geo-d .dr{position:absolute;left:-40px;bottom:-40px;opacity:.5}
+
+  /* geo 页眉：左对齐标题 + 深蓝药丸小标 + 下划线 */
+  .ghead{margin-bottom:6px}
+  .ghead .gpill{display:inline-block;background:${t.primary};color:#fff;font-size:11px;letter-spacing:2px;font-weight:800;padding:5px 14px;border-radius:3px}
+  .ghead h2{font-size:27px;color:${t.primaryDk};font-weight:800;margin:14px 0 0}
+  .ghead .gul{width:56px;height:4px;background:${t.accent};margin-top:12px}
+
+  /* V 形箭头流程条 */
+  .chvs{flex:1;display:flex;align-items:center;margin-top:34px;gap:0}
+  .chv{flex:1;min-width:0;color:#fff;padding:26px 20px 26px 40px;position:relative;clip-path:polygon(0 0,calc(100% - 26px) 0,100% 50%,calc(100% - 26px) 100%,0 100%,26px 50%);margin-left:-20px;display:flex;flex-direction:column;gap:8px}
+  .chv.first{clip-path:polygon(0 0,calc(100% - 26px) 0,100% 50%,calc(100% - 26px) 100%,0 100%);margin-left:0;padding-left:26px}
+  .chv .chn{font-size:12px;font-weight:800;color:${t.accent};letter-spacing:1px}
+  .chv .cht{font-size:14px;line-height:1.45}
+
+  /* 中心辐射图 */
+  .spoke{flex:1;position:relative;margin-top:16px;align-self:center;width:640px;height:440px}
+  .spoke svg{position:absolute;inset:0}
+  .spoke .spc{position:absolute;left:320px;top:220px;transform:translate(-50%,-50%);width:118px;height:118px;border-radius:50%;background:${t.primary};color:#fff;display:flex;align-items:center;justify-content:center;text-align:center;font-size:15px;font-weight:800;padding:10px;line-height:1.3}
+  .spoke .spn{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:6px;width:150px;text-align:center}
+  .spoke .spn .spd{width:14px;height:14px;border-radius:50%;background:${t.accent};box-shadow:0 0 0 5px ${t.accent}22}
+  .spoke .spn .spt{font-size:13px;color:${t.ink};line-height:1.4}
 
   /* 六边形图片框 */
   .hexf{position:relative;width:340px;flex:none;aspect-ratio:1/1.1}
@@ -490,15 +558,15 @@ const bgImg = (url?: string) => (url ? `<img class="bg" src="${esc(url)}" crosso
 const isGeo = (o: DeckOutline) => o.theme.style === 'geo'
 /** geo 风内容页装饰：左侧色条 + 左下圆点圈 + 每页轮换的大几何元素 */
 function geoDeco(t: DeckTheme, v = 0): string {
-  const m = ((v % 4) + 4) % 4
-  const big =
-    m === 1
-      ? `<div class="v1">${arcCluster(t, 420)}</div>`
-      : m === 2
-        ? `<div class="v2">${rayBurst(t, 400)}</div>`
-        : m === 3
-          ? `<div class="v3">${hexCluster(t, 300)}</div>`
-          : `<div class="v0">${arcCluster(t, 460)}</div>`
+  const m = ((v % 6) + 6) % 6
+  const big = [
+    `<div class="v0">${arcCluster(t, 460)}</div>`,
+    `<div class="v1">${arcCluster(t, 420)}</div>`,
+    `<div class="v2">${rayBurst(t, 400)}</div>`,
+    `<div class="v3">${hexCluster(t, 300)}</div>`,
+    `<div class="v4">${quarter(t, 300)}</div>`,
+    `<div class="v5">${arcCluster(t, 380)}</div>`,
+  ][m]
   return `<div class="geo-d">${big}<div class="dr">${dotRing(t, 130)}</div><div class="gbar"></div></div>`
 }
 let _geoIdx = 0
@@ -551,7 +619,7 @@ function ringStats(sl: DeckSlideIn, en: string, o: DeckOutline): string {
       return `<div class="rw"><div class="rc">${progRing(t, num, 150)}<div class="rv">${esc(String(r.value))}</div></div><div class="rl">${esc(r.label)}</div></div>`
     })
     .join('')}</div>`
-  return bodySlide(o, `${head(sl, en)}${body}`)
+  return bodySlide(o, `${head(sl, en, o)}${body}`)
 }
 
 function cover(o: DeckOutline): string {
@@ -613,7 +681,13 @@ function section(s: DeckSection, idx: number, total: number, o: DeckOutline): st
     </div></div>`
 }
 
-function head(sl: DeckSlideIn, en: string): string {
+function head(sl: DeckSlideIn, en: string, o?: DeckOutline): string {
+  // geo 风：左对齐标题 + 深蓝药丸小标 + 下划线（参考模板那种页眉）
+  if (o && isGeo(o)) {
+    return `<div class="ghead"><span class="gpill">${esc(sl.en || en)}</span>
+      <h2>${esc(sl.title || '')}</h2><div class="gul"></div></div>
+      ${sl.intro ? `<div class="intro">${para(sl.intro)}</div>` : ''}`
+  }
   return `<div class="head"><h2>${esc(sl.title || '')}</h2><div class="fl"></div>
     <div class="en">${esc(sl.en || en)}</div></div>
     ${sl.intro ? `<div class="intro">${para(sl.intro)}</div>` : ''}`
@@ -671,7 +745,10 @@ function content(sl: DeckSlideIn, en: string, o: DeckOutline, imgFlip = false, l
   else branch = n <= 1 ? 'quote' : n <= 3 ? 'cards' : 'list'
 
   let body: string
-  if (branch === 'timeline') {
+  if (branch === 'timeline' && isGeo(o)) {
+    // geo 风流程 → V 形箭头条
+    body = chevronStrip(items, o.theme)
+  } else if (branch === 'timeline') {
     body = `<div class="steps"><div class="track">${items
       .map(
         (b, i) =>
@@ -696,14 +773,14 @@ function content(sl: DeckSlideIn, en: string, o: DeckOutline, imgFlip = false, l
       )
       .join('')}</div>`
   }
-  return bodySlide(o, `${head(sl, en)}${body}`)
+  return bodySlide(o, `${head(sl, en, o)}${body}`)
 }
 
 function bigNumber(sl: DeckSlideIn, en: string, o: DeckOutline): string {
   const b = sl.big_number || { value: '' }
   return bodySlide(
     o,
-    `${head(sl, en)}
+    `${head(sl, en, o)}
     <div class="bignum">
       <div class="bar"></div>
       <div class="v">${esc(b.value || '—')}</div>
@@ -727,7 +804,7 @@ function matrix(sl: DeckSlideIn, en: string, o: DeckOutline): string {
     .join('')
   return bodySlide(
     o,
-    `${head(sl, en)}
+    `${head(sl, en, o)}
     <div class="mtx">${m.xLabel ? `<div class="xl">${esc(m.xLabel)}</div>` : ''}${m.yLabel ? `<div class="yl">${esc(m.yLabel)}</div>` : ''}${q}</div>`,
   )
 }
@@ -766,7 +843,7 @@ function chart(sl: DeckSlideIn, t: DeckTheme, en: string, o: DeckOutline): strin
       })
       .join('')}</div>`
   }
-  return bodySlide(o, `${head(sl, en)}${body}`)
+  return bodySlide(o, `${head(sl, en, o)}${body}`)
 }
 
 function compare(sl: DeckSlideIn, en: string, o: DeckOutline): string {
@@ -778,7 +855,7 @@ function compare(sl: DeckSlideIn, en: string, o: DeckOutline): string {
       .slice(0, 5)
       .map((p) => `<div class="ci">${esc(p)}</div>`)
       .join('')}</div>`
-  return bodySlide(o, `${head(sl, en)}<div class="cmp">${col('a', c.left)}${col('b', c.right)}</div>`)
+  return bodySlide(o, `${head(sl, en, o)}<div class="cmp">${col('a', c.left)}${col('b', c.right)}</div>`)
 }
 
 function swot(sl: DeckSlideIn, en: string, o: DeckOutline): string {
@@ -792,7 +869,7 @@ function swot(sl: DeckSlideIn, en: string, o: DeckOutline): string {
       .join('')}</div>`
   return bodySlide(
     o,
-    `${head(sl, en)}
+    `${head(sl, en, o)}
     <div class="swot">
       ${quad('qs', '优势', 'STRENGTHS', s.s)}
       ${quad('qw', '劣势', 'WEAKNESSES', s.w)}
@@ -830,7 +907,14 @@ const CONTENT_LAYOUTS = new Set([
   'swot',
   'image_text',
   'rings',
+  'spoke',
 ])
+
+function spokeLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
+  const items = (sl.bullets || []).map((s) => s.trim()).filter(Boolean).slice(0, 6)
+  const center = (sl.title || '核心').trim()
+  return bodySlide(o, `${head(sl, en, o)}${spokeDiagram(o.theme, center, items)}`)
+}
 
 /** LLM 给的 layout 优先，缺失/对不上数据就按 payload 推断 */
 export function resolveLayout(sl: DeckSlideIn): string {
@@ -843,6 +927,7 @@ export function resolveLayout(sl: DeckSlideIn): string {
   }
   if (lay in need && (sl[need[lay]] == null || typeof sl[need[lay]] !== 'object')) lay = ''
   if ((lay === 'bar' || lay === 'stats' || lay === 'rings') && !sl.data?.items?.length) lay = ''
+  if (lay === 'spoke' && (sl.bullets || []).filter((b) => b && b.trim()).length < 3) lay = ''
   if (CONTENT_LAYOUTS.has(lay)) return lay
   if (sl.data?.kind === 'ring' && sl.data.items?.length) return 'rings'
   if (sl.swot && (sl.swot.s?.length || sl.swot.w?.length || sl.swot.o?.length || sl.swot.t?.length))
@@ -872,6 +957,7 @@ export function composeDeck(o: DeckOutline): { styleTag: string; slides: string[
       else if (lay === 'matrix') slides.push(matrix(sl, en, o))
       else if (lay === 'compare') slides.push(compare(sl, en, o))
       else if (lay === 'rings') slides.push(ringStats(sl, en, o))
+      else if (lay === 'spoke') slides.push(spokeLayout(sl, en, o))
       else if (lay === 'bar' || lay === 'stats') slides.push(chart(sl, t, en, o))
       else if (lay === 'big_number') slides.push(bigNumber(sl, en, o))
       else if (lay === 'image_text') {

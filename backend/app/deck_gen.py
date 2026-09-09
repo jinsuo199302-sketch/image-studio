@@ -752,7 +752,8 @@ def build_deck(outline: dict, theme_key: str = "red", bg: dict | None = None) ->
                 slides.append(_content(
                     t, i, ttl, en, (sl.get("intro") or "").strip(),
                     [str(x).strip() for x in (sl.get("bullets") or []) if str(x).strip()],
-                    page, cbg, img, lay if lay in ("quote", "cards", "list", "timeline") else "",
+                    page, cbg, img,
+                    "list" if lay == "spoke" else (lay if lay in ("quote", "cards", "list", "timeline") else ""),
                 ))
             page += 1
     slides.append(_closing(t, title, bg.get("content")))
@@ -761,7 +762,7 @@ def build_deck(outline: dict, theme_key: str = "red", bg: dict | None = None) ->
 
 _CONTENT_LAYOUTS = {
     "cards", "list", "quote", "timeline", "big_number", "stats", "bar", "rings",
-    "compare", "matrix", "swot", "image_text",
+    "compare", "matrix", "swot", "image_text", "spoke",
 }
 
 
@@ -772,6 +773,8 @@ def resolve_layout(sl: dict) -> str:
     if lay in _need and not isinstance(sl.get(_need[lay]), dict):
         lay = ""
     if lay in ("bar", "stats", "rings") and not (isinstance(sl.get("data"), dict) and sl["data"].get("items")):
+        lay = ""
+    if lay == "spoke" and len([b for b in (sl.get("bullets") or []) if str(b).strip()]) < 3:
         lay = ""
     if lay in _CONTENT_LAYOUTS:
         return lay
