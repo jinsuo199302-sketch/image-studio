@@ -17,12 +17,26 @@ export interface DeckTheme {
   ink: string
 }
 
+export interface DeckCompare {
+  left: { heading: string; points: string[] }
+  right: { heading: string; points: string[] }
+}
+export interface DeckSwot {
+  s: string[]
+  w: string[]
+  o: string[]
+  t: string[]
+}
 export interface DeckSlideIn {
   title?: string
   en?: string
   intro?: string
   bullets?: string[]
   data?: { kind: 'bar' | 'stat'; items: { label: string; value: string | number }[] }
+  /** 对比页：左右两栏各一个观点组 */
+  compare?: DeckCompare
+  /** SWOT 四象限 */
+  swot?: DeckSwot
 }
 export interface DeckSection {
   heading: string
@@ -132,6 +146,33 @@ function css(t: DeckTheme): string {
   .bar .track{flex:1;height:16px;background:#eceff4;border-radius:8px;position:relative}
   .bar .fill{position:absolute;left:0;top:0;height:16px;border-radius:8px}
   .bar .bv{width:64px;font-size:16px;font-weight:800;color:${t.primary};flex:none}
+
+  /* 对比页（两栏） */
+  .cmp{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:38px;margin-top:40px;align-content:center}
+  .cmp .col{border:1px solid #e2e5ec;border-radius:14px;padding:30px 28px;display:flex;flex-direction:column;gap:16px}
+  .cmp .col.a{border-top:4px solid ${t.primary}}
+  .cmp .col.b{border-top:4px solid ${t.accent}}
+  .cmp .ch{font-size:19px;font-weight:800}
+  .cmp .col.a .ch{color:${t.primary}}
+  .cmp .col.b .ch{color:${t.primaryDk}}
+  .cmp .cd{width:26px;height:3px;background:${t.accent}}
+  .cmp .ci{font-size:15px;line-height:1.6;padding-left:16px;position:relative}
+  .cmp .ci::before{content:"";position:absolute;left:0;top:9px;width:6px;height:6px;border-radius:50%;background:${t.accent}}
+
+  /* SWOT 四象限 */
+  .swot{flex:1;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:20px;margin-top:32px}
+  .swot .q{border-radius:14px;padding:22px 26px;display:flex;flex-direction:column;gap:10px;border:1px solid #e6e8ee}
+  .swot .q .qh{font-size:16px;font-weight:800;letter-spacing:1px;display:flex;align-items:baseline;gap:10px}
+  .swot .q .qh span{font-size:12px;font-weight:700;color:#9aa0ab}
+  .swot .q .qi{font-size:13.5px;line-height:1.55}
+  .swot .qs{background:${t.primary}12;border-color:${t.primary}44}
+  .swot .qs .qh{color:${t.primaryDk}}
+  .swot .qw{background:#d9534f10;border-color:#d9534f3a}
+  .swot .qw .qh{color:#b5433f}
+  .swot .qo{background:${t.accent}18;border-color:${t.accent}55}
+  .swot .qo .qh{color:${t.primaryDk}}
+  .swot .qt{background:#5b6b8210;border-color:#5b6b823a}
+  .swot .qt .qh{color:#47566f}
 
   /* 结尾 */
   .closing{background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center}
@@ -243,6 +284,37 @@ function chart(sl: DeckSlideIn, t: DeckTheme, en: string, o: DeckOutline): strin
   return `<div class="slide body">${bgImg(o.bg?.content)}<div class="z">${head(sl, en)}${body}</div></div>`
 }
 
+function compare(sl: DeckSlideIn, en: string, o: DeckOutline): string {
+  const c = sl.compare!
+  const col = (side: 'a' | 'b', g: { heading: string; points: string[] }) =>
+    `<div class="col ${side}"><div class="ch">${esc(g.heading)}</div><div class="cd"></div>${(g.points || [])
+      .map((p) => p.trim())
+      .filter(Boolean)
+      .slice(0, 5)
+      .map((p) => `<div class="ci">${esc(p)}</div>`)
+      .join('')}</div>`
+  return `<div class="slide body">${bgImg(o.bg?.content)}<div class="z">${head(sl, en)}
+    <div class="cmp">${col('a', c.left)}${col('b', c.right)}</div></div></div>`
+}
+
+function swot(sl: DeckSlideIn, en: string, o: DeckOutline): string {
+  const s = sl.swot!
+  const quad = (cls: string, label: string, sub: string, items: string[]) =>
+    `<div class="q ${cls}"><div class="qh">${label}<span>${sub}</span></div>${(items || [])
+      .map((i) => i.trim())
+      .filter(Boolean)
+      .slice(0, 4)
+      .map((i) => `<div class="qi">· ${esc(i)}</div>`)
+      .join('')}</div>`
+  return `<div class="slide body">${bgImg(o.bg?.content)}<div class="z">${head(sl, en)}
+    <div class="swot">
+      ${quad('qs', '优势', 'STRENGTHS', s.s)}
+      ${quad('qw', '劣势', 'WEAKNESSES', s.w)}
+      ${quad('qo', '机会', 'OPPORTUNITIES', s.o)}
+      ${quad('qt', '威胁', 'THREATS', s.t)}
+    </div></div></div>`
+}
+
 function closing(o: DeckOutline): string {
   return `<div class="slide closing">${bgImg(o.bg?.content)}<div class="z" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px">
     <div class="ty">THANK YOU</div><h1>感谢观看</h1><div class="tick"></div>
@@ -259,8 +331,15 @@ export function composeDeck(o: DeckOutline): { styleTag: string; slides: string[
   o.sections.forEach((sec, si) => {
     slides.push(section(sec, si + 1, o.sections.length, o))
     sec.slides.forEach((sl) => {
+      const en = EN[si % EN.length]
       slides.push(
-        sl.data?.items?.length ? chart(sl, t, EN[si % EN.length], o) : content(sl, EN[si % EN.length], o),
+        sl.swot
+          ? swot(sl, en, o)
+          : sl.compare
+            ? compare(sl, en, o)
+            : sl.data?.items?.length
+              ? chart(sl, t, en, o)
+              : content(sl, en, o),
       )
     })
   })

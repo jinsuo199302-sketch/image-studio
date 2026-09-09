@@ -159,7 +159,7 @@ class DeckRequest(BaseModel):
     """AI 生成 PPT：主题 + 章节数 + 主题风格。ai_bg=True 另外生成 3 张 AI 整页背景（走异步）。"""
     topic: str
     sections: int = 4
-    theme: str = "red"
+    theme: str = "auto"
     extra: str = ""
     ai_bg: bool = False
 

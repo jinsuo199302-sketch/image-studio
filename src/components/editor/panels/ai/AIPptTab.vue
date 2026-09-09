@@ -33,13 +33,17 @@ async function run(fn: () => Promise<Blob>, name: string) {
 
 // ── AI 生成 ──────────────────────────────────────────────
 const THEMES = [
+  { key: 'auto', label: 'AI 智能配色' },
   { key: 'red', label: '党政红金' },
   { key: 'blue', label: '商务蓝' },
   { key: 'green', label: '清新绿' },
+  { key: 'purple', label: '典雅紫' },
+  { key: 'slate', label: '沉稳蓝灰' },
+  { key: 'teal', label: '青碧' },
 ]
 const topic = ref('')
 const sections = ref(4)
-const theme = ref('red')
+const theme = ref('auto')
 const extra = ref('')
 const aiBg = ref(false)
 const deck = ref<DeckResult | null>(null)
@@ -137,12 +141,12 @@ function rmImg(i: number) {
           <span class="w-4 text-xs text-gray-400">{{ sections }}</span>
         </div>
         <div>
-          <p class="mb-1 text-xs text-gray-500">主题风格</p>
-          <div class="flex gap-1.5">
+          <p class="mb-1 text-xs text-gray-500">配色主题</p>
+          <div class="grid grid-cols-4 gap-1.5">
             <button
               v-for="th in THEMES"
               :key="th.key"
-              class="flex-1 rounded-md border px-2 py-1 text-[11px] transition"
+              class="rounded-md border px-1.5 py-1 text-[11px] transition"
               :class="theme === th.key ? 'border-violet-500 bg-violet-50 text-violet-600' : 'border-gray-200 text-gray-500'"
               @click="theme = th.key"
             >
@@ -176,24 +180,41 @@ function rmImg(i: number) {
         </el-button>
 
         <template v-if="deck">
-          <div class="flex items-center justify-between pt-1">
-            <span class="text-xs font-medium text-gray-600">{{ deck.title }} · {{ deck.slides.length }} 页</span>
-            <el-button size="small" type="primary" plain :loading="busy" @click="downloadDeck">下载 PPTX</el-button>
-          </div>
-          <div class="space-y-2">
-            <div v-for="(s, i) in deck.slides" :key="i" class="relative">
-              <span class="absolute left-1 top-1 z-10 rounded bg-black/45 px-1 text-[10px] text-white">{{ i + 1 }}</span>
-              <SlidePreview :slide="s as unknown as SlideData" :width="360" />
-            </div>
-          </div>
-          <p class="text-[11px] text-gray-400">
-            装饰目前是代码画的简版；下载的 PPTX 是原生形状，文字/配色/排版都能在 PowerPoint 里改。
+          <div class="pt-1 text-xs font-medium text-gray-600">{{ deck.title }}</div>
+
+          <!-- 主：CSS 模板排版 → 浏览器转可编辑 PPTX -->
+          <DeckHtmlPreview v-if="deck.outline" :outline="deck.outline" :theme-key="deck.theme" :bg="deck.bg" />
+          <p v-if="deck.outline" class="text-[11px] text-gray-400">
+            下载的 PPTX 是原生形状/文本框，文字、配色、排版都能在 PowerPoint 里改。
           </p>
 
-          <div v-if="deck.outline" class="mt-3 rounded-lg border border-violet-100 bg-violet-50/40 p-2">
-            <p class="mb-1 text-[11px] font-medium text-violet-700">HTML 版（实验）：CSS 排版 → 浏览器转可编辑 PPTX</p>
-            <DeckHtmlPreview :outline="deck.outline" :theme-key="deck.theme" :bg="deck.bg" />
-          </div>
+          <!-- 备用：纯代码排版版（形状更简，个别环境兼容性更好） -->
+          <details v-if="deck.outline" class="rounded-lg border border-gray-200 bg-gray-50/60 p-2">
+            <summary class="cursor-pointer text-[11px] text-gray-500">备用：代码排版版（{{ deck.slides.length }} 页）</summary>
+            <div class="mt-2 flex justify-end">
+              <el-button size="small" plain :loading="busy" @click="downloadDeck">下载这一版</el-button>
+            </div>
+            <div class="mt-2 space-y-2">
+              <div v-for="(s, i) in deck.slides" :key="i" class="relative">
+                <span class="absolute left-1 top-1 z-10 rounded bg-black/45 px-1 text-[10px] text-white">{{ i + 1 }}</span>
+                <SlidePreview :slide="s as unknown as SlideData" :width="360" />
+              </div>
+            </div>
+          </details>
+
+          <!-- 兜底：老数据没有 outline 时退回代码版为主 -->
+          <template v-if="!deck.outline">
+            <div class="flex items-center justify-between">
+              <span class="text-xs text-gray-500">{{ deck.slides.length }} 页</span>
+              <el-button size="small" type="primary" plain :loading="busy" @click="downloadDeck">下载 PPTX</el-button>
+            </div>
+            <div class="space-y-2">
+              <div v-for="(s, i) in deck.slides" :key="i" class="relative">
+                <span class="absolute left-1 top-1 z-10 rounded bg-black/45 px-1 text-[10px] text-white">{{ i + 1 }}</span>
+                <SlidePreview :slide="s as unknown as SlideData" :width="360" />
+              </div>
+            </div>
+          </template>
         </template>
       </template>
 

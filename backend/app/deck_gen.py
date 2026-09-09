@@ -23,11 +23,23 @@ DISPLAY, H1, H2, H3, BODY, CAP = 58, 40, 26, 19, 16, 13
 
 # ── 主题：一组配色 + 字体。palette 可由 LLM 给，缺了用这里兜底 ──────
 _FALLBACK = {
-    "red":   ["#b01f24", "#d99b2b", "#8c1519", "#f4f4f4", "#2b2b2b"],
-    "blue":  ["#1f4e9c", "#e0a52b", "#16336b", "#f5f6f8", "#2b2b2b"],
-    "green": ["#2f7d55", "#e0a52b", "#1f5c3d", "#f4f7f5", "#2b2b2b"],
-    "dark":  ["#e8b04b", "#3f7cc4", "#c8963a", "#1c2230", "#f2f2f2"],
+    "red":    ["#b01f24", "#d99b2b", "#8c1519", "#f4f4f4", "#2b2b2b"],
+    "blue":   ["#1f4e9c", "#e0a52b", "#16336b", "#f5f6f8", "#2b2b2b"],
+    "green":  ["#2f7d55", "#e0a52b", "#1f5c3d", "#f4f7f5", "#2b2b2b"],
+    "purple": ["#6b4ea8", "#e0a52b", "#463079", "#f6f4fa", "#2b2b2b"],
+    "slate":  ["#37506b", "#c98a3c", "#243447", "#f4f6f8", "#2b2b2b"],
+    "teal":   ["#1f7a72", "#e0a52b", "#134b46", "#f2f7f6", "#2b2b2b"],
+    "dark":   ["#e8b04b", "#3f7cc4", "#c8963a", "#1c2230", "#f2f2f2"],
 }
+
+
+def apply_theme_palette(outline: dict, theme_key: str) -> dict:
+    """用户选了具体配色主题（非 auto）时，用固定 palette 覆盖 LLM 给的，让结果可预期。
+    auto / 未知 key 保持 LLM 的 palette 不动。"""
+    if theme_key and theme_key != "auto" and theme_key in _FALLBACK:
+        outline = dict(outline)
+        outline["palette"] = list(_FALLBACK[theme_key])
+    return outline
 
 
 def _mk_theme(theme_key: str, palette: list[str] | None) -> dict:
@@ -406,6 +418,66 @@ def _chart(t: dict, sec_idx: int, title: str, en: str, kind: str, items: list[di
     return {"background": t["paper"], "elements": els, "w": W, "h": H}
 
 
+def _compare(t: dict, sec_idx: int, title: str, en: str, cmp: dict, page: int, bg: str | None) -> dict:
+    """对比页：左右两栏，各一个标题 + 要点组。左栏主色描边，右栏强调色描边。"""
+    els, y = _content_head(t, title, en or _EN_CAP[sec_idx % len(_EN_CAP)], page, bg)
+    ink = t["ink"]
+    gap = 48
+    cw = (CW - gap) / 2
+    top = y + 14
+    ch = (H - 60) - top
+    sides = [(cmp.get("left") or {}, t["primary"]), (cmp.get("right") or {}, t["accent"])]
+    for i, (g, accent) in enumerate(sides):
+        x = M + i * (cw + gap)
+        els += [
+            _r(x, top, cw, ch, t["panel"], rx=14, stroke=_mix(ink, t["paper"], 0.82), sw=1),
+            _r(x, top, cw, 4, accent),
+            _t(x + 26, top + 24, cw - 52, (g.get("heading") or "").strip(), H3,
+               t["primary"] if i == 0 else t["primary_dk"], bold=True),
+            _r(x + 28, top + 24 + H3 * 1.3, 26, 3, t["accent"]),
+        ]
+        yy = top + 24 + H3 * 1.3 + 24
+        for p in [str(s).strip() for s in (g.get("points") or []) if str(s).strip()][:5]:
+            els += [
+                _circle(x + 30, yy + BODY * 0.72, 3, fill=t["accent"]),
+                _t(x + 44, yy, cw - 76, p, BODY, ink),
+            ]
+            yy += estimate_text_height(p, cw - 76, BODY) + 14
+    return {"background": t["paper"], "elements": els, "w": W, "h": H}
+
+
+def _swot(t: dict, sec_idx: int, title: str, en: str, sw: dict, page: int, bg: str | None) -> dict:
+    """SWOT 四象限：优势 / 劣势 / 机会 / 威胁，2×2 淡色块。"""
+    els, y = _content_head(t, title, en or "SWOT", page, bg)
+    ink = t["ink"]
+    gap = 22
+    top = y + 12
+    cw = (CW - gap) / 2
+    chh = ((H - 58) - top - gap) / 2
+    quads = [
+        ("优势", "STRENGTHS", sw.get("s"), t["primary"]),
+        ("劣势", "WEAKNESSES", sw.get("w"), "#c0504d"),
+        ("机会", "OPPORTUNITIES", sw.get("o"), t["accent"]),
+        ("威胁", "THREATS", sw.get("t"), "#5b6b82"),
+    ]
+    for idx, (label, sub, items, accent) in enumerate(quads):
+        x = M + (idx % 2) * (cw + gap)
+        yy0 = top + (idx // 2) * (chh + gap)
+        els += [
+            _r(x, yy0, cw, chh, _mix(accent, t["paper"], 0.9), rx=14,
+               stroke=_mix(accent, t["paper"], 0.6), sw=1),
+            _t(x + 24, yy0 + 18, cw - 48, label, H3, accent, bold=True),
+            _t(x + 26, yy0 + 20 + H3 * 1.2, 220, sub, CAP - 1, _mix(ink, t["paper"], 0.5),
+               font=t["kicker_font"], spacing=2),
+        ]
+        yy = yy0 + 22 + H3 * 1.2 + CAP + 12
+        for p in [str(s).strip() for s in (items or []) if str(s).strip()][:4]:
+            line = "· " + p
+            els.append(_t(x + 24, yy, cw - 48, line, CAP + 1, ink))
+            yy += estimate_text_height(line, cw - 48, CAP + 1) + 8
+    return {"background": t["paper"], "elements": els, "w": W, "h": H}
+
+
 def _closing(t: dict, title: str, bg: str | None) -> dict:
     """用内容页那张浅底背景（跟封面的深底不同），文字一律深色居中。"""
     els = _bg_layer(t, bg, "content")
@@ -437,15 +509,21 @@ def build_deck(outline: dict, theme_key: str = "red", bg: dict | None = None) ->
         page += 1
         for sl in (sec.get("slides") or [])[:4]:
             d = sl.get("data") if isinstance(sl.get("data"), dict) else None
-            if d and d.get("items"):
+            cmp = sl.get("compare") if isinstance(sl.get("compare"), dict) else None
+            sw = sl.get("swot") if isinstance(sl.get("swot"), dict) else None
+            ttl = (sl.get("title") or "").strip()
+            en = (sl.get("en") or "").strip()
+            if sw and any(sw.get(k) for k in ("s", "w", "o", "t")):
+                slides.append(_swot(t, i, ttl, en, sw, page, bg.get("content")))
+            elif cmp and (cmp.get("left") or cmp.get("right")):
+                slides.append(_compare(t, i, ttl, en, cmp, page, bg.get("content")))
+            elif d and d.get("items"):
                 slides.append(_chart(
-                    t, i, (sl.get("title") or "").strip(), (sl.get("en") or "").strip(),
-                    d.get("kind", "bar"), d.get("items") or [], page, bg.get("content"),
+                    t, i, ttl, en, d.get("kind", "bar"), d.get("items") or [], page, bg.get("content"),
                 ))
             else:
                 slides.append(_content(
-                    t, i, (sl.get("title") or "").strip(), (sl.get("en") or "").strip(),
-                    (sl.get("intro") or "").strip(),
+                    t, i, ttl, en, (sl.get("intro") or "").strip(),
                     [str(x).strip() for x in (sl.get("bullets") or []) if str(x).strip()],
                     page, bg.get("content"),
                 ))

@@ -791,6 +791,11 @@ async def _gen_deck_outline(topic: str, sections: int, extra: str = "") -> dict:
         "当某一页内容本身是量化的（占比、数量、几个关键指标），可以把这一页改成图表页——"
         '把该 slide 写成 {"title":"...","en":"...","data":{"kind":"bar 或 stat","items":[{"label":"标签","value":85}]}}，'
         "bar 用于多项数值对比、stat 用于 2~4 个关键指标；此时不需要 bullets。data 里的数字要真实合理，编不出准确数就不要用图表页。\n"
+        "当某一页是两个对象/方案/时期的对照（如「传统做法 vs 新做法」「优点 vs 缺点」），"
+        '写成对比页 {"title":"...","en":"...","compare":{"left":{"heading":"左栏标题","points":["要点","要点"]},"right":{"heading":"右栏标题","points":["要点","要点"]}}}，每栏 3~4 条、每条 12~28 字，不要 bullets。\n'
+        "当某一页适合做 SWOT 态势分析时，"
+        '写成 {"title":"...","en":"...","swot":{"s":["优势要点"],"w":["劣势要点"],"o":["机会要点"],"t":["威胁要点"]}}，每个象限 2~4 条、每条 10~22 字，不要 bullets。\n'
+        "对比页 / SWOT 页整份大纲里最多各 1 页，只在内容确实契合时才用，不要硬套。\n"
         f"要求：palette 必须是 5 个协调的十六进制色，符合主题气质、对比度足够（正文色要能在背景浅色上看清）；"
         f"sections 生成 {sections} 个；每个 section 下 2~3 个 slides；普通 slide 配 3~5 条 bullets，"
         "每条 20~45 字，具体、准确、书面语，不空话套话；title/heading 精炼；en 字段是给版式当装饰小字用的英文，"
@@ -870,6 +875,7 @@ async def _run_deck_job(job_id, user_id, ticket, topic, n, theme, extra, ai_bg):
         if user is None:
             raise RuntimeError("用户不存在")
         outline = await _gen_deck_outline(topic, n, extra)
+        outline = deck_gen.apply_theme_palette(outline, theme)
         bg = None
         if ai_bg:
             raw_kit = await _gen_deck_bg_kit(outline.get("mood", ""), outline.get("palette") or [])
@@ -931,6 +937,7 @@ async def design_deck(
 
     try:
         outline = await _gen_deck_outline(topic, n, extra)
+        outline = deck_gen.apply_theme_palette(outline, payload.theme)
         slides = deck_gen.build_deck(outline, payload.theme)
         return {"title": (outline.get("title") or topic), "theme": payload.theme, "slides": slides, "outline": outline}
     except Exception:

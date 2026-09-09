@@ -16,6 +16,9 @@ const FALLBACK: Record<string, string[]> = {
   red: ['#b01f24', '#d99b2b', '#8c1519', '#f6f3ee', '#2b2b2b'],
   blue: ['#1f5fa8', '#e0a52b', '#123c6b', '#f5f7fa', '#2b2b2b'],
   green: ['#2f7d55', '#e0a52b', '#1f5c3d', '#f4f7f5', '#2b2b2b'],
+  purple: ['#6b4ea8', '#e0a52b', '#463079', '#f6f4fa', '#2b2b2b'],
+  slate: ['#37506b', '#c98a3c', '#243447', '#f4f6f8', '#2b2b2b'],
+  teal: ['#1f7a72', '#e0a52b', '#134b46', '#f2f7f6', '#2b2b2b'],
 }
 
 const theme = computed<DeckTheme>(() => {
@@ -59,7 +62,7 @@ async function download() {
     const els = Array.from(stage.querySelectorAll<HTMLElement>('.slide'))
     const blob = await slidesToPptx(els, props.outline.title)
     await saveFile(`${props.outline.title || '演示文稿'}.pptx`, blob)
-    ElMessage.success('PPTX 已导出（HTML 版）')
+    ElMessage.success('PPTX 已导出')
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '导出失败')
   } finally {
@@ -73,10 +76,8 @@ defineExpose({ download })
 <template>
   <div ref="wrapRef">
     <div class="mb-2 flex items-center justify-between">
-      <span class="text-xs font-medium text-gray-600">HTML 版 · {{ composed.slides.length }} 页</span>
-      <el-button size="small" type="primary" plain :loading="busy" @click="download">
-        下载 PPTX（HTML 版）
-      </el-button>
+      <span class="text-xs font-medium text-gray-600">共 {{ composed.slides.length }} 页</span>
+      <el-button size="small" type="primary" :loading="busy" @click="download">下载 PPTX</el-button>
     </div>
 
     <div class="space-y-2">

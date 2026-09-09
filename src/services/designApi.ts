@@ -351,6 +351,8 @@ export interface DeckOutlineRaw {
       intro?: string
       bullets?: string[]
       data?: { kind: 'bar' | 'stat'; items: { label: string; value: string | number }[] }
+      compare?: { left: { heading: string; points: string[] }; right: { heading: string; points: string[] } }
+      swot?: { s: string[]; w: string[]; o: string[]; t: string[] }
     }[]
   }[]
 }
