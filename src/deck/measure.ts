@@ -71,7 +71,7 @@ function firstFont(family: string): string {
 }
 
 /** 这个元素是不是"文字叶子"：自己有可见文字，且没有还带文字的子元素 */
-function isTextLeaf(el: HTMLElement): boolean {
+export function isTextLeaf(el: HTMLElement): boolean {
   const own = Array.from(el.childNodes).some(
     (n) => n.nodeType === Node.TEXT_NODE && (n.textContent || '').trim(),
   )
