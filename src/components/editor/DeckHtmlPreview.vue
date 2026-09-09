@@ -6,7 +6,11 @@ import { slidesToPptx } from '../../deck/toPptx'
 import { saveFile } from '../../utils/saveFile'
 import type { DeckOutlineRaw } from '../../services/designApi'
 
-const props = defineProps<{ outline: DeckOutlineRaw; themeKey: string }>()
+const props = defineProps<{
+  outline: DeckOutlineRaw
+  themeKey: string
+  bg?: { cover?: string; content?: string; section?: string } | null
+}>()
 
 const FALLBACK: Record<string, string[]> = {
   red: ['#b01f24', '#d99b2b', '#8c1519', '#f6f3ee', '#2b2b2b'],
@@ -28,6 +32,7 @@ const composed = computed(() => {
     subtitle: props.outline.subtitle,
     theme: theme.value,
     sections: props.outline.sections || [],
+    bg: props.bg ?? null,
   }
   return composeDeck(o)
 })

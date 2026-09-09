@@ -1,7 +1,12 @@
 /**
  * 幻灯片 HTML 模板。每个函数吐一段 <div class="slide">…</div>（1280×720）。
- * 排版用 CSS（flex/grid/真字号），比在坐标里摆快得多、也好看。
- * 渲染出来后 measure + pptxgenjs 转可编辑 PPTX。
+ * 排版用 CSS（flex/grid/真字号/发丝线），渲染后 measure + pptxgenjs 转可编辑 PPTX。
+ *
+ * 设计原则（参考主流 AI PPT 工具的"去 AI 味"经验）：
+ *  - 按内容类型换版式：1 句=引言 / 2~3 条=卡片 / 4~5 条=清单 / 流程=时间轴 / 数据=图表
+ *  - 克制配色：主色管结构，强调色只点缀
+ *  - 强层级：字号阶梯拉开；充足留白；发丝线分隔而非重框
+ *  - 内容页浅底 / 章节页深底，形成节奏
  */
 
 export interface DeckTheme {
@@ -19,155 +24,209 @@ export interface DeckSlideIn {
   bullets?: string[]
   data?: { kind: 'bar' | 'stat'; items: { label: string; value: string | number }[] }
 }
+export interface DeckSection {
+  heading: string
+  en?: string
+  slides: DeckSlideIn[]
+}
 export interface DeckOutline {
   title: string
   subtitle?: string
   theme: DeckTheme
-  sections: { heading: string; en?: string; slides: DeckSlideIn[] }[]
+  sections: DeckSection[]
+  /** AI 生成的整页背景（可选） */
+  bg?: { cover?: string; content?: string; section?: string } | null
 }
 
 const esc = (s = '') =>
   s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
 
+const pad2 = (n: number) => String(n).padStart(2, '0')
+
 function css(t: DeckTheme): string {
   return `
-  .slide{width:1280px;height:720px;position:relative;overflow:hidden;background:${t.paper};
+  .slide{--m:96px;width:1280px;height:720px;position:relative;overflow:hidden;background:${t.paper};
     font-family:"Microsoft YaHei","Noto Sans SC",sans-serif;color:${t.ink};box-sizing:border-box}
   .slide *{box-sizing:border-box;margin:0;padding:0}
-  .kick{font-size:13px;letter-spacing:3px;color:${t.accent};font-weight:700}
-  .tick{width:56px;height:3px;background:${t.accent}}
+  .bg{position:absolute;inset:0;width:1280px;height:720px;object-fit:cover;z-index:0}
+  .z{position:relative;z-index:1;height:100%}
+  .tick{width:52px;height:3px;background:${t.accent};flex:none}
+  .en{font-size:12px;letter-spacing:3px;color:#a9adb6;font-weight:700}
 
-  .s-cover{background:#fff;padding:0}
-  .s-cover .frame{position:absolute;left:0;top:0;width:14px;height:100%;background:${t.primary}}
-  .s-cover .frame::after{content:"";position:absolute;left:0;top:0;width:14px;height:120px;background:${t.accent}}
-  .s-cover .wrap{position:absolute;left:100px;top:196px;width:820px}
-  .s-cover h1{font-size:56px;line-height:1.16;color:${t.primaryDk};font-weight:800;margin:16px 0 22px}
-  .s-cover .sub{font-size:20px;color:#8a8a8a}
-  .s-cover .meta{position:absolute;left:100px;bottom:64px;font-size:13px;color:#9a9a9a;line-height:2}
+  /* 封面 */
+  .s-cover{background:#fff}
+  .s-cover .side{position:absolute;left:0;top:0;width:16px;height:100%;background:${t.primary};z-index:2}
+  .s-cover .side::after{content:"";position:absolute;left:0;top:0;width:16px;height:128px;background:${t.accent}}
+  .s-cover .panel{position:absolute;left:76px;top:150px;width:760px;padding:44px 44px 40px;background:rgba(255,255,255,.9);border-radius:8px;z-index:2}
+  .s-cover .kick{font-size:13px;letter-spacing:4px;color:${t.accent};font-weight:800}
+  .s-cover h1{font-size:52px;line-height:1.18;color:${t.primaryDk};font-weight:800;margin:14px 0 20px}
+  .s-cover .sub{font-size:19px;color:#7c7c7c;margin-top:20px}
+  .s-cover .meta{margin-top:36px;font-size:13px;color:#9a9a9a;line-height:2}
 
+  /* 目录 */
   .s-toc{padding:76px 116px}
-  .s-toc h2{font-size:40px;color:${t.primary};font-weight:800}
-  .s-toc .en{font-size:13px;letter-spacing:3px;color:${t.accent};font-weight:700;margin:8px 0 6px}
-  .s-toc ul{list-style:none;margin-top:56px;display:grid;gap:8px}
-  .s-toc li{display:flex;align-items:baseline;gap:24px;padding:18px 0;border-bottom:1px solid #e3e6ec}
-  .s-toc .no{font-size:34px;font-weight:800;color:${t.primary};opacity:.35;min-width:52px}
-  .s-toc .h{font-size:19px;font-weight:700}
+  .s-toc h2{font-size:38px;color:${t.primary};font-weight:800}
+  .s-toc .en{margin:10px 0 4px;color:${t.accent}}
+  .s-toc .grid{margin-top:52px;display:grid;grid-template-columns:1fr;gap:6px}
+  .s-toc .grid.two{grid-template-columns:1fr 1fr;column-gap:56px}
+  .s-toc .it{display:flex;align-items:baseline;gap:22px;padding:16px 0;border-bottom:1px solid #e4e7ec}
+  .s-toc .no{font-size:30px;font-weight:800;color:${t.primary};opacity:.32;min-width:46px}
+  .s-toc .h{font-size:18px;font-weight:700}
 
-  .s-sec{background:${t.primaryDk};color:#fff;padding:0}
-  .s-sec .big{position:absolute;left:70px;top:230px;font-size:170px;font-weight:800;color:rgba(255,255,255,.10);line-height:1}
-  .s-sec .box{position:absolute;left:96px;top:400px;width:900px}
-  .s-sec .part{font-size:19px;letter-spacing:6px;color:${t.accent};font-weight:700}
-  .s-sec h2{font-size:44px;font-weight:800;margin:14px 0 16px}
-  .s-sec .en{font-size:12px;letter-spacing:3px;color:rgba(255,255,255,.55)}
+  /* 章节过渡 */
+  .s-sec{background:${t.primaryDk};color:#fff}
+  .s-sec .big{position:absolute;left:64px;top:210px;font-size:190px;font-weight:800;color:rgba(255,255,255,.09);line-height:.9}
+  .s-sec .box{position:absolute;left:96px;top:404px;width:920px}
+  .s-sec .part{font-size:18px;letter-spacing:6px;color:${t.accent};font-weight:800}
+  .s-sec h2{font-size:42px;font-weight:800;margin:12px 0 14px}
+  .s-sec .en{color:rgba(255,255,255,.5)}
 
-  .body{padding:52px 96px;height:100%;display:flex;flex-direction:column}
+  /* 内容页骨架 */
+  .body{padding:50px 96px;height:100%;display:flex;flex-direction:column}
   .head{text-align:center}
-  .head h2{font-size:26px;color:${t.primary};font-weight:800}
-  .head .l{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:8px}
-  .head .l::before,.head .l::after{content:"";width:30px;height:3px;background:${t.accent}}
-  .head .en{font-size:12px;letter-spacing:3px;color:#aeb2ba}
-  .intro{text-align:center;color:#8a8a8a;font-size:16px;margin-top:22px;max-width:900px;align-self:center}
+  .head h2{font-size:25px;color:${t.primary};font-weight:800}
+  .head .fl{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:8px}
+  .head .fl::before,.head .fl::after{content:"";width:28px;height:3px;background:${t.accent}}
+  .head .en{margin-top:8px}
+  .intro{text-align:center;color:#8b8b8b;font-size:15px;line-height:1.6;margin:20px auto 0;max-width:880px}
 
-  .cards{display:grid;gap:32px;flex:1;margin-top:44px}
-  .card{border:1px solid #e0e3ea;border-radius:14px;padding:30px 26px;display:flex;flex-direction:column;align-items:center;text-align:center;justify-content:flex-start}
-  .card .ring{width:60px;height:60px;border:2px solid ${t.primary};border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;color:${t.primary}}
-  .card .ct{margin-top:18px;font-size:16px;line-height:1.6}
+  /* 卡片（2~3 条） */
+  .cards{display:grid;gap:30px;flex:1;margin-top:42px;align-content:center}
+  .card{border:1px solid #e2e5ec;border-radius:14px;padding:32px 26px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:16px}
+  .card .ring{width:58px;height:58px;border:2px solid ${t.primary};border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:${t.primary}}
+  .card .bd{width:26px;height:3px;background:${t.accent}}
+  .card .ct{font-size:16px;line-height:1.62}
 
-  .list{flex:1;margin-top:36px;display:flex;flex-direction:column;justify-content:center;gap:26px}
-  .row{display:flex;align-items:center;gap:24px}
-  .row .n{width:38px;height:38px;flex:none;border:2px solid ${t.accent};border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:${t.accent}}
-  .row .rt{font-size:16px;line-height:1.55}
+  /* 清单（4~5 条） */
+  .list{flex:1;margin-top:34px;display:flex;flex-direction:column;justify-content:center}
+  .row{display:flex;align-items:center;gap:22px;padding:16px 0;border-bottom:1px solid #e8eaef}
+  .row:last-child{border-bottom:0}
+  .row .n{width:36px;height:36px;flex:none;border:2px solid ${t.accent};border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:${t.accent}}
+  .row .rt{font-size:16px;line-height:1.5}
 
-  .quote{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:22px}
-  .quote .q{font-size:64px;color:${t.accent};font-weight:800;line-height:1}
-  .quote .qt{font-size:22px;line-height:1.7;max-width:900px}
+  /* 引言（1 句） */
+  .quote{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:20px}
+  .quote .q{font-size:60px;color:${t.accent};font-weight:800;line-height:.6}
+  .quote .qt{font-size:22px;line-height:1.7;max-width:900px;font-weight:600}
 
-  .kpi{flex:1;display:flex;align-items:center;justify-content:space-around}
-  .kpi .it{text-align:center}
-  .kpi .v{font-size:60px;font-weight:800;color:${t.primary};line-height:1}
-  .kpi .k{font-size:15px;color:#666;margin-top:10px}
+  /* 时间轴（流程/步骤） */
+  .steps{flex:1;display:flex;align-items:center;margin-top:30px}
+  .steps .track{flex:1;display:flex;align-items:flex-start;position:relative}
+  .steps .track::before{content:"";position:absolute;left:6%;right:6%;top:19px;height:2px;background:#dfe2e8}
+  .steps .st{flex:1;display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px;padding:0 10px}
+  .steps .dot{width:40px;height:40px;border-radius:50%;background:${t.primary};color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;position:relative;z-index:1}
+  .steps .sl{font-size:14px;line-height:1.5;color:${t.ink}}
 
-  .bars{flex:1;margin-top:36px;display:flex;flex-direction:column;justify-content:center;gap:22px}
+  /* KPI 大数字 */
+  .kpi{flex:1;display:flex;align-items:center;justify-content:space-around;margin-top:20px}
+  .kpi .it{text-align:center;flex:1}
+  .kpi .it + .it{border-left:1px solid #e4e7ec}
+  .kpi .v{font-size:58px;font-weight:800;color:${t.primary};line-height:1}
+  .kpi .bd{width:30px;height:3px;background:${t.accent};margin:12px auto 8px}
+  .kpi .k{font-size:15px;color:#666}
+
+  /* 横向条形图 */
+  .bars{flex:1;margin-top:34px;display:flex;flex-direction:column;justify-content:center;gap:20px}
   .bar{display:flex;align-items:center;gap:18px}
-  .bar .bl{width:180px;font-size:15px;text-align:right;flex:none}
-  .bar .track{flex:1;height:18px;background:#e9edf3;border-radius:9px;position:relative}
-  .bar .fill{position:absolute;left:0;top:0;height:18px;border-radius:9px}
-  .bar .bv{width:70px;font-size:15px;font-weight:800;color:${t.primary};flex:none}
+  .bar .bl{width:190px;font-size:15px;text-align:right;flex:none;color:#555}
+  .bar .track{flex:1;height:16px;background:#eceff4;border-radius:8px;position:relative}
+  .bar .fill{position:absolute;left:0;top:0;height:16px;border-radius:8px}
+  .bar .bv{width:64px;font-size:16px;font-weight:800;color:${t.primary};flex:none}
 
-  .closing{background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;text-align:center}
-  .closing .ty{font-size:13px;letter-spacing:6px;color:${t.accent};font-weight:700}
-  .closing h1{font-size:56px;font-weight:800;color:${t.primary}}
-  .closing .sub{font-size:18px;color:#8a8a8a}
+  /* 结尾 */
+  .closing{background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center}
+  .closing .ty{font-size:13px;letter-spacing:6px;color:${t.accent};font-weight:800}
+  .closing h1{font-size:54px;font-weight:800;color:${t.primary}}
+  .closing .sub{font-size:17px;color:#8a8a8a}
   `
 }
 
+const bgImg = (url?: string) => (url ? `<img class="bg" src="${esc(url)}" crossorigin="anonymous">` : '')
+
+/* ── 页型 ─────────────────────────────────────────────── */
 function cover(o: DeckOutline): string {
-  return `<div class="slide s-cover"><div class="frame"></div>
-    <div class="wrap"><div class="kick">KEYNOTE PRESENTATION</div>
+  const b = o.bg?.cover
+  return `<div class="slide s-cover">${bgImg(b)}<div class="side"></div>
+    <div class="panel">
+      <div class="kick">KEYNOTE PRESENTATION</div>
       <h1>${esc(o.title)}</h1><div class="tick"></div>
-      ${o.subtitle ? `<div class="sub" style="margin-top:22px">${esc(o.subtitle)}</div>` : ''}</div>
-    <div class="meta"><div>汇报单位：____________</div><div>汇报时间：____________</div></div></div>`
+      ${o.subtitle ? `<div class="sub">${esc(o.subtitle)}</div>` : ''}
+      <div class="meta"><div>汇报单位：____________</div><div>汇报时间：____________</div></div>
+    </div></div>`
 }
 
 function toc(o: DeckOutline): string {
-  const li = o.sections
-    .slice(0, 6)
+  const rows = o.sections.slice(0, 6)
+  const two = rows.length > 4
+  const li = rows
     .map(
       (s, i) =>
-        `<li><span class="no">${String(i + 1).padStart(2, '0')}</span><span class="h">${esc(s.heading)}</span></li>`,
+        `<div class="it"><span class="no">${pad2(i + 1)}</span><span class="h">${esc(s.heading)}</span></div>`,
     )
     .join('')
-  return `<div class="slide s-toc"><h2>目录</h2><div class="en">CONTENTS</div><div class="tick"></div>
-    <ul>${li}</ul></div>`
+  return `<div class="slide s-toc">${bgImg(o.bg?.content)}<div class="z">
+    <h2>目录</h2><div class="en">CONTENTS</div><div class="tick"></div>
+    <div class="grid ${two ? 'two' : ''}">${li}</div></div></div>`
 }
 
-function section(s: DeckOutline['sections'][0], idx: number, total: number): string {
-  return `<div class="slide s-sec"><div class="big">${String(idx).padStart(2, '0')}</div>
-    <div class="box"><div class="part">PART ${String(idx).padStart(2, '0')} / ${String(total).padStart(2, '0')}</div>
+function section(s: DeckSection, idx: number, total: number, o: DeckOutline): string {
+  return `<div class="slide s-sec">${bgImg(o.bg?.section)}
+    <div class="big">${pad2(idx)}</div>
+    <div class="box">
+      <div class="part">PART ${pad2(idx)} / ${pad2(total)}</div>
       <h2>${esc(s.heading)}</h2><div class="tick"></div>
-      ${s.en ? `<div class="en" style="margin-top:14px">${esc(s.en)}</div>` : ''}</div></div>`
+      ${s.en ? `<div class="en" style="margin-top:14px">${esc(s.en)}</div>` : ''}
+    </div></div>`
 }
 
-function headHtml(sl: DeckSlideIn, en: string): string {
-  return `<div class="head"><h2>${esc(sl.title || '')}</h2><div class="l"></div>
-    <div class="en" style="margin-top:8px">${esc(sl.en || en)}</div></div>
+function head(sl: DeckSlideIn, en: string): string {
+  return `<div class="head"><h2>${esc(sl.title || '')}</h2><div class="fl"></div>
+    <div class="en">${esc(sl.en || en)}</div></div>
     ${sl.intro ? `<div class="intro">${esc(sl.intro)}</div>` : ''}`
 }
 
-function content(sl: DeckSlideIn, _t: DeckTheme, enFallback: string): string {
-  const items = (sl.bullets || []).filter(Boolean).slice(0, 5)
+const STEP_RE = /流程|步骤|阶段|环节|顺序|先后|第一步|首先/
+
+function content(sl: DeckSlideIn, en: string, o: DeckOutline): string {
+  const items = (sl.bullets || []).map((s) => s.trim()).filter(Boolean).slice(0, 6)
   const n = items.length
-  let body = ''
-  if (n === 1) {
+  let body: string
+  const asSteps = n >= 3 && STEP_RE.test((sl.title || '') + (sl.intro || ''))
+
+  if (asSteps) {
+    body = `<div class="steps"><div class="track">${items
+      .map((b, i) => `<div class="st"><div class="dot">${i + 1}</div><div class="sl">${esc(b)}</div></div>`)
+      .join('')}</div></div>`
+  } else if (n === 1) {
     body = `<div class="quote"><div class="q">"</div><div class="qt">${esc(items[0])}</div><div class="tick"></div></div>`
   } else if (n === 2 || n === 3) {
-    const cards = items
+    body = `<div class="cards" style="grid-template-columns:repeat(${n},1fr)">${items
       .map(
         (b, i) =>
-          `<div class="card"><div class="ring">${i + 1}</div><div class="ct">${esc(b)}</div></div>`,
+          `<div class="card"><div class="ring">${i + 1}</div><div class="bd"></div><div class="ct">${esc(b)}</div></div>`,
       )
-      .join('')
-    body = `<div class="cards" style="grid-template-columns:repeat(${n},1fr)">${cards}</div>`
+      .join('')}</div>`
   } else {
-    const rows = items
+    body = `<div class="list">${items
       .map(
-        (b, i) =>
-          `<div class="row"><div class="n">${String(i + 1).padStart(2, '0')}</div><div class="rt">${esc(b)}</div></div>`,
+        (b, i) => `<div class="row"><div class="n">${pad2(i + 1)}</div><div class="rt">${esc(b)}</div></div>`,
       )
-      .join('')
-    body = `<div class="list">${rows}</div>`
+      .join('')}</div>`
   }
-  return `<div class="slide body">${headHtml(sl, enFallback)}${body}</div>`
+  return `<div class="slide body">${bgImg(o.bg?.content)}<div class="z">${head(sl, en)}${body}</div></div>`
 }
 
-function chart(sl: DeckSlideIn, t: DeckTheme, enFallback: string): string {
+function chart(sl: DeckSlideIn, t: DeckTheme, en: string, o: DeckOutline): string {
   const d = sl.data!
   const rows = d.items.filter((r) => r.label).slice(0, 6)
-  let body = ''
+  let body: string
   if (d.kind === 'stat') {
     body = `<div class="kpi">${rows
       .slice(0, 4)
-      .map((r) => `<div class="it"><div class="v">${esc(String(r.value))}</div><div class="k">${esc(r.label)}</div></div>`)
+      .map(
+        (r) =>
+          `<div class="it"><div class="v">${esc(String(r.value))}</div><div class="bd"></div><div class="k">${esc(r.label)}</div></div>`,
+      )
       .join('')}</div>`
   } else {
     const nums = rows.map((r) => Math.abs(parseFloat(String(r.value).replace(/[^0-9.\-]/g, '')) || 0))
@@ -175,19 +234,19 @@ function chart(sl: DeckSlideIn, t: DeckTheme, enFallback: string): string {
     body = `<div class="bars">${rows
       .map((r, i) => {
         const pct = Math.max(4, (nums[i] / mx) * 100)
-        const col = i % 2 === 0 ? t.primary : t.accent
         return `<div class="bar"><div class="bl">${esc(r.label)}</div>
-          <div class="track"><div class="fill" style="width:${pct}%;background:${col}"></div></div>
+          <div class="track"><div class="fill" style="width:${pct}%;background:${i % 2 ? t.accent : t.primary}"></div></div>
           <div class="bv">${esc(String(r.value))}</div></div>`
       })
       .join('')}</div>`
   }
-  return `<div class="slide body">${headHtml(sl, enFallback)}${body}</div>`
+  return `<div class="slide body">${bgImg(o.bg?.content)}<div class="z">${head(sl, en)}${body}</div></div>`
 }
 
 function closing(o: DeckOutline): string {
-  return `<div class="slide closing"><div class="ty">THANK YOU</div><h1>感谢观看</h1>
-    <div class="tick"></div><div class="sub">${esc(o.title)}</div></div>`
+  return `<div class="slide closing">${bgImg(o.bg?.content)}<div class="z" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px">
+    <div class="ty">THANK YOU</div><h1>感谢观看</h1><div class="tick"></div>
+    <div class="sub">${esc(o.title)}</div></div></div>`
 }
 
 const EN = ['OVERVIEW', 'ANALYSIS', 'KEY POINTS', 'ACTION PLAN', 'SUMMARY', 'OUTLOOK']
@@ -198,9 +257,11 @@ export function composeDeck(o: DeckOutline): { styleTag: string; slides: string[
   const slides: string[] = [cover(o)]
   if (o.sections.length) slides.push(toc(o))
   o.sections.forEach((sec, si) => {
-    slides.push(section(sec, si + 1, o.sections.length))
+    slides.push(section(sec, si + 1, o.sections.length, o))
     sec.slides.forEach((sl) => {
-      slides.push(sl.data?.items?.length ? chart(sl, t, EN[si % EN.length]) : content(sl, t, EN[si % EN.length]))
+      slides.push(
+        sl.data?.items?.length ? chart(sl, t, EN[si % EN.length], o) : content(sl, EN[si % EN.length], o),
+      )
     })
   })
   slides.push(closing(o))

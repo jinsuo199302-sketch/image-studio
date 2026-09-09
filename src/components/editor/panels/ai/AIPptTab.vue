@@ -192,7 +192,7 @@ function rmImg(i: number) {
 
           <div v-if="deck.outline" class="mt-3 rounded-lg border border-violet-100 bg-violet-50/40 p-2">
             <p class="mb-1 text-[11px] font-medium text-violet-700">HTML 版（实验）：CSS 排版 → 浏览器转可编辑 PPTX</p>
-            <DeckHtmlPreview :outline="deck.outline" :theme-key="deck.theme" />
+            <DeckHtmlPreview :outline="deck.outline" :theme-key="deck.theme" :bg="deck.bg" />
           </div>
         </template>
       </template>
