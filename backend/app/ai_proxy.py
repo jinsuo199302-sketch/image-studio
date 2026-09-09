@@ -866,7 +866,7 @@ async def _gen_deck_outline(
         )
     res = await _post_openlux(
         f"{OPENLUX_BASE_URL}/chat/completions",
-        timeout=90,
+        timeout=180,  # 后台 job 里跑，不受 nginx 网关超时限制，给大模型足够时间
         headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
         json={"model": "gemini-3-flash-preview", "messages": [{"role": "user", "content": prompt}]},
     )
@@ -1014,25 +1014,14 @@ async def design_deck(
     ticket = billing.consume(db, user, "AIPPT")
     ai_bg = payload.ai_bg and payload.theme not in deck_gen.GEO_THEMES  # 几何风不生图
 
-    if ai_bg:
-        job_id = uuid.uuid4().hex
-        _HANDOUT_JOBS[job_id] = {"status": "pending", "user_id": user.id}
-        _prune_handout_jobs()
-        asyncio.create_task(
-            _run_deck_job(job_id, user.id, ticket, topic, n, payload.theme, extra, True, "", photos, ref_pal)
-        )
-        return {"jobId": job_id}
-
-    try:
-        outline = await _gen_deck_outline(topic, n, extra, "", [p["tag"] for p in photos] if photos else None)
-        outline = deck_gen.normalize_outline_text(outline)
-        outline = deck_gen.apply_theme_palette(outline, payload.theme, ref_pal)
-        outline = _attach_deck_photos(outline, photos)
-        slides = deck_gen.build_deck(outline, payload.theme)
-        return {"title": (outline.get("title") or topic), "theme": payload.theme, "slides": slides, "outline": outline}
-    except Exception:
-        billing.refund_ticket(db, user, ticket)
-        raise
+    # 一律走异步 job：大纲(+可选生图)可能要 1~3 分钟，同步返回会被 nginx 网关超时掐断
+    job_id = uuid.uuid4().hex
+    _HANDOUT_JOBS[job_id] = {"status": "pending", "user_id": user.id}
+    _prune_handout_jobs()
+    asyncio.create_task(
+        _run_deck_job(job_id, user.id, ticket, topic, n, payload.theme, extra, ai_bg, "", photos, ref_pal)
+    )
+    return {"jobId": job_id}
 
 
 def _shrink_jpeg(image_bytes: bytes, max_px: int = 1024, quality: int = 80) -> tuple[bytes, str]:
