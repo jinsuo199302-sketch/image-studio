@@ -9,6 +9,7 @@
  */
 import PptxGenJS from 'pptxgenjs'
 import { snapdom } from '@zumer/snapdom'
+import JSZip from 'jszip'
 import { measureSlide, isTextLeaf, type Prim } from './measure'
 
 const SLIDE_W = 13.333
@@ -102,5 +103,23 @@ export async function slidesToPptx(slideEls: HTMLElement[], title = '演示文�
     for (const p of texts) addTextBox(slide, p)
   }
 
-  return (await pptx.write({ outputType: 'blob' })) as Blob
+  const blob = (await pptx.write({ outputType: 'blob' })) as Blob
+  return preserveLeadingSpaces(blob)
+}
+
+/** pptxgenjs 生成的 <a:t> 没有 xml:space="preserve"——首行缩进用的两个全角空格
+ * 在部分渲染器/PowerPoint 里可能被当无意义空白吃掉。解压重写这一个属性，其余原样打包回去。 */
+async function preserveLeadingSpaces(blob: Blob): Promise<Blob> {
+  try {
+    const zip = await JSZip.loadAsync(blob)
+    const slideFiles = Object.keys(zip.files).filter((n) => /^ppt\/slides\/slide\d+\.xml$/.test(n))
+    for (const name of slideFiles) {
+      const xml = await zip.files[name].async('string')
+      const patched = xml.replace(/<a:t>/g, '<a:t xml:space="preserve">')
+      if (patched !== xml) zip.file(name, patched)
+    }
+    return await zip.generateAsync({ type: 'blob', mimeType: blob.type })
+  } catch {
+    return blob // 修不了就算了，不影响正常导出
+  }
 }

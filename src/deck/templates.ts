@@ -150,7 +150,7 @@ function spokeDiagram(t: DeckTheme, center: string, items: string[]): string {
   const ry = 210
   const nodes = items.slice(0, n).map((b, i) => {
     const a = (2 * Math.PI * i) / n - Math.PI / 2
-    return { b, x: cx + rx * Math.cos(a), y: cy + ry * Math.sin(a) }
+    return { b: short(b), x: cx + rx * Math.cos(a), y: cy + ry * Math.sin(a) }
   })
   const lines = nodes
     .map(
@@ -167,7 +167,7 @@ function spokeDiagram(t: DeckTheme, center: string, items: string[]): string {
     )
     .join('')
   return `<div class="spoke"><svg viewBox="0 0 1000 520" preserveAspectRatio="none">${lines}</svg>
-    <div class="spc">${esc(center)}</div>${dots}</div>`
+    <div class="spc">${esc(short(center, 10))}</div>${dots}</div>`
 }
 /** 斜向叠放的方块阶梯（参考模板 #2） */
 function stackBlocks(items: string[], t: DeckTheme): string {
@@ -223,14 +223,14 @@ function hexHive(t: DeckTheme, center: string, items: string[], images?: string[
       if (usePhoto && images![i]) {
         return `<div class="hvc hvc-ph" style="left:${left}%;top:${top}%"><img src="${esc(
           images![i],
-        )}" crossorigin="anonymous"><span class="hvcap">${esc(b)}</span></div>`
+        )}" crossorigin="anonymous"><span class="hvcap">${esc(short(b, 16))}</span></div>`
       }
       return `<div class="hvc" style="left:${left}%;top:${top}%;background:${
         i % 2 ? t.primary : t.primaryDk
-      }"><span class="hvi">${icon(pickIcon(b, i), 24)}</span><span class="hvt">${esc(b)}</span></div>`
+      }"><span class="hvi">${icon(pickIcon(b, i), 24)}</span><span class="hvt">${esc(short(b, 14))}</span></div>`
     })
     .join('')
-  return `<div class="hive"><div class="hvc mid">${esc(center)}</div>${cells}</div>`
+  return `<div class="hive"><div class="hvc mid">${esc(short(center, 10))}</div>${cells}</div>`
 }
 /** 树状图：主干 + 分支线 + 圆形节点（叶子），适合"发展方向/分支要点" */
 function treeDiagram(t: DeckTheme, items: string[]): string {
@@ -245,7 +245,7 @@ function treeDiagram(t: DeckTheme, items: string[]): string {
     const t0 = n === 1 ? 0.5 : i / (n - 1)
     const x = forkX - spread / 2 + t0 * spread
     const y = 150 + Math.abs(t0 - 0.5) * 2 * 60
-    return { b, x, y }
+    return { b: short(b, 14), x, y }
   })
   const branches = nodes
     .map(
@@ -280,7 +280,7 @@ function diamondGrid(t: DeckTheme, items: string[]): string {
         `<div class="dmc"><div class="dmd" style="background:${i % 2 ? t.accent : t.primary}"><span class="dmi">${icon(
           pickIcon(b, i),
           26,
-        )}</span></div><div class="dmt">${esc(b)}</div></div>`,
+        )}</span></div><div class="dmt">${esc(short(b, 12))}</div></div>`,
     )
     .join('')
   return `<div class="dmg n${n}">${cells}</div>`
@@ -294,7 +294,7 @@ function bulbSpoke(t: DeckTheme, items: string[]): string {
   const ry = 195
   const nodes = items.slice(0, n).map((b, i) => {
     const a = (2 * Math.PI * i) / n - Math.PI / 2
-    return { b, x: cx + rx * Math.cos(a), y: cy + ry * Math.sin(a) }
+    return { b: short(b, 16), x: cx + rx * Math.cos(a), y: cy + ry * Math.sin(a) }
   })
   const lines = nodes
     .map(
@@ -500,6 +500,11 @@ const esc = (s = '') =>
 /** 中文办公稿正文段落：首行空两格（用全角空格，导出到 PPT 也保留） */
 const para = (s = '') => '　　' + esc(s.replace(/^[　\s]+/, ''))
 
+/** 节点类版式（spoke/hive/tree/diamond/bulb）的标签是贴在图形节点上的短标签，不是段落。
+ * LLM 有时不听话给成整句，字数一长就会在固定宽度的盒子里裹很多行、撑破/压住图标——
+ * 防御性截断，不指望提示词管住模型。 */
+const short = (s: string, n = 16) => (s.length > n ? s.slice(0, n - 1) + '…' : s)
+
 const pad2 = (n: number) => String(n).padStart(2, '0')
 
 function css(t: DeckTheme): string {
@@ -688,8 +693,7 @@ function css(t: DeckTheme): string {
   .cmp .col.a .ch{color:${t.primary}}
   .cmp .col.b .ch{color:${t.primaryDk}}
   .cmp .cd{width:26px;height:3px;background:${t.accent}}
-  .cmp .ci{font-size:15px;line-height:1.6;padding-left:16px;position:relative}
-  .cmp .ci::before{content:"";position:absolute;left:0;top:9px;width:6px;height:6px;border-radius:50%;background:${t.accent}}
+  .cmp .ci{font-size:15px;line-height:1.6}
 
   /* SWOT 四象限 */
   .swot{flex:1;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:20px;margin-top:32px}
@@ -776,7 +780,7 @@ function css(t: DeckTheme): string {
   .spoke .spc{position:absolute;left:50%;top:49%;transform:translate(-50%,-50%);width:150px;height:150px;border-radius:50%;background:${t.primary};color:#fff;display:flex;align-items:center;justify-content:center;text-align:center;font-size:17px;font-weight:800;padding:12px;line-height:1.3;box-shadow:0 0 0 10px ${t.primary}12}
   .spoke .spn{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:8px;width:172px;text-align:center}
   .spoke .spn .spd{width:16px;height:16px;border-radius:50%;background:${t.accent};box-shadow:0 0 0 6px ${t.accent}22}
-  .spoke .spn .spt{font-size:14px;color:${t.ink};line-height:1.45;font-weight:600}
+  .spoke .spn .spt{display:block;width:100%;font-size:14px;color:${t.ink};line-height:1.45;font-weight:600}
 
   /* 六边形图片框 */
   .hexf{position:relative;width:340px;flex:none;aspect-ratio:1/1.1}
@@ -870,6 +874,7 @@ function css(t: DeckTheme): string {
   /* 蜂窝六边形群 */
   .hive{flex:1;position:relative;align-self:stretch;width:100%;margin-top:8px}
   .hive .hvc{position:absolute;transform:translate(-50%,-50%);width:158px;height:180px;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:14px;font-size:13px;font-weight:600;line-height:1.3}
+  .hive .hvc .hvt{display:block;width:100%}
   .hive .hvc.mid{left:50%;top:50%;background:${t.accent};font-size:16px;font-weight:800}
   .hive .hvc .hvi{opacity:.92}
   .hive .hvc-ph{padding:0;background:${t.primaryDk}}
@@ -894,8 +899,9 @@ function css(t: DeckTheme): string {
   .bulbsp{flex:1;position:relative;margin-top:12px;align-self:stretch;width:100%}
   .bulbsp svg{position:absolute;inset:0;width:100%;height:100%}
   .bulbsp .blc{position:absolute;left:50%;top:49%;transform:translate(-50%,-50%);width:150px;height:150px;border-radius:50%;background:${t.accent};color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 14px ${t.accent}14,0 0 0 30px ${t.accent}0a}
-  .bulbsp .bln{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:9px;width:172px;text-align:center}
-  .bulbsp .bln .blni{width:46px;height:46px;flex:none;border-radius:12px;background:${t.primary}12;color:${t.primary};display:flex;align-items:center;justify-content:center}
+  .bulbsp .bln{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:10px;width:180px;text-align:center}
+  .bulbsp .bln .blni{width:46px;height:46px;flex:none;align-self:center;border-radius:12px;background:${t.primary}12;color:${t.primary};display:flex;align-items:center;justify-content:center}
+  .bulbsp .bln .blnt{display:block;width:100%}
   .bulbsp .bln .blnt{font-size:13.5px;color:${t.ink};line-height:1.4;font-weight:600}
   /* 弧形箭头循环 */
   .aring{position:relative;align-self:center;width:512px;height:512px;margin:auto}
@@ -1292,7 +1298,7 @@ function compare(sl: DeckSlideIn, en: string, o: DeckOutline): string {
       .map((p) => p.trim())
       .filter(Boolean)
       .slice(0, 5)
-      .map((p) => `<div class="ci">${esc(p)}</div>`)
+      .map((p) => `<div class="ci">${para(p)}</div>`)
       .join('')}</div>`
   return bodySlide(o, `${head(sl, en, o)}<div class="cmp">${col('a', c.left)}${col('b', c.right)}</div>`)
 }
