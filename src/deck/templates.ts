@@ -410,6 +410,78 @@ function motif(t: DeckTheme, kind: 'gear' | 'bulb' | 'petal', size = 240): strin
     c * 0.16
   }" fill="${t.accent}22"/></svg>`
 }
+/** 折线图：真实数字必须代码画，生图模型画不准——渐变面积 + 折线 + 数据点 + 数值/横轴标签 */
+function lineChart(t: DeckTheme, items: { label: string; value: number }[]): string {
+  const n = items.length
+  const vals = items.map((d) => d.value)
+  const max = Math.max(...vals, 1)
+  const min = Math.min(0, ...vals)
+  const W = 1000
+  const H = 420
+  const padL = 24
+  const padR = 24
+  const padT = 40
+  const padB = 46
+  const plotW = W - padL - padR
+  const plotH = H - padT - padB
+  const xAt = (i: number) => padL + (n <= 1 ? plotW / 2 : (i / (n - 1)) * plotW)
+  const yAt = (v: number) => padT + plotH - ((v - min) / (max - min || 1)) * plotH
+  const pts = items.map((d, i) => ({ x: xAt(i), y: yAt(d.value), ...d }))
+  const linePath = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ')
+  const base = (padT + plotH).toFixed(1)
+  const areaPath = `${linePath} L ${pts[pts.length - 1].x.toFixed(1)} ${base} L ${pts[0].x.toFixed(1)} ${base} Z`
+  const gid = 'lg' + Math.random().toString(36).slice(2, 8)
+  const grid = [0, 1, 2, 3]
+    .map((i) => {
+      const y = (padT + (plotH * i) / 3).toFixed(1)
+      return `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="${t.ink}0d" stroke-width="1"/>`
+    })
+    .join('')
+  const dots = pts
+    .map((p) => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="7" fill="${t.primary}" stroke="#fff" stroke-width="2.5"/>`)
+    .join('')
+  const xlabels = pts
+    .map((p) => `<div class="lcx" style="left:${((p.x / W) * 100).toFixed(2)}%">${esc(short(p.label, 10))}</div>`)
+    .join('')
+  const vlabels = pts
+    .map(
+      (p) =>
+        `<div class="lcv" style="left:${((p.x / W) * 100).toFixed(2)}%;top:${(
+          (Math.max(4, p.y - 34) / H) *
+          100
+        ).toFixed(2)}%">${esc(String(p.value))}</div>`,
+    )
+    .join('')
+  return `<div class="lchart"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${t.primary}" stop-opacity="0.34"/>
+      <stop offset="100%" stop-color="${t.primary}" stop-opacity="0"/>
+    </linearGradient></defs>
+    ${grid}
+    <path d="${areaPath}" fill="url(#${gid})" stroke="none"/>
+    <path d="${linePath}" fill="none" stroke="${t.primary}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    ${dots}
+  </svg>${vlabels}${xlabels}</div>`
+}
+/** 数据表格：真实数字/状态必须代码画表格，不能靠生图 */
+function dataTable(t: DeckTheme, columns: string[], rows: string[][]): string {
+  void t
+  const head = columns
+    .slice(0, 6)
+    .map((c) => `<th>${esc(c)}</th>`)
+    .join('')
+  const body = rows
+    .slice(0, 7)
+    .map(
+      (r) =>
+        `<tr>${r
+          .slice(0, columns.length)
+          .map((c, j) => (j === 0 ? `<td><b>${esc(c)}</b></td>` : `<td>${esc(c)}</td>`))
+          .join('')}</tr>`,
+    )
+    .join('')
+  return `<div class="dtbl"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`
+}
 
 export interface DeckCompare {
   left: { heading: string; points: string[] }
@@ -451,6 +523,8 @@ export type DeckLayout =
   | 'tree'
   | 'diamond'
   | 'bulb'
+  | 'line'
+  | 'table'
 export interface DeckSlideIn {
   /** LLM 判断的版式类型；缺失时按内容推断 */
   layout?: DeckLayout | string
@@ -458,7 +532,9 @@ export interface DeckSlideIn {
   en?: string
   intro?: string
   bullets?: string[]
-  data?: { kind: 'bar' | 'stat' | 'ring'; items: { label: string; value: string | number }[] }
+  data?: { kind: 'bar' | 'stat' | 'ring' | 'line'; items: { label: string; value: string | number }[] }
+  /** 数据表格：columns 是表头，rows 每行长度跟 columns 一致 */
+  table?: { columns: string[]; rows: string[][] }
   /** 对比页：左右两栏各一个观点组 */
   compare?: DeckCompare
   /** SWOT 四象限 */
@@ -683,6 +759,21 @@ function css(t: DeckTheme): string {
   .bar .track{flex:1;height:16px;background:#eceff4;border-radius:8px;position:relative}
   .bar .fill{position:absolute;left:0;top:0;height:16px;border-radius:8px}
   .bar .bv{width:64px;font-size:16px;font-weight:800;color:${t.primary};flex:none}
+
+  /* 折线图：真实数字，代码画 */
+  .lchart{flex:1;position:relative;align-self:stretch;width:100%;margin-top:24px;margin-bottom:8px}
+  .lchart svg{position:absolute;inset:0;width:100%;height:100%}
+  .lchart .lcx{position:absolute;bottom:8px;transform:translateX(-50%);font-size:13.5px;color:#7c828d;white-space:nowrap}
+  .lchart .lcv{position:absolute;transform:translate(-50%,-100%);font-size:15px;font-weight:800;color:${t.primaryDk};white-space:nowrap;font-family:"Arial","Microsoft YaHei",sans-serif}
+
+  /* 数据表格：真实数字/状态，代码画 */
+  .dtbl{flex:1;margin-top:24px;align-self:center;width:100%;overflow:hidden;border-radius:12px;border:1px solid #e4e7ec}
+  .dtbl table{width:100%;border-collapse:collapse;font-size:14.5px}
+  .dtbl thead th{background:${t.primary};color:#fff;text-align:left;padding:15px 20px;font-weight:700;font-size:13.5px;letter-spacing:.3px}
+  .dtbl tbody td{padding:14px 20px;border-bottom:1px solid #eceef2;color:${t.ink};line-height:1.5}
+  .dtbl tbody td b{color:${t.primaryDk};font-weight:700}
+  .dtbl tbody tr:last-child td{border-bottom:0}
+  .dtbl tbody tr:nth-child(even){background:${t.primary}07}
 
   /* 对比页（两栏） */
   .cmp{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:38px;margin-top:30px;margin-bottom:8px;align-content:stretch;grid-auto-rows:1fr}
@@ -1276,6 +1367,12 @@ function chart(sl: DeckSlideIn, t: DeckTheme, en: string, o: DeckOutline): strin
           `<div class="it"><div class="v">${esc(String(r.value))}</div><div class="bd"></div><div class="k">${esc(r.label)}</div></div>`,
       )
       .join('')}</div>`
+  } else if (d.kind === 'line') {
+    // 趋势/预测类数据 → 折线图，代码画保证数字准确
+    body = lineChart(
+      t,
+      rows.map((r) => ({ label: r.label, value: Math.abs(parseFloat(String(r.value).replace(/[^0-9.\-]/g, '')) || 0) })),
+    )
   } else {
     const nums = rows.map((r) => Math.abs(parseFloat(String(r.value).replace(/[^0-9.\-]/g, '')) || 0))
     const mx = Math.max(...nums, 1)
@@ -1289,6 +1386,11 @@ function chart(sl: DeckSlideIn, t: DeckTheme, en: string, o: DeckOutline): strin
       .join('')}</div>`
   }
   return bodySlide(o, `${head(sl, en, o)}${body}`)
+}
+
+function tableLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
+  const tb = sl.table!
+  return bodySlide(o, `${head(sl, en, o)}${dataTable(o.theme, tb.columns, tb.rows)}`)
 }
 
 function compare(sl: DeckSlideIn, en: string, o: DeckOutline): string {
@@ -1359,6 +1461,8 @@ const CONTENT_LAYOUTS = new Set([
   'tree',
   'diamond',
   'bulb',
+  'line',
+  'table',
 ])
 
 function spokeLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
@@ -1425,7 +1529,8 @@ export function resolveLayout(sl: DeckSlideIn): string {
     big_number: 'big_number',
   }
   if (lay in need && (sl[need[lay]] == null || typeof sl[need[lay]] !== 'object')) lay = ''
-  if ((lay === 'bar' || lay === 'stats' || lay === 'rings') && !sl.data?.items?.length) lay = ''
+  if ((lay === 'bar' || lay === 'stats' || lay === 'rings' || lay === 'line') && !sl.data?.items?.length) lay = ''
+  if (lay === 'table' && !(sl.table?.columns?.length && sl.table?.rows?.length)) lay = ''
   if (
     (lay === 'spoke' || lay === 'hive' || lay === 'cycle' || lay === 'bulb') &&
     (sl.bullets || []).filter((b) => b && b.trim()).length < 3
@@ -1436,7 +1541,9 @@ export function resolveLayout(sl: DeckSlideIn): string {
   if (lay === 'gallery' && (sl.images || []).filter(Boolean).length < 2) lay = ''
   if (CONTENT_LAYOUTS.has(lay)) return lay
   if ((sl.images || []).filter(Boolean).length >= 2) return 'gallery'
+  if (sl.table?.columns?.length && sl.table?.rows?.length) return 'table'
   if (sl.data?.kind === 'ring' && sl.data.items?.length) return 'rings'
+  if (sl.data?.kind === 'line' && sl.data.items?.length) return 'line'
   if (sl.swot && (sl.swot.s?.length || sl.swot.w?.length || sl.swot.o?.length || sl.swot.t?.length))
     return 'swot'
   if (sl.matrix?.cells?.length) return 'matrix'
@@ -1471,7 +1578,8 @@ export function composeDeck(o: DeckOutline): { styleTag: string; slides: string[
       else if (lay === 'tree') slides.push(treeLayout(sl, en, o))
       else if (lay === 'diamond') slides.push(diamondLayout(sl, en, o))
       else if (lay === 'bulb') slides.push(bulbLayout(sl, en, o))
-      else if (lay === 'bar' || lay === 'stats') slides.push(chart(sl, t, en, o))
+      else if (lay === 'table') slides.push(tableLayout(sl, en, o))
+      else if (lay === 'bar' || lay === 'stats' || lay === 'line') slides.push(chart(sl, t, en, o))
       else if (lay === 'big_number') slides.push(bigNumber(sl, en, o))
       else if (lay === 'image_text') {
         slides.push(content(sl, en, o, imgFlip))

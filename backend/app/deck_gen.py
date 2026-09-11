@@ -84,6 +84,14 @@ def normalize_outline_text(outline: dict) -> dict:
                 for k in ("s", "w", "o", "t"):
                     if isinstance(sw.get(k), list):
                         sw[k] = [_norm_text(p) for p in sw[k] if str(p).strip()]
+            tbl = sl.get("table")
+            if isinstance(tbl, dict):
+                if isinstance(tbl.get("columns"), list):
+                    tbl["columns"] = [fix_short(c) for c in tbl["columns"] if str(c).strip()]
+                if isinstance(tbl.get("rows"), list):
+                    tbl["rows"] = [
+                        [fix_short(c) for c in row] for row in tbl["rows"] if isinstance(row, list)
+                    ]
     return outline
 
 W, H = 1280, 720           # 16:9
@@ -728,6 +736,7 @@ def build_deck(outline: dict, theme_key: str = "red", bg: dict | None = None) ->
         page += 1
         for sl in (sec.get("slides") or [])[:4]:
             d = sl.get("data") if isinstance(sl.get("data"), dict) else None
+            tbl = sl.get("table") if isinstance(sl.get("table"), dict) else None
             cmp = sl.get("compare") if isinstance(sl.get("compare"), dict) else None
             sw = sl.get("swot") if isinstance(sl.get("swot"), dict) else None
             mx = sl.get("matrix") if isinstance(sl.get("matrix"), dict) else None
@@ -745,11 +754,18 @@ def build_deck(outline: dict, theme_key: str = "red", bg: dict | None = None) ->
                 slides.append(_matrix(t, i, ttl, en, mx, page, cbg))
             elif lay == "compare" and cmp:
                 slides.append(_compare(t, i, ttl, en, cmp, page, cbg))
-            elif lay in ("bar", "stats", "rings") and d and d.get("items"):
-                k = "bar" if d.get("kind") == "bar" else "stat"  # python 备用路把 ring 当 stat 画
+            elif lay in ("bar", "stats", "rings", "line") and d and d.get("items"):
+                k = "stat" if d.get("kind") == "ring" else "bar"  # python 备用路把 ring/line 都当 bar 画
                 slides.append(_chart(t, i, ttl, en, k, d.get("items") or [], page, cbg))
             elif lay == "big_number" and bn:
                 slides.append(_big_number(t, i, ttl, en, bn, page, cbg))
+            elif lay == "table" and tbl and tbl.get("rows"):
+                cols = [str(c).strip() for c in (tbl.get("columns") or [])]
+                rows_txt = [
+                    "、".join(f"{cols[j]}：{c}" if j < len(cols) and j > 0 else str(c) for j, c in enumerate(r))
+                    for r in (tbl.get("rows") or [])[:6]
+                ]
+                slides.append(_content(t, i, ttl, en, (sl.get("intro") or "").strip(), rows_txt, page, cbg, img, "list"))
             else:
                 slides.append(_content(
                     t, i, ttl, en, (sl.get("intro") or "").strip(),
@@ -769,7 +785,7 @@ def build_deck(outline: dict, theme_key: str = "red", bg: dict | None = None) ->
 _CONTENT_LAYOUTS = {
     "cards", "list", "quote", "timeline", "big_number", "stats", "bar", "rings",
     "compare", "matrix", "swot", "image_text", "spoke", "hive", "cycle", "gallery",
-    "tree", "diamond", "bulb",
+    "tree", "diamond", "bulb", "line", "table",
 }
 
 
@@ -779,7 +795,9 @@ def resolve_layout(sl: dict) -> str:
     _need = {"swot": "swot", "matrix": "matrix", "compare": "compare", "big_number": "big_number"}
     if lay in _need and not isinstance(sl.get(_need[lay]), dict):
         lay = ""
-    if lay in ("bar", "stats", "rings") and not (isinstance(sl.get("data"), dict) and sl["data"].get("items")):
+    if lay in ("bar", "stats", "rings", "line") and not (isinstance(sl.get("data"), dict) and sl["data"].get("items")):
+        lay = ""
+    if lay == "table" and not (isinstance(sl.get("table"), dict) and sl["table"].get("rows")):
         lay = ""
     if lay in ("spoke", "hive", "cycle", "bulb", "diamond") and len(
         [b for b in (sl.get("bullets") or []) if str(b).strip()]
@@ -789,8 +807,12 @@ def resolve_layout(sl: dict) -> str:
         lay = ""
     if lay in _CONTENT_LAYOUTS:
         return lay
+    if isinstance(sl.get("table"), dict) and sl["table"].get("rows"):
+        return "table"
     if isinstance(sl.get("data"), dict) and sl["data"].get("kind") == "ring" and sl["data"].get("items"):
         return "rings"
+    if isinstance(sl.get("data"), dict) and sl["data"].get("kind") == "line" and sl["data"].get("items"):
+        return "line"
     # 兜底推断（老数据 / 模型没给 layout）
     if isinstance(sl.get("swot"), dict) and any(sl["swot"].get(k) for k in ("s", "w", "o", "t")):
         return "swot"
