@@ -401,6 +401,8 @@ export interface DeckOutline {
   coverImage?: string
   /** 封面亮点规格条（产品/方案发布类）：3~4 个 */
   coverFeatures?: { value: string; label: string; en?: string }[]
+  /** 参考图归类出来的排版倾向（只影响装饰母题轮换和疏密，版面尺寸位置仍全部本引擎算） */
+  style_hint?: { density?: 'airy' | 'balanced' | 'packed' | string; motif?: string }
 }
 
 const esc = (s = '') =>
@@ -714,6 +716,12 @@ function css(t: DeckTheme): string {
 
   /* geo 风：白底 + 实心导航块卡片（参考模板那种），撑满整页高度 + 大号数字水印 */
   .body.geo,.s-toc.geo{background:#fff}
+  /* 参考图排版倾向：饱满 = 边距收紧、正文更近；留白 = 边距放宽 */
+  .body.geo.d-packed{padding:44px 80px}
+  .body.geo.d-packed .ghead{margin-bottom:2px}
+  .body.geo.d-packed .cards,.body.geo.d-packed .list,.body.geo.d-packed .imgrow{margin-top:18px}
+  .body.geo.d-airy{padding:66px 116px}
+  .body.geo.d-airy .cards,.body.geo.d-airy .list{margin-top:40px}
   .geo .cards{align-content:stretch;grid-auto-rows:1fr;margin-top:26px;gap:24px}
   .geo .cards .card{background:${t.primary};border:0;color:#fff;justify-content:flex-start;gap:18px;padding:34px 28px;position:relative;overflow:hidden}
   .geo .cards .card:nth-child(even){background:${t.primaryDk}}
@@ -799,10 +807,10 @@ function css(t: DeckTheme): string {
 const bgImg = (url?: string) => (url ? `<img class="bg" src="${esc(url)}" crossorigin="anonymous">` : '')
 
 const isGeo = (o: DeckOutline) => o.theme.style === 'geo'
-/** geo 风内容页装饰：左侧色条 + 左下圆点圈 + 每页轮换的大几何元素 */
-function geoDeco(t: DeckTheme, v = 0): string {
-  const m = ((v % 9) + 9) % 9
-  const big = [
+/** geo 风内容页装饰：左侧色条 + 左下圆点圈 + 每页轮换的大几何元素。
+ * motif（参考图归类出来的主装饰形状）只改"轮换池的排序偏好"，具体尺寸/位置全在下面写死。*/
+function geoDeco(t: DeckTheme, v = 0, motifKey = ''): string {
+  const all = [
     `<div class="v0">${arcCluster(t, 460)}</div>`,
     `<div class="v1">${arcCluster(t, 420)}</div>`,
     `<div class="v2">${rayBurst(t, 400)}</div>`,
@@ -812,7 +820,17 @@ function geoDeco(t: DeckTheme, v = 0): string {
     `<div class="v6">${motif(t, 'gear', 240)}</div>`,
     `<div class="v7">${motif(t, 'bulb', 230)}</div>`,
     `<div class="v8">${motif(t, 'petal', 240)}</div>`,
-  ][m]
+  ]
+  // 按主装饰母题挑一个优先子集轮换；没命中就用全集
+  const pools: Record<string, number[]> = {
+    hexagon: [3, 4, 6, 0, 2],
+    circle: [0, 1, 5, 2, 7],
+    arrow: [4, 2, 0, 5, 3],
+    wedge: [4, 0, 5, 1, 8],
+    line: [2, 1, 0, 5, 4],
+  }
+  const pool = pools[motifKey] || [0, 1, 2, 3, 4, 5, 6, 7, 8]
+  const big = all[pool[((v % pool.length) + pool.length) % pool.length]]
   return `<div class="geo-d">${big}<div class="dr">${dotRing(t, 130)}</div><div class="gbar"></div></div>`
 }
 let _geoIdx = 0
@@ -945,12 +963,13 @@ const techMark = '<div class="ctech"><i class="t1"></i><i class="t2"></i><i clas
 /** 内容页底：geo 风用几何装饰；否则有 AI 底图就铺图+渐变白蒙层，没有就代码淡纹+科技角标 */
 const cbg = (o: DeckOutline) =>
   isGeo(o)
-    ? geoDeco(o.theme, _geoIdx)
+    ? geoDeco(o.theme, _geoIdx, o.style_hint?.motif || '')
     : (o.bg?.content
         ? `${bgImg(o.bg.content)}<div class="cwash"></div>`
         : `<div class="cbg"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i></div>`) + techMark
 const bodySlide = (o: DeckOutline, inner: string) => {
-  const html = `<div class="slide body${isGeo(o) ? ' geo' : ''}">${cbg(o)}<div class="z">${inner}</div></div>`
+  const dz = isGeo(o) && o.style_hint?.density === 'packed' ? ' d-packed' : isGeo(o) && o.style_hint?.density === 'airy' ? ' d-airy' : ''
+  const html = `<div class="slide body${isGeo(o) ? ' geo' : ''}${dz}">${cbg(o)}<div class="z">${inner}</div></div>`
   if (isGeo(o)) _geoIdx++
   return html
 }

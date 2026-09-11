@@ -166,6 +166,10 @@ class DeckRequest(BaseModel):
     photos: list[dict] = []
     # 参考图分析出来的配色（5 个十六进制色），有则覆盖 LLM 的 palette
     palette: list[str] = []
+    # 参考图归类出来的通用版式偏好 / 密度 / 主装饰形状（只影响我们自己排版引擎的选择，不复刻）
+    ref_layouts: list[str] = []
+    ref_density: str = ""
+    ref_motif: str = ""
 
 
 class DeckPptxRequest(BaseModel):

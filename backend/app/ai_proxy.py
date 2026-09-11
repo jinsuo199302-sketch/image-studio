@@ -843,12 +843,27 @@ _DECK_PHOTO_RULE = (
 
 
 async def _gen_deck_outline(
-    topic: str, sections: int, extra: str = "", material: str = "", photo_tags: list[str] | None = None
+    topic: str,
+    sections: int,
+    extra: str = "",
+    material: str = "",
+    photo_tags: list[str] | None = None,
+    ref_layouts: list[str] | None = None,
+    ref_density: str = "",
 ) -> dict:
     """主题（或整份资料）→ PPT 大纲 JSON（含 title/subtitle/sections + palette + mood）。
     material 非空时走"重组资料"模式：标题/内容全部从资料提炼，不新增资料里没有的信息。
-    photo_tags 非空时让模型给合适的 slide 标 "image":编号。"""
+    photo_tags 非空时让模型给合适的 slide 标 "image":编号。
+    ref_layouts / ref_density：参考图归类出来的通用版式偏好，只做倾向性引导，内容不契合就不用。"""
     extra_line = f"用户补充要求：{extra}。\n" if extra else ""
+    ref_line = ""
+    if ref_layouts:
+        _dz = {"airy": "整体偏留白、每页别塞太满", "packed": "每页信息量做足、少留白、多用图解页", "balanced": "疏密适中"}
+        ref_line = (
+            f"【参考风格倾向】用户挑了一套喜欢的模板，它常用这几类通用图解：{('、'.join(ref_layouts))}。"
+            f"在内容确实契合时，优先从这几种里选 layout（别硬套，不契合就按内容本身最合适的来）；"
+            f"排版{_dz.get(ref_density, '疏密适中')}。这只是风格倾向，版面/尺寸/位置全部由我们自己的引擎决定。\n"
+        )
     photo_rule = ""
     if photo_tags:
         photo_list = "\n".join(f"[{i}] {t}" for i, t in enumerate(photo_tags))
@@ -861,14 +876,14 @@ async def _gen_deck_outline(
             "但不得新增资料里没有的事实、数据或观点，不要脑补。资料里出现的数字/占比要保留并可做成图表页。\n"
             f"章节数：资料结构清晰就按它自然的段落数（2~6 个）来；否则归纳成约 {sections} 个章节。"
             "每个 section 下 2~4 个 slides，普通 slide 3~5 条 bullets、每条 15~45 字。\n"
-            f"{extra_line}"
+            f"{extra_line}{ref_line}"
             f"{_DECK_JSON_SPEC}{photo_rule}\n"
             f"【资料原文】\n{material}"
         )
     else:
         prompt = (
             f"你是资深 PPT 设计师。为主题「{topic}」写一份幻灯片大纲，并给出配套的视觉方案。\n"
-            f"{extra_line}"
+            f"{extra_line}{ref_line}"
             f"{_DECK_JSON_SPEC}{photo_rule}\n"
             f"要求：sections 生成 {sections} 个；每个 section 下 2~3 个 slides；普通 slide 配 3~5 条 bullets，"
             "每条 20~45 字，具体、准确、书面语，不空话套话；title/heading 精炼；涉及事实或数据要可靠。"
@@ -975,7 +990,10 @@ async def _gen_deck_spot_photos(prompts: list[str], db: Session, user_id: str) -
     return out
 
 
-async def _run_deck_job(job_id, user_id, ticket, topic, n, theme, extra, ai_bg, material="", photos=None, palette=None):
+async def _run_deck_job(
+    job_id, user_id, ticket, topic, n, theme, extra, ai_bg, material="", photos=None, palette=None,
+    ref_layouts=None, ref_density="", ref_motif="",
+):
     from app.database import SessionLocal
 
     photos = photos or []
@@ -985,10 +1003,14 @@ async def _run_deck_job(job_id, user_id, ticket, topic, n, theme, extra, ai_bg, 
         if user is None:
             raise RuntimeError("用户不存在")
         outline = await _gen_deck_outline(
-            topic, n, extra, material, [p["tag"] for p in photos] if photos else None
+            topic, n, extra, material, [p["tag"] for p in photos] if photos else None,
+            ref_layouts=ref_layouts, ref_density=ref_density,
         )
         outline = deck_gen.normalize_outline_text(outline)
         outline = deck_gen.apply_theme_palette(outline, theme, palette)
+        # 参考图的密度/主装饰形状：只塞进 outline 供前端排版引擎读，不影响任何内容
+        if ref_density or ref_motif:
+            outline["style_hint"] = {"density": ref_density or "balanced", "motif": ref_motif or "mixed"}
         is_geo = theme in deck_gen.GEO_THEMES
         # 用户没上传照片、又勾了「AI 配图」：几何风 → AI 按 photo_prompts 生成写实照片嵌进图框
         if not photos and ai_bg and is_geo:
@@ -1052,15 +1074,37 @@ async def design_deck(
     ticket = billing.consume(db, user, "AIPPT")
     # ai_bg：非几何风 = 生成整页 AI 底图；几何风 = 按主题生成写实照片嵌进几何图框
     ai_bg = bool(payload.ai_bg)
+    ref_layouts, ref_density, ref_motif = _clean_ref_hints(
+        payload.ref_layouts, payload.ref_density, payload.ref_motif
+    )
 
     # 一律走异步 job：大纲(+可选生图)可能要 1~3 分钟，同步返回会被 nginx 网关超时掐断
     job_id = uuid.uuid4().hex
     _HANDOUT_JOBS[job_id] = {"status": "pending", "user_id": user.id}
     _prune_handout_jobs()
     asyncio.create_task(
-        _run_deck_job(job_id, user.id, ticket, topic, n, payload.theme, extra, ai_bg, "", photos, ref_pal)
+        _run_deck_job(
+            job_id, user.id, ticket, topic, n, payload.theme, extra, ai_bg, "", photos, ref_pal,
+            ref_layouts, ref_density, ref_motif,
+        )
     )
     return {"jobId": job_id}
+
+
+_ALLOWED_REF_LAYOUTS = {
+    "cards", "list", "timeline", "spoke", "hive", "cycle",
+    "matrix", "swot", "gallery", "stats", "bar", "big_number", "quote",
+}
+
+
+def _clean_ref_hints(layouts, density, motif) -> tuple[list[str], str, str]:
+    """前端传来的参考图版式偏好——收窄到白名单，防注入。"""
+    ls = [str(x).strip().lower() for x in (layouts or []) if str(x).strip().lower() in _ALLOWED_REF_LAYOUTS][:6]
+    d = str(density or "").strip().lower()
+    d = d if d in ("airy", "balanced", "packed") else ""
+    m = str(motif or "").strip().lower()
+    m = m if m in ("hexagon", "circle", "arrow", "wedge", "line", "mixed") else ""
+    return ls, d, m
 
 
 def _shrink_jpeg(image_bytes: bytes, max_px: int = 1024, quality: int = 80) -> tuple[bytes, str]:
@@ -1234,20 +1278,25 @@ async def design_deck_photos(
     return {"photos": photos}
 
 
-_DECK_REF_PROMPT = """你在分析一张 PPT 模板/参考图，目的是判断它属于我们系统的哪种风格 + 提取配色气质，用来配置我们自己的模板生成器。绝不复刻参考图的具体版面。
+_DECK_REF_PROMPT = """你在分析一张 PPT 模板/参考图，目的是把它归到我们系统已有的几个通用类别里，用来配置我们自己的模板生成器。我们只学"用了哪几类通用图解、整体多密、主色调"这种最上层的信息，绝不复刻参考图的任何一页版面、坐标、形状或元素数量——那些全部由我们自己的排版引擎独立决定。
 
 只返回一个 JSON 对象，不要多余说明：
-{"style":"geo 或 photo 或 plain","palette":["#主色","#强调色","#主色深","#背景浅色","#正文深灰"],"mood":"一句话气质描述"}
+{"style":"geo 或 photo 或 plain","palette":["#主色","#强调色","#主色深","#背景浅色","#正文深灰"],"mood":"一句话气质描述","layouts":["从下面固定列表里挑 3~6 个"],"density":"airy 或 balanced 或 packed","motif":"hexagon 或 circle 或 arrow 或 wedge 或 line 或 mixed"}
 
-style 判断：
+style：
 - "geo"：白底 / 浅底，靠色块、圆弧、环形图、线条等几何图形做装饰
 - "photo"：用了实景照片或整幅设计大图当背景 / 主视觉
 - "plain"：极简白底，装饰很少
 
-palette：5 个十六进制色，要能代表这套模板的配色气质（不是逐像素取色，是整体感觉）。
-mood：例「沉稳的商务深蓝」「科技感的青色调」「简洁的浅灰商务」。
+palette：5 个十六进制色，代表整体配色气质（不是逐像素取色）。
+mood：例「沉稳的商务深蓝」「科技感的青色调」。
 
-严禁：描述任何可读文字、精确坐标、精确外形、元素数量。只做风格归类 + 配色气质提取。"""
+layouts：这套模板"经常出现"的通用图解类型，只能从这个固定列表里选（这些是行业通用的 SmartArt 类别，不是描述某一页）：
+  cards（并列要点块）/ list（编号清单）/ timeline（流程时间轴）/ spoke（中心辐射）/ hive（蜂窝六边形群）/ cycle（循环箭头）/ matrix（四象限）/ swot / gallery（多图并排）/ stats（关键指标）/ bar（条形对比）/ big_number（单个大数字）/ quote（金句）
+density：整份看下来页面平均有多满——airy 留白多 / balanced 适中 / packed 信息量大铺得满。
+motif：占主导的装饰形状家族——hexagon 六边形 / circle 圆与圆环 / arrow 箭头 / wedge 斜切色块 / line 细线 / mixed 混合。
+
+严禁：描述任何可读文字、精确坐标、精确外形、元素数量、某一页的具体布局。layouts 只是勾选通用类别，不是描述参考图。"""
 
 
 @router.post("/design/deck/reference")
@@ -1307,6 +1356,13 @@ async def _run_deck_ref_job(job_id, user_id, raw: bytes, ct: str):
         pal = [str(c).strip() for c in (d.get("palette") or []) if re.match(r"^#?[0-9a-fA-F]{6}$", str(c).strip())]
         pal = [c if c.startswith("#") else "#" + c for c in pal][:5]
         theme = {"geo": "geoblue", "photo": "techblue"}.get(style, "auto")
+        layouts = [
+            str(x).strip().lower() for x in (d.get("layouts") or []) if str(x).strip().lower() in _ALLOWED_REF_LAYOUTS
+        ][:6]
+        density = str(d.get("density") or "").strip().lower()
+        density = density if density in ("airy", "balanced", "packed") else "balanced"
+        motif = str(d.get("motif") or "").strip().lower()
+        motif = motif if motif in ("hexagon", "circle", "arrow", "wedge", "line", "mixed") else "mixed"
         _HANDOUT_JOBS[job_id] = {
             "status": "done",
             "user_id": user_id,
@@ -1315,6 +1371,9 @@ async def _run_deck_ref_job(job_id, user_id, raw: bytes, ct: str):
                 "palette": pal if len(pal) == 5 else [],
                 "mood": str(d.get("mood") or "").strip()[:40],
                 "ai_bg": style == "photo",
+                "layouts": layouts,
+                "density": density,
+                "motif": motif,
             },
         }
     except HTTPException as e:
@@ -1333,6 +1392,7 @@ async def design_deck_material(
     ai_bg: bool = Form(False),
     photos_json: str = Form(""),
     palette_json: str = Form(""),
+    ref_hints_json: str = Form(""),
     user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -1377,6 +1437,14 @@ async def design_deck_material(
     except Exception:
         ref_pal = None
 
+    try:
+        _rh = json.loads(ref_hints_json) if ref_hints_json.strip() else {}
+    except Exception:
+        _rh = {}
+    ref_layouts, ref_density, ref_motif = _clean_ref_hints(
+        _rh.get("layouts"), _rh.get("density"), _rh.get("motif")
+    )
+
     await _moderate_text(material[:2000] + " " + extra.strip()[:200])
     n = min(6, max(2, sections))
     ai_bg2 = bool(ai_bg)  # 几何风时 = AI 按主题配图；非几何风 = AI 整页底图
@@ -1387,7 +1455,8 @@ async def design_deck_material(
     _prune_handout_jobs()
     asyncio.create_task(
         _run_deck_job(
-            job_id, user.id, ticket, "", n, theme, extra.strip()[:300], ai_bg2, material, photos, ref_pal
+            job_id, user.id, ticket, "", n, theme, extra.strip()[:300], ai_bg2, material, photos, ref_pal,
+            ref_layouts, ref_density, ref_motif,
         )
     )
     return {"jobId": job_id}

@@ -67,6 +67,11 @@ const refInput = ref<HTMLInputElement>()
 const refStyle = ref<DeckRefStyle | null>(null)
 const refBusy = ref(false)
 const REF_LABEL: Record<string, string> = { geoblue: '几何图形风', techblue: '照片背景风', auto: '简约风' }
+const LAYOUT_LABEL: Record<string, string> = {
+  cards: '卡片', list: '清单', timeline: '时间轴', spoke: '辐射', hive: '蜂窝', cycle: '循环',
+  matrix: '四象限', swot: 'SWOT', gallery: '图墙', stats: '指标', bar: '条形图', big_number: '大数字', quote: '金句',
+}
+const DENSITY_LABEL: Record<string, string> = { airy: '留白', balanced: '适中', packed: '饱满' }
 async function pickRef(e: Event) {
   const f = (e.target as HTMLInputElement).files?.[0]
   ;(e.target as HTMLInputElement).value = ''
@@ -78,7 +83,8 @@ async function pickRef(e: Event) {
     refStyle.value = r
     theme.value = r.theme
     aiBg.value = r.ai_bg
-    ElMessage.success(`已识别：${REF_LABEL[r.theme] || r.theme}${r.mood ? ' · ' + r.mood : ''}`)
+    const lay = r.layouts?.length ? ` · 偏好版式 ${r.layouts.map((k) => LAYOUT_LABEL[k] || k).join('/')}` : ''
+    ElMessage.success(`已识别：${REF_LABEL[r.theme] || r.theme}${r.mood ? ' · ' + r.mood : ''}${lay}`)
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : '参考图分析失败')
   } finally {
@@ -140,6 +146,13 @@ async function genDeck() {
       photos = await uploadDeckPhotos(deckPhotos.value.map((p) => p.file))
     }
     const refPal = refStyle.value?.palette ?? []
+    const refHints = refStyle.value
+      ? {
+          layouts: refStyle.value.layouts ?? [],
+          density: refStyle.value.density ?? '',
+          motif: refStyle.value.motif ?? '',
+        }
+      : {}
     const r = useMaterial
       ? await generateDeckFromMaterial(
           { file: matFile.value ?? undefined, pastedText: matText.value.trim() || undefined },
@@ -149,6 +162,7 @@ async function genDeck() {
           aiBg.value,
           photos,
           refPal,
+          refHints,
         )
       : await generateDeck(
           topic.value.trim(),
@@ -158,6 +172,7 @@ async function genDeck() {
           aiBg.value,
           photos,
           refPal,
+          refHints,
         )
     await preloadSlideImages(r.slides as unknown as SlideData[])
     deck.value = r
@@ -349,15 +364,22 @@ function rmImg(i: number) {
           >
             {{ refBusy ? '识别中…' : '↑ 上传一张喜欢的模板图，按它的风格生成' }}
           </button>
-          <div v-if="refStyle" class="mt-1 flex items-center gap-1.5 text-[11px] text-gray-500">
-            <span class="rounded bg-violet-50 px-1.5 py-0.5 text-violet-600">{{ REF_LABEL[refStyle.theme] || refStyle.theme }}</span>
-            <span
-              v-for="c in refStyle.palette.slice(0, 5)"
-              :key="c"
-              class="h-3 w-3 shrink-0 rounded-sm border border-gray-200"
-              :style="{ background: c }"
-            />
-            <span class="ml-auto cursor-pointer text-gray-400 hover:text-red-400" @click="refStyle = null">清除</span>
+          <div v-if="refStyle" class="mt-1 space-y-1 text-[11px] text-gray-500">
+            <div class="flex items-center gap-1.5">
+              <span class="rounded bg-violet-50 px-1.5 py-0.5 text-violet-600">{{ REF_LABEL[refStyle.theme] || refStyle.theme }}</span>
+              <span
+                v-for="c in refStyle.palette.slice(0, 5)"
+                :key="c"
+                class="h-3 w-3 shrink-0 rounded-sm border border-gray-200"
+                :style="{ background: c }"
+              />
+              <span class="ml-auto cursor-pointer text-gray-400 hover:text-red-400" @click="refStyle = null">清除</span>
+            </div>
+            <div v-if="refStyle.layouts?.length" class="text-gray-400">
+              偏好版式：{{ refStyle.layouts.map((k) => LAYOUT_LABEL[k] || k).join(' / ')
+              }}<template v-if="refStyle.density"> · 排版{{ DENSITY_LABEL[refStyle.density] || refStyle.density }}</template>
+              <span class="text-gray-300">（引导 AI 选版式，版面由我们自己排）</span>
+            </div>
           </div>
         </div>
         <el-input

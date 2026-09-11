@@ -344,6 +344,7 @@ export interface DeckOutlineRaw {
   mood?: string
   cover_image?: string
   cover_features?: { value: string; label: string; en?: string }[]
+  style_hint?: { density?: string; motif?: string }
   sections: {
     heading: string
     en?: string
@@ -404,6 +405,15 @@ export interface DeckRefStyle {
   palette: string[]
   mood: string
   ai_bg: boolean
+  /** 参考图归类出来的通用版式偏好（生成时引导 AI 选版式，不复刻版面） */
+  layouts?: string[]
+  density?: string
+  motif?: string
+}
+export interface DeckRefHints {
+  layouts?: string[]
+  density?: string
+  motif?: string
 }
 
 /** 上传一张喜欢的 PPT 模板/参考图 → 判断风格类别 + 提取配色气质（不复刻版面） */
@@ -441,10 +451,16 @@ export async function generateDeck(
   aiBg = false,
   photos: DeckPhoto[] = [],
   palette: string[] = [],
+  refHints: DeckRefHints = {},
 ): Promise<DeckResult> {
   const r = await authPostJson<DeckResult & { jobId?: string }>(
     '/design/deck',
-    { topic, sections, theme, extra, ai_bg: aiBg, photos, palette },
+    {
+      topic, sections, theme, extra, ai_bg: aiBg, photos, palette,
+      ref_layouts: refHints.layouts ?? [],
+      ref_density: refHints.density ?? '',
+      ref_motif: refHints.motif ?? '',
+    },
     'PPT 生成失败',
   )
   return r.jobId ? pollDeckJob(r.jobId) : r
@@ -462,6 +478,7 @@ export async function generateDeckFromMaterial(
   aiBg = false,
   photos: DeckPhoto[] = [],
   palette: string[] = [],
+  refHints: DeckRefHints = {},
 ): Promise<DeckResult> {
   const form = new FormData()
   if (input.file) form.append('file', input.file, input.file.name || 'material')
@@ -472,6 +489,9 @@ export async function generateDeckFromMaterial(
   form.append('ai_bg', String(aiBg))
   if (photos.length) form.append('photos_json', JSON.stringify(photos))
   if (palette.length === 5) form.append('palette_json', JSON.stringify(palette))
+  if (refHints.layouts?.length || refHints.density || refHints.motif) {
+    form.append('ref_hints_json', JSON.stringify(refHints))
+  }
   const { jobId } = await authPostForm<{ jobId: string }>('/design/deck/material', form, 'PPT 生成失败')
   return pollDeckJob(jobId)
 }
