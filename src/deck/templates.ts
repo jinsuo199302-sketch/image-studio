@@ -198,8 +198,9 @@ function numRail(items: string[], t: DeckTheme): string {
 function triImg(url: string): string {
   return `<div class="trif"><div class="trif-b"></div><img src="${esc(url)}" crossorigin="anonymous"></div>`
 }
-/** 蜂窝六边形群 + 图标（参考模板 #7）。百分比定位，铺满内容区 */
-function hexHive(t: DeckTheme, center: string, items: string[]): string {
+/** 蜂窝六边形群 + 图标/照片（参考模板 #7）。百分比定位，铺满内容区。
+ * 传了 images（≥3 张）时外圈六边形套真实照片+底部说明条，否则套图标+文字。 */
+function hexHive(t: DeckTheme, center: string, items: string[], images?: string[]): string {
   const n = Math.min(items.length, 6)
   const pos: [number, number][] = [
     [0, -1.05],
@@ -212,20 +213,105 @@ function hexHive(t: DeckTheme, center: string, items: string[]): string {
   // viewBox 1000×480，中心 (500,240)
   const rx = 300
   const ry = 172
+  const usePhoto = !!images && images.length >= 3
   const cells = items
     .slice(0, n)
     .map((b, i) => {
       const [dx, dy] = pos[i]
-      return `<div class="hvc" style="left:${(((500 + dx * rx) / 1000) * 100).toFixed(2)}%;top:${(
-        ((240 + dy * ry) / 480) *
-        100
-      ).toFixed(2)}%;background:${i % 2 ? t.primary : t.primaryDk}"><span class="hvi">${icon(
-        pickIcon(b, i),
-        24,
-      )}</span><span class="hvt">${esc(b)}</span></div>`
+      const left = (((500 + dx * rx) / 1000) * 100).toFixed(2)
+      const top = (((240 + dy * ry) / 480) * 100).toFixed(2)
+      if (usePhoto && images![i]) {
+        return `<div class="hvc hvc-ph" style="left:${left}%;top:${top}%"><img src="${esc(
+          images![i],
+        )}" crossorigin="anonymous"><span class="hvcap">${esc(b)}</span></div>`
+      }
+      return `<div class="hvc" style="left:${left}%;top:${top}%;background:${
+        i % 2 ? t.primary : t.primaryDk
+      }"><span class="hvi">${icon(pickIcon(b, i), 24)}</span><span class="hvt">${esc(b)}</span></div>`
     })
     .join('')
   return `<div class="hive"><div class="hvc mid">${esc(center)}</div>${cells}</div>`
+}
+/** 树状图：主干 + 分支线 + 圆形节点（叶子），适合"发展方向/分支要点" */
+function treeDiagram(t: DeckTheme, items: string[]): string {
+  const n = Math.min(Math.max(items.length, 2), 6)
+  const VBW = 1000
+  const VBH = 520
+  const forkX = 500
+  const forkY = 300
+  const baseY = 480
+  const spread = 740
+  const nodes = items.slice(0, n).map((b, i) => {
+    const t0 = n === 1 ? 0.5 : i / (n - 1)
+    const x = forkX - spread / 2 + t0 * spread
+    const y = 150 + Math.abs(t0 - 0.5) * 2 * 60
+    return { b, x, y }
+  })
+  const branches = nodes
+    .map(
+      (nd) =>
+        `<path d="M ${forkX} ${forkY} Q ${((forkX + nd.x) / 2).toFixed(0)} ${((forkY + nd.y) / 2 + 30).toFixed(
+          0,
+        )} ${nd.x.toFixed(0)} ${(nd.y + 36).toFixed(0)}" fill="none" stroke="${t.primary}40" stroke-width="3"/>`,
+    )
+    .join('')
+  const trunk = `<path d="M ${forkX} ${baseY} L ${forkX} ${forkY}" stroke="${t.primaryDk}" stroke-width="10" stroke-linecap="round"/>`
+  const nodesHtml = nodes
+    .map(
+      (nd, i) =>
+        `<div class="trn" style="left:${((nd.x / VBW) * 100).toFixed(2)}%;top:${((nd.y / VBH) * 100).toFixed(
+          2,
+        )}%;background:${i % 2 ? t.accent : t.primary}"><span>${icon(pickIcon(nd.b, i), 24)}</span></div>
+        <div class="trnl" style="left:${((nd.x / VBW) * 100).toFixed(2)}%;top:${(
+          ((nd.y + 62) / VBH) *
+          100
+        ).toFixed(2)}%">${esc(nd.b)}</div>`,
+    )
+    .join('')
+  return `<div class="tree"><svg viewBox="0 0 ${VBW} ${VBH}" preserveAspectRatio="none">${trunk}${branches}</svg>${nodesHtml}</div>`
+}
+/** 菱形宫格：旋转 45° 的方块图标 + 文字，3~4 项 */
+function diamondGrid(t: DeckTheme, items: string[]): string {
+  const n = Math.min(Math.max(items.length, 3), 4)
+  const cells = items
+    .slice(0, n)
+    .map(
+      (b, i) =>
+        `<div class="dmc"><div class="dmd" style="background:${i % 2 ? t.accent : t.primary}"><span class="dmi">${icon(
+          pickIcon(b, i),
+          26,
+        )}</span></div><div class="dmt">${esc(b)}</div></div>`,
+    )
+    .join('')
+  return `<div class="dmg n${n}">${cells}</div>`
+}
+/** 灯泡放射内容：中心灯泡 + 环绕图标要点，跟 spoke 结构类似但视觉是不同的签名动作 */
+function bulbSpoke(t: DeckTheme, items: string[]): string {
+  const n = Math.min(items.length, 6)
+  const cx = 500
+  const cy = 255
+  const rx = 372
+  const ry = 195
+  const nodes = items.slice(0, n).map((b, i) => {
+    const a = (2 * Math.PI * i) / n - Math.PI / 2
+    return { b, x: cx + rx * Math.cos(a), y: cy + ry * Math.sin(a) }
+  })
+  const lines = nodes
+    .map(
+      (nd) =>
+        `<line x1="${cx}" y1="${cy}" x2="${nd.x.toFixed(0)}" y2="${nd.y.toFixed(0)}" stroke="${t.accent}44" stroke-width="2" stroke-dasharray="2 7"/>`,
+    )
+    .join('')
+  const dots = nodes
+    .map(
+      (nd, i) =>
+        `<div class="bln" style="left:${((nd.x / 1000) * 100).toFixed(2)}%;top:${((nd.y / 510) * 100).toFixed(
+          2,
+        )}%"><span class="blni">${icon(pickIcon(nd.b, i), 24)}</span><span class="blnt">${esc(nd.b)}</span></div>`,
+    )
+    .join('')
+  return `<div class="bulbsp"><svg viewBox="0 0 1000 510" preserveAspectRatio="none">${lines}</svg>
+    <div class="blc">${icon('bulb', 50)}</div>${dots}</div>`
 }
 /** 弧形箭头循环（参考模板 #9）。圆形保持等比，居中，标签在四周 */
 function arrowRing(t: DeckTheme, center: string, items: string[]): string {
@@ -362,6 +448,9 @@ export type DeckLayout =
   | 'hive'
   | 'cycle'
   | 'gallery'
+  | 'tree'
+  | 'diamond'
+  | 'bulb'
 export interface DeckSlideIn {
   /** LLM 判断的版式类型；缺失时按内容推断 */
   layout?: DeckLayout | string
@@ -783,6 +872,31 @@ function css(t: DeckTheme): string {
   .hive .hvc{position:absolute;transform:translate(-50%,-50%);width:158px;height:180px;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:14px;font-size:13px;font-weight:600;line-height:1.3}
   .hive .hvc.mid{left:50%;top:50%;background:${t.accent};font-size:16px;font-weight:800}
   .hive .hvc .hvi{opacity:.92}
+  .hive .hvc-ph{padding:0;background:${t.primaryDk}}
+  .hive .hvc-ph img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .hive .hvc-ph .hvcap{position:absolute;left:6px;right:6px;bottom:14px;text-align:center;font-size:12px;font-weight:700;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.7);line-height:1.3}
+
+  /* 树状图 */
+  .tree{flex:1;position:relative;align-self:stretch;width:100%;margin-top:6px}
+  .tree svg{position:absolute;inset:0;width:100%;height:100%}
+  .tree .trn{position:absolute;transform:translate(-50%,-50%);width:62px;height:62px;border-radius:50%;color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 7px ${t.primary}12}
+  .tree .trnl{position:absolute;transform:translate(-50%,0);width:168px;text-align:center;font-size:14px;font-weight:600;color:${t.ink};line-height:1.4}
+
+  /* 菱形宫格 */
+  .dmg{flex:1;display:grid;grid-template-columns:repeat(2,1fr);grid-template-rows:repeat(2,1fr);gap:28px 70px;margin-top:22px;align-items:center;justify-items:center}
+  .dmg.n3{grid-template-columns:repeat(3,1fr);grid-template-rows:1fr}
+  .dmc{display:flex;flex-direction:column;align-items:center;gap:18px}
+  .dmd{width:114px;height:114px;transform:rotate(45deg);display:flex;align-items:center;justify-content:center;border-radius:18px;box-shadow:0 10px 24px -8px rgba(0,0,0,.25)}
+  .dmd .dmi{transform:rotate(-45deg);color:#fff;display:flex}
+  .dmt{font-size:15px;font-weight:600;color:${t.ink};text-align:center;max-width:210px;line-height:1.45}
+
+  /* 灯泡放射内容 */
+  .bulbsp{flex:1;position:relative;margin-top:12px;align-self:stretch;width:100%}
+  .bulbsp svg{position:absolute;inset:0;width:100%;height:100%}
+  .bulbsp .blc{position:absolute;left:50%;top:49%;transform:translate(-50%,-50%);width:150px;height:150px;border-radius:50%;background:${t.accent};color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 14px ${t.accent}14,0 0 0 30px ${t.accent}0a}
+  .bulbsp .bln{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:9px;width:172px;text-align:center}
+  .bulbsp .bln .blni{width:46px;height:46px;flex:none;border-radius:12px;background:${t.primary}12;color:${t.primary};display:flex;align-items:center;justify-content:center}
+  .bulbsp .bln .blnt{font-size:13.5px;color:${t.ink};line-height:1.4;font-weight:600}
   /* 弧形箭头循环 */
   .aring{position:relative;align-self:center;width:512px;height:512px;margin:auto}
   .aring svg{position:absolute;inset:0;width:100%;height:100%}
@@ -1236,6 +1350,9 @@ const CONTENT_LAYOUTS = new Set([
   'hive',
   'cycle',
   'gallery',
+  'tree',
+  'diamond',
+  'bulb',
 ])
 
 function spokeLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
@@ -1248,7 +1365,25 @@ function hiveLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
   const items = (sl.bullets || []).map((s) => s.trim()).filter(Boolean).slice(0, 6)
   const center = (sl.title || '核心').trim()
   if (!isGeo(o)) return content({ ...sl, layout: 'list' }, en, o, false, 'list')
-  return bodySlide(o, `${head(sl, en, o)}${hexHive(o.theme, center, items)}`)
+  return bodySlide(o, `${head(sl, en, o)}${hexHive(o.theme, center, items, sl.images)}`)
+}
+
+function treeLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
+  const items = (sl.bullets || []).map((s) => s.trim()).filter(Boolean).slice(0, 6)
+  if (!isGeo(o)) return content({ ...sl, layout: 'list' }, en, o, false, 'list')
+  return bodySlide(o, `${head(sl, en, o)}${treeDiagram(o.theme, items)}`)
+}
+
+function diamondLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
+  const items = (sl.bullets || []).map((s) => s.trim()).filter(Boolean).slice(0, 4)
+  if (!isGeo(o)) return content({ ...sl, layout: 'cards' }, en, o, false, 'cards')
+  return bodySlide(o, `${head(sl, en, o)}${diamondGrid(o.theme, items)}`)
+}
+
+function bulbLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
+  const items = (sl.bullets || []).map((s) => s.trim()).filter(Boolean).slice(0, 6)
+  if (!isGeo(o)) return content({ ...sl, layout: 'list' }, en, o, false, 'list')
+  return bodySlide(o, `${head(sl, en, o)}${bulbSpoke(o.theme, items)}`)
 }
 
 function cycleLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
@@ -1285,8 +1420,13 @@ export function resolveLayout(sl: DeckSlideIn): string {
   }
   if (lay in need && (sl[need[lay]] == null || typeof sl[need[lay]] !== 'object')) lay = ''
   if ((lay === 'bar' || lay === 'stats' || lay === 'rings') && !sl.data?.items?.length) lay = ''
-  if ((lay === 'spoke' || lay === 'hive' || lay === 'cycle') && (sl.bullets || []).filter((b) => b && b.trim()).length < 3)
+  if (
+    (lay === 'spoke' || lay === 'hive' || lay === 'cycle' || lay === 'bulb') &&
+    (sl.bullets || []).filter((b) => b && b.trim()).length < 3
+  )
     lay = ''
+  if (lay === 'tree' && (sl.bullets || []).filter((b) => b && b.trim()).length < 2) lay = ''
+  if (lay === 'diamond' && (sl.bullets || []).filter((b) => b && b.trim()).length < 3) lay = ''
   if (lay === 'gallery' && (sl.images || []).filter(Boolean).length < 2) lay = ''
   if (CONTENT_LAYOUTS.has(lay)) return lay
   if ((sl.images || []).filter(Boolean).length >= 2) return 'gallery'
@@ -1322,6 +1462,9 @@ export function composeDeck(o: DeckOutline): { styleTag: string; slides: string[
       else if (lay === 'hive') slides.push(hiveLayout(sl, en, o))
       else if (lay === 'cycle') slides.push(cycleLayout(sl, en, o))
       else if (lay === 'gallery') slides.push(galleryLayout(sl, en, o))
+      else if (lay === 'tree') slides.push(treeLayout(sl, en, o))
+      else if (lay === 'diamond') slides.push(diamondLayout(sl, en, o))
+      else if (lay === 'bulb') slides.push(bulbLayout(sl, en, o))
       else if (lay === 'bar' || lay === 'stats') slides.push(chart(sl, t, en, o))
       else if (lay === 'big_number') slides.push(bigNumber(sl, en, o))
       else if (lay === 'image_text') {

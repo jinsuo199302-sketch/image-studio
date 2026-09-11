@@ -755,8 +755,10 @@ def build_deck(outline: dict, theme_key: str = "red", bg: dict | None = None) ->
                     t, i, ttl, en, (sl.get("intro") or "").strip(),
                     [str(x).strip() for x in (sl.get("bullets") or []) if str(x).strip()],
                     page, cbg, img,
-                    "list" if lay in ("spoke", "hive") else (
-                        "timeline" if lay == "cycle" else (lay if lay in ("quote", "cards", "list", "timeline") else "")
+                    "list" if lay in ("spoke", "hive", "tree", "bulb") else (
+                        "timeline" if lay == "cycle" else (
+                            "cards" if lay == "diamond" else (lay if lay in ("quote", "cards", "list", "timeline") else "")
+                        )
                     ),
                 ))
             page += 1
@@ -767,6 +769,7 @@ def build_deck(outline: dict, theme_key: str = "red", bg: dict | None = None) ->
 _CONTENT_LAYOUTS = {
     "cards", "list", "quote", "timeline", "big_number", "stats", "bar", "rings",
     "compare", "matrix", "swot", "image_text", "spoke", "hive", "cycle", "gallery",
+    "tree", "diamond", "bulb",
 }
 
 
@@ -778,7 +781,11 @@ def resolve_layout(sl: dict) -> str:
         lay = ""
     if lay in ("bar", "stats", "rings") and not (isinstance(sl.get("data"), dict) and sl["data"].get("items")):
         lay = ""
-    if lay in ("spoke", "hive", "cycle") and len([b for b in (sl.get("bullets") or []) if str(b).strip()]) < 3:
+    if lay in ("spoke", "hive", "cycle", "bulb", "diamond") and len(
+        [b for b in (sl.get("bullets") or []) if str(b).strip()]
+    ) < 3:
+        lay = ""
+    if lay == "tree" and len([b for b in (sl.get("bullets") or []) if str(b).strip()]) < 2:
         lay = ""
     if lay in _CONTENT_LAYOUTS:
         return lay

@@ -802,11 +802,15 @@ _DECK_JSON_SPEC = (
     '- "spoke"：围绕一个核心概念展开 3~6 个方面/维度/组成部分,彼此并列。title 写核心概念,填 bullets(3~6 条,每条 4~14 字的短语)\n'
     '- "hive"：一组 3~6 个并列的能力/模块/要素,想突出"体系感"。title 写体系名,填 bullets(3~6 条,每条 2~8 字)\n'
     '- "cycle"：3~5 个环节首尾相接、循环往复的闭环流程(区别于 timeline 的单向推进)。title 写循环名,填 bullets(3~5 条,按顺序)\n'
+    '- "tree"：一个主干话题分出 2~6 个分支方向/子类。填 bullets(2~6 条,每条 2~10 字)\n'
+    '- "diamond"：正好 3~4 个并列要点,想要点缀感、不想用卡片。填 bullets(3~4 条,每条 2~10 字)\n'
+    '- "bulb"：3~6 个"想法/亮点/启发"类要点,强调创意感(区别于 spoke 的中性并列)。填 bullets(3~6 条,每条 2~10 字)\n'
     '- "compare"：两个对象/方案/时期的对照。填 compare:{"left":{"heading":"左栏标题","points":["要点"]},"right":{"heading":"右栏标题","points":["要点"]}}(每栏 3~4 条)\n'
     '- "matrix"：按两个维度分成四类。填 matrix:{"xLabel":"横轴","yLabel":"纵轴","cells":[{"title":"象限名","items":["要点"]}]}(正好 4 个 cell)\n'
     '- "swot"：专门的 SWOT 态势分析。填 swot:{"s":[],"w":[],"o":[],"t":[]}(每项 2~4 条)\n'
     "cover / section_divider / closing 由系统自动排,不用你选。\n"
-    "分布要求:同一份大纲里 layout 至少出现 4 种以上,不要每页都是 cards;compare/matrix/swot/big_number/spoke/hive/cycle 各最多 1~2 页,只在真契合时用。\n"
+    "分布要求:同一份大纲里 layout 至少出现 4 种以上,不要每页都是 cards;"
+    "compare/matrix/swot/big_number/spoke/hive/cycle/tree/diamond/bulb 各最多 1~2 页,只在真契合时用。\n"
     "palette 必须是 5 个协调的十六进制色，符合主题气质、对比度足够（正文色要能在背景浅色上看清）；"
     "en 字段是给版式当装饰小字用的英文，要贴切、地道。\n"
     "cover_image_prompt：描述一张能直接当商业 PPT 封面的完整设计图。参考市面成品模板的做法——"
@@ -828,7 +832,8 @@ _DECK_JSON_SPEC = (
     "自然真实的光线，主体居中或偏一侧留出干净空间，画面绝对不要任何文字/水印/logo/拼贴/示意图。"
     "主题实在不适合配实拍照片（纯理论 / 纯数据）就给空数组 []。\n"
     "配图分配：在 2~4 个内容契合的普通 slide（有 bullets 的）上加 \"image\": 照片编号（0 起的整数，对应 photo_prompts 里第几条）。"
-    "可以另外挑 1 个 slide 把 layout 设成 \"gallery\" 并加 \"images\": [编号,编号,编号]（正好 3 张，bullets 写这 3 张的短说明）。"
+    "可以另外挑 1 个 slide 把 layout 设成 \"gallery\" 并加 \"images\": [编号,编号,编号]（正好 3 张，bullets 写这 3 张的短说明）；"
+    "也可以挑 1 个 slide 把 layout 设成 \"hive\" 并加 \"images\": [编号,...]（3~6 张，bullets 写每张一句说明），做成蜂窝嵌照片。"
     "一张照片最多用一次；图表页 / 对比页 / SWOT / matrix / big_number 不放图；不契合宁可不放。"
 )
 
@@ -1094,6 +1099,7 @@ async def design_deck(
 _ALLOWED_REF_LAYOUTS = {
     "cards", "list", "timeline", "spoke", "hive", "cycle",
     "matrix", "swot", "gallery", "stats", "bar", "big_number", "quote",
+    "tree", "diamond", "bulb",
 }
 
 
@@ -1292,7 +1298,7 @@ palette：5 个十六进制色，代表整体配色气质（不是逐像素取�
 mood：例「沉稳的商务深蓝」「科技感的青色调」。
 
 layouts：这套模板"经常出现"的通用图解类型，只能从这个固定列表里选（这些是行业通用的 SmartArt 类别，不是描述某一页）：
-  cards（并列要点块）/ list（编号清单）/ timeline（流程时间轴）/ spoke（中心辐射）/ hive（蜂窝六边形群）/ cycle（循环箭头）/ matrix（四象限）/ swot / gallery（多图并排）/ stats（关键指标）/ bar（条形对比）/ big_number（单个大数字）/ quote（金句）
+  cards（并列要点块）/ list（编号清单）/ timeline（流程时间轴）/ spoke（中心辐射）/ hive（蜂窝六边形群）/ cycle（循环箭头）/ matrix（四象限）/ swot / gallery（多图并排）/ stats（关键指标）/ bar（条形对比）/ big_number（单个大数字）/ quote（金句）/ tree（树状分支图）/ diamond（菱形宫格图标）/ bulb（灯泡放射要点）
 density：整份看下来页面平均有多满——airy 留白多 / balanced 适中 / packed 信息量大铺得满。
 motif：占主导的装饰形状家族——hexagon 六边形 / circle 圆与圆环 / arrow 箭头 / wedge 斜切色块 / line 细线 / mixed 混合。
 
