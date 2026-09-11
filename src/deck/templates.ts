@@ -286,7 +286,7 @@ function pictoSplit(t: DeckTheme, rows: { label: string; value: number }[]): str
       )} · <b>${pct}%</b></div><div class="pcpr">${ppl}</div></div>`
     })
     .join('')
-  return `<div class="picto"><div class="pcpie">${donut(t, segs, 250)}<div class="pcv">${p0}%</div></div><div class="pcrs">${legend}</div></div>`
+  return `<div class="picto"><div class="pcpie">${donut(t, segs, 320)}<div class="pcv">${p0}%</div></div><div class="pcrs">${legend}</div></div>`
 }
 /** 小几何母题：齿轮 / 灯泡 / 花瓣（参考模板 #5 #11 #6，只做角落淡装饰不做主图） */
 function motif(t: DeckTheme, kind: 'gear' | 'bulb' | 'petal', size = 240): string {
@@ -591,8 +591,8 @@ function css(t: DeckTheme): string {
   .bar .bv{width:64px;font-size:16px;font-weight:800;color:${t.primary};flex:none}
 
   /* 对比页（两栏） */
-  .cmp{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:38px;margin-top:40px;align-content:center}
-  .cmp .col{border:1px solid #e2e5ec;border-radius:14px;padding:30px 28px;display:flex;flex-direction:column;gap:16px}
+  .cmp{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:38px;margin-top:30px;margin-bottom:8px;align-content:stretch;grid-auto-rows:1fr}
+  .cmp .col{border:1px solid #e2e5ec;border-radius:14px;padding:32px 30px;display:flex;flex-direction:column;gap:16px}
   .cmp .col.a{border-top:4px solid ${t.primary}}
   .cmp .col.b{border-top:4px solid ${t.accent}}
   .cmp .ch{font-size:19px;font-weight:800}
@@ -655,27 +655,31 @@ function css(t: DeckTheme): string {
   .geo-d{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden}
   .geo-d .gbar{position:absolute;left:0;top:0;width:8px;height:100%;background:${t.primary}}
   .geo-d .gbar::after{content:"";position:absolute;left:0;top:0;width:8px;height:140px;background:${t.accent}}
-  /* 每页轮换的大装饰元素 */
-  .geo-d .v0{position:absolute;right:-150px;top:-150px}
-  .geo-d .v1{position:absolute;right:-140px;bottom:-160px}
-  .geo-d .v2{position:absolute;right:-90px;top:-90px}
-  .geo-d .v3{position:absolute;right:60px;top:-120px}
-  .geo-d .v4{position:absolute;right:0;bottom:0}
-  .geo-d .v5{position:absolute;left:-110px;top:-110px}
-  .geo-d .dr{position:absolute;left:-40px;bottom:-40px;opacity:.5}
+  /* 每页轮换的大装饰元素（往画面里多探一点，别只露一角） */
+  .geo-d .v0{position:absolute;right:-90px;top:-90px}
+  .geo-d .v1{position:absolute;right:-90px;bottom:-100px}
+  .geo-d .v2{position:absolute;right:-50px;top:-50px}
+  .geo-d .v3{position:absolute;right:80px;top:-90px}
+  .geo-d .v4{position:absolute;right:-20px;bottom:-20px}
+  .geo-d .v5{position:absolute;left:-90px;top:-90px}
+  .geo-d .dr{position:absolute;left:-40px;bottom:-40px;opacity:.6}
+  /* 右下角锚一块，压住空白 */
+  .geo-d .cnr{position:absolute;right:0;bottom:0;width:180px;height:64px;background:${t.primary};clip-path:polygon(38px 0,100% 0,100% 100%,0 100%)}
+  .geo-d .cnr::after{content:"";position:absolute;left:-14px;bottom:0;width:14px;height:64px;background:${t.accent}}
 
-  /* geo 页眉：左对齐标题 + 深蓝药丸小标 + 下划线 */
-  .ghead{margin-bottom:6px}
-  .ghead .gpill{display:inline-block;background:${t.primary};color:#fff;font-size:11px;letter-spacing:2px;font-weight:800;padding:5px 14px;border-radius:3px}
-  .ghead h2{font-size:27px;color:${t.primaryDk};font-weight:800;margin:14px 0 0}
-  .ghead .gul{width:56px;height:4px;background:${t.accent};margin-top:12px}
+  /* geo 页眉：左对齐大标题 + 深蓝药丸小标 + 下划线 + 通栏细线，有分量 */
+  .ghead{margin-bottom:12px;position:relative}
+  .ghead .gpill{display:inline-block;background:${t.primary};color:#fff;font-size:12px;letter-spacing:2px;font-weight:800;padding:6px 16px;border-radius:3px}
+  .ghead h2{font-size:34px;color:${t.primaryDk};font-weight:800;margin:16px 0 0;line-height:1.2}
+  .ghead .gul{position:relative;width:74px;height:5px;background:${t.accent};margin-top:14px}
+  .ghead .gul::after{content:"";position:absolute;left:88px;top:1px;width:360px;height:3px;background:${t.primary}1a}
 
-  /* V 形箭头流程条 */
-  .chvs{flex:1;display:flex;align-items:center;margin-top:34px;gap:0}
-  .chv{flex:1;min-width:0;color:#fff;padding:26px 20px 26px 40px;position:relative;clip-path:polygon(0 0,calc(100% - 26px) 0,100% 50%,calc(100% - 26px) 100%,0 100%,26px 50%);margin-left:-20px;display:flex;flex-direction:column;gap:8px}
-  .chv.first{clip-path:polygon(0 0,calc(100% - 26px) 0,100% 50%,calc(100% - 26px) 100%,0 100%);margin-left:0;padding-left:26px}
-  .chv .chn{font-size:12px;font-weight:800;color:${t.accent};letter-spacing:1px}
-  .chv .cht{font-size:14px;line-height:1.45}
+  /* V 形箭头流程条：撑高成粗条，不是细带 */
+  .chvs{flex:1;display:flex;align-items:stretch;margin-top:22px;margin-bottom:10px;gap:0;max-height:430px}
+  .chv{flex:1;min-width:0;color:#fff;padding:28px 22px 28px 46px;position:relative;clip-path:polygon(0 0,calc(100% - 28px) 0,100% 50%,calc(100% - 28px) 100%,0 100%,28px 50%);margin-left:-22px;display:flex;flex-direction:column;justify-content:center;gap:12px}
+  .chv.first{clip-path:polygon(0 0,calc(100% - 28px) 0,100% 50%,calc(100% - 28px) 100%,0 100%);margin-left:0;padding-left:30px}
+  .chv .chn{font-size:14px;font-weight:800;color:${t.accent};letter-spacing:1px}
+  .chv .cht{font-size:15.5px;line-height:1.5}
 
   /* 中心辐射图 */
   .spoke{flex:1;position:relative;margin-top:14px;align-self:stretch;width:100%}
@@ -708,11 +712,11 @@ function css(t: DeckTheme): string {
   .g-sec .en{margin-top:16px;font-size:12px;letter-spacing:2px;color:rgba(255,255,255,.42);font-weight:700}
 
   /* 环形进度墙 */
-  .rings{flex:1;display:flex;align-items:center;justify-content:space-around;margin-top:24px;gap:24px}
+  .rings{flex:1;display:flex;align-items:center;justify-content:space-evenly;margin-top:18px;gap:20px}
   .rings .rw{display:flex;flex-direction:column;align-items:center;text-align:center;position:relative}
-  .rings .rw .rc{position:relative}
-  .rings .rw .rv{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:800;color:${t.primary};font-family:"Arial","Microsoft YaHei",sans-serif}
-  .rings .rw .rl{margin-top:14px;font-size:15px;color:${t.ink};max-width:180px;line-height:1.4}
+  .rings .rw .rc{position:relative;display:flex}
+  .rings .rw .rv{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:800;color:${t.primary};font-family:"Arial","Microsoft YaHei",sans-serif}
+  .rings .rw .rl{margin-top:18px;font-size:16px;font-weight:600;color:${t.ink};max-width:220px;line-height:1.45}
 
   /* geo 风：白底 + 实心导航块卡片（参考模板那种），撑满整页高度 + 大号数字水印 */
   .body.geo,.s-toc.geo{background:#fff}
@@ -730,10 +734,11 @@ function css(t: DeckTheme): string {
   .geo .cards .card .ct{color:rgba(255,255,255,.94);font-size:16px}
   .geo .cards .card .bn{position:absolute;right:16px;bottom:-24px;font-size:118px;line-height:1;font-weight:800;color:rgba(255,255,255,.10);font-family:"Arial","Microsoft YaHei",sans-serif}
   /* geo 风指标页：环形饼图 */
-  .donuts{flex:1;display:flex;align-items:center;justify-content:space-around;margin-top:20px;gap:24px}
+  .donuts{flex:1;display:flex;align-items:center;justify-content:space-evenly;margin-top:16px;gap:20px}
   .donuts .dn{position:relative;display:flex;flex-direction:column;align-items:center;text-align:center}
-  .donuts .dn .dv{position:absolute;top:56px;left:0;right:0;font-size:26px;font-weight:800;color:${t.primary};font-family:"Arial","Microsoft YaHei",sans-serif}
-  .donuts .dn .dl{margin-top:12px;font-size:14px;color:${t.ink};max-width:170px;line-height:1.4}
+  .donuts .dn .dc{position:relative;display:flex}
+  .donuts .dn .dv{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:36px;font-weight:800;color:${t.primary};font-family:"Arial","Microsoft YaHei",sans-serif}
+  .donuts .dn .dl{margin-top:16px;font-size:16px;font-weight:600;color:${t.ink};max-width:220px;line-height:1.45}
 
   /* 斜叠方块阶梯 */
   .stk{flex:1;display:flex;flex-direction:column;justify-content:center;gap:14px;margin-top:20px}
@@ -766,13 +771,13 @@ function css(t: DeckTheme): string {
   .photobig .pbimg img{width:100%;height:100%;object-fit:cover}
   .photobig .pbimg .pbfr{position:absolute;left:0;top:0;bottom:0;width:10px;background:${t.accent}}
   /* 照片墙 */
-  .gallery{flex:1;display:flex;align-items:center;justify-content:center;gap:44px;margin-top:18px}
-  .gallery .gcell{display:flex;flex-direction:column;align-items:center;gap:16px;width:300px}
-  .gallery .gcell .hexf{width:260px}
-  .gallery .gcell .gph{width:280px;aspect-ratio:4/3;overflow:hidden;position:relative}
-  .gallery .gcell .gph::after{content:"";position:absolute;left:0;bottom:0;width:46px;height:6px;background:${t.accent}}
+  .gallery{flex:1;display:flex;align-items:center;justify-content:center;gap:40px;margin-top:14px}
+  .gallery .gcell{display:flex;flex-direction:column;align-items:center;gap:18px;width:330px}
+  .gallery .gcell .hexf{width:310px}
+  .gallery .gcell .gph{width:326px;aspect-ratio:4/3;overflow:hidden;position:relative}
+  .gallery .gcell .gph::after{content:"";position:absolute;left:0;bottom:0;width:52px;height:7px;background:${t.accent}}
   .gallery .gcell .gph img{width:100%;height:100%;object-fit:cover}
-  .gallery .gcell .gcap{font-size:13.5px;color:${t.ink};text-align:center;line-height:1.5;max-width:260px}
+  .gallery .gcell .gcap{font-size:14.5px;font-weight:600;color:${t.ink};text-align:center;line-height:1.5;max-width:300px}
   /* 蜂窝六边形群 */
   .hive{flex:1;position:relative;align-self:stretch;width:100%;margin-top:8px}
   .hive .hvc{position:absolute;transform:translate(-50%,-50%);width:158px;height:180px;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:14px;font-size:13px;font-weight:600;line-height:1.3}
@@ -786,12 +791,12 @@ function css(t: DeckTheme): string {
   .aring .arn .arnn{font-size:13px;font-weight:800;color:${t.accent};letter-spacing:1px}
   .aring .arn .arnt{font-size:14px;color:${t.ink};line-height:1.45;font-weight:600}
   /* 占比象形图 */
-  .picto{flex:1;display:flex;align-items:center;gap:60px;margin-top:16px;padding-left:20px}
-  .picto .pcpie{position:relative;flex:none}
-  .picto .pcpie .pcv{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:34px;font-weight:800;color:${t.primary};font-family:"Arial","Microsoft YaHei",sans-serif}
-  .picto .pcrs{flex:1;display:flex;flex-direction:column;gap:26px}
-  .picto .pch{font-size:15px;color:${t.ink};display:flex;align-items:center;gap:8px;margin-bottom:8px}
-  .picto .pch b{color:${t.primaryDk};font-size:17px}
+  .picto{flex:1;display:flex;align-items:center;justify-content:center;gap:76px;margin-top:12px;padding-left:12px}
+  .picto .pcpie{position:relative;flex:none;display:flex}
+  .picto .pcpie .pcv{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:44px;font-weight:800;color:${t.primary};font-family:"Arial","Microsoft YaHei",sans-serif}
+  .picto .pcrs{flex:none;width:420px;display:flex;flex-direction:column;gap:36px}
+  .picto .pch{font-size:17px;color:${t.ink};display:flex;align-items:center;gap:8px;margin-bottom:10px}
+  .picto .pch b{color:${t.primaryDk};font-size:19px}
   .picto .pcd{width:12px;height:12px;border-radius:3px;flex:none}
   .picto .pcpr{display:flex;gap:5px;color:${t.primary}2e}
   .picto .pcp{display:flex}
@@ -831,7 +836,9 @@ function geoDeco(t: DeckTheme, v = 0, motifKey = ''): string {
   }
   const pool = pools[motifKey] || [0, 1, 2, 3, 4, 5, 6, 7, 8]
   const big = all[pool[((v % pool.length) + pool.length) % pool.length]]
-  return `<div class="geo-d">${big}<div class="dr">${dotRing(t, 130)}</div><div class="gbar"></div></div>`
+  // 右下角小色块隔页出现（偶数页），压住空白又不喧宾夺主
+  const cnr = v % 2 === 0 ? '<div class="cnr"></div>' : ''
+  return `<div class="geo-d">${big}<div class="dr">${dotRing(t, 130)}</div><div class="gbar"></div>${cnr}</div>`
 }
 let _geoIdx = 0
 
@@ -877,10 +884,11 @@ function gSection(s: DeckSection, idx: number, total: number, o: DeckOutline): s
 function ringStats(sl: DeckSlideIn, en: string, o: DeckOutline): string {
   const t = o.theme
   const rows = (sl.data?.items || []).filter((r) => r.label).slice(0, 5)
+  const rsz = rows.length <= 2 ? 300 : rows.length === 3 ? 240 : 200
   const body = `<div class="rings">${rows
     .map((r) => {
       const num = Math.abs(parseFloat(String(r.value).replace(/[^0-9.\-]/g, '')) || 0)
-      return `<div class="rw"><div class="rc">${progRing(t, num, 150)}<div class="rv">${esc(String(r.value))}</div></div><div class="rl">${esc(r.label)}</div></div>`
+      return `<div class="rw"><div class="rc">${progRing(t, num, rsz)}<div class="rv">${esc(String(r.value))}</div></div><div class="rl">${esc(r.label)}</div></div>`
     })
     .join('')}</div>`
   return bodySlide(o, `${head(sl, en, o)}${body}`)
@@ -1113,7 +1121,13 @@ function chart(sl: DeckSlideIn, t: DeckTheme, en: string, o: DeckOutline): strin
   const rows = d.items.filter((r) => r.label).slice(0, 6)
   let body: string
   const statNums = rows.map((r) => Math.abs(parseFloat(String(r.value).replace(/[^0-9.\-]/g, '')) || 0))
-  if (d.kind === 'stat' && isGeo(o) && rows.length === 2 && statNums.every((n) => n > 0 && n <= 100)) {
+  // 只有当两个数确实互补成一个整体（和≈100）才当"占比"画饼图，否则是两个独立指标
+  const isRatioPair =
+    d.kind === 'stat' &&
+    rows.length === 2 &&
+    statNums.every((n) => n > 0 && n < 100) &&
+    Math.abs(statNums[0] + statNums[1] - 100) <= 5
+  if (isGeo(o) && isRatioPair) {
     // geo 风两项占比 → 饼图 + 小人象形图
     body = pictoSplit(t, [
       { label: rows[0].label, value: statNums[0] },
@@ -1121,14 +1135,19 @@ function chart(sl: DeckSlideIn, t: DeckTheme, en: string, o: DeckOutline): strin
     ])
   } else if (d.kind === 'stat' && isGeo(o)) {
     // geo 风把关键指标做成环形饼图
-    body = `<div class="donuts">${rows
-      .slice(0, 4)
-      .map((r, i) => {
-        const n = Math.abs(parseFloat(String(r.value).replace(/[^0-9.\-]/g, '')) || 0)
-        const pct = n > 100 ? 100 : n
-        return `<div class="dn">${donut(t, [{ v: pct, c: i % 2 ? t.accent : t.primary }, { v: 100 - pct, c: t.primary + '14' }], 170)}<div class="dv">${esc(String(r.value))}</div><div class="dl">${esc(r.label)}</div></div>`
-      })
-      .join('')}</div>`
+    {
+      const dsz = rows.length <= 2 ? 330 : rows.length === 3 ? 250 : 210
+      body = `<div class="donuts">${rows
+        .slice(0, 4)
+        .map((r, i) => {
+          const n = Math.abs(parseFloat(String(r.value).replace(/[^0-9.\-]/g, '')) || 0)
+          const pct = n > 100 ? 100 : n
+          return `<div class="dn"><div class="dc">${donut(t, [{ v: pct, c: i % 2 ? t.accent : t.primary }, { v: 100 - pct, c: t.primary + '14' }], dsz)}<div class="dv">${esc(
+            String(r.value),
+          )}</div></div><div class="dl">${esc(r.label)}</div></div>`
+        })
+        .join('')}</div>`
+    }
   } else if (d.kind === 'stat') {
     body = `<div class="kpi">${rows
       .slice(0, 4)
