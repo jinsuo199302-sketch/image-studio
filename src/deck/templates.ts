@@ -866,6 +866,19 @@ const short = (s: string, n = 16) => (s.length > n ? s.slice(0, n - 1) + '…' :
 
 const pad2 = (n: number) => String(n).padStart(2, '0')
 
+/** 十六进制色朝白色淡化 ratio（0~1，越大越淡）——用来算卡片交替底色这类"浅色调"，
+ * 不是用透明度叠加（卡片可能压在 AI 背景图上，半透明会把背景的杂色也漏出来，
+ * 算出一个不透明的浅色更稳）。 */
+function tintToWhite(hex: string, ratio: number): string {
+  const h = hex.replace('#', '')
+  const n = h.length === 3 ? h.replace(/./g, (c) => c + c) : h
+  const r = parseInt(n.slice(0, 2), 16) || 0
+  const g = parseInt(n.slice(2, 4), 16) || 0
+  const b = parseInt(n.slice(4, 6), 16) || 0
+  const mix = (c: number) => Math.round(c + (255 - c) * ratio)
+  return `#${[mix(r), mix(g), mix(b)].map((v) => v.toString(16).padStart(2, '0')).join('')}`
+}
+
 /** 卡片/清单正文按这组里最长一条的字数自动降字号——.slide 是固定 720px 高、overflow:hidden，
  * 文字明显偏多时字号不跟着降，卡片/清单会被撑高到画布外直接截掉。同组统一取一个字号（不逐条
  * 各缩各的），排版看着才齐整，不会一行大字一行小字。 */
@@ -1041,8 +1054,8 @@ function css(t: DeckTheme): string {
      现在图标缩到 40px 跟文字同行，省下来的高度直接还给正文，形状好看的同时也从根上
      减少了正文被迫缩字号的情况。 */
   .cards{display:grid;gap:26px;flex:1;margin-top:34px;align-content:center}
-  .card{border:1px solid #e4e7ec;border-top:3px solid ${t.primary};border-radius:16px;padding:24px 26px;display:flex;flex-direction:column;align-items:flex-start;gap:14px;background:#fff}
-  .card:nth-child(even){border-top-color:${t.accent}}
+  .card{border:1px solid #e4e7ec;border-top:3px solid ${t.primary};border-radius:16px;padding:24px 26px;display:flex;flex-direction:column;align-items:flex-start;gap:14px;background:${tintToWhite(t.primary, 0.89)}}
+  .card:nth-child(even){border-top-color:${t.accent};background:${tintToWhite(t.accent, 0.89)}}
   .card .hd{display:flex;align-items:center;gap:12px}
   .card .ic{width:40px;height:40px;flex:none;border-radius:11px;background:${t.primary}12;color:${t.primary};display:flex;align-items:center;justify-content:center}
   .card .ic.rd{border-radius:50%}
