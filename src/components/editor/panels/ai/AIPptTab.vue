@@ -16,6 +16,7 @@ import {
   type DeckBgDetail,
 } from '../../../../services/designApi'
 import { preloadSlideImages, type SlideData } from '../../../../utils/slideRender'
+import { DECK_INDUSTRIES, findDeckIndustry } from '../../../../data/deckIndustries'
 import { prepareUpload } from '../../../../utils/prepImage'
 import { saveFile } from '../../../../utils/saveFile'
 import { useAuthStore } from '../../../../stores/auth'
@@ -71,6 +72,14 @@ const BG_DETAIL_OPTS: { value: DeckBgDetail; label: string; hint: string }[] = [
 const deck = ref<DeckResult | null>(null)
 const generating = ref(false)
 
+// 所属行业（可选）：选了自动带出配色主题建议 + 版式偏好倾向 + 一句内容方向提示，
+// 三者用户随时能自己改（再点别的颜色块 / 参考图分析结果优先 / 补充要求照常自己写）
+const industry = ref('')
+function pickIndustry(key: string) {
+  industry.value = industry.value === key ? '' : key
+  if (industry.value) theme.value = findDeckIndustry(industry.value)?.theme || theme.value
+}
+
 // 参考风格图：上传一张喜欢的模板 → 判断风格 + 提取配色
 const refInput = ref<HTMLInputElement>()
 const refStyle = ref<DeckRefStyle | null>(null)
@@ -79,6 +88,7 @@ const REF_LABEL: Record<string, string> = { geoblue: '几何图形风', techblue
 const LAYOUT_LABEL: Record<string, string> = {
   cards: '卡片', list: '清单', timeline: '时间轴', spoke: '辐射', hive: '蜂窝', cycle: '循环',
   matrix: '四象限', swot: 'SWOT', gallery: '图墙', stats: '指标', bar: '条形图', big_number: '大数字', quote: '金句',
+  radar: '雷达图', waterfall: '瀑布图', gauge: '仪表盘',
 }
 const DENSITY_LABEL: Record<string, string> = { airy: '留白', balanced: '适中', packed: '饱满' }
 async function pickRef(e: Event) {
@@ -155,20 +165,26 @@ async function genDeck() {
       photos = await uploadDeckPhotos(deckPhotos.value.map((p) => p.file))
     }
     const refPal = refStyle.value?.palette ?? []
+    const industryPreset = industry.value ? findDeckIndustry(industry.value) : undefined
+    // 参考图是直接分析上传图得出的，比行业预设这种通用兜底更具体——同时有的话参考图优先
     const refHints = refStyle.value
       ? {
           layouts: refStyle.value.layouts ?? [],
           density: refStyle.value.density ?? '',
           motif: refStyle.value.motif ?? '',
         }
-      : {}
+      : industryPreset
+        ? { layouts: industryPreset.layouts, density: industryPreset.density, motif: industryPreset.motif }
+        : {}
+    // 行业提示拼在用户自己写的「补充要求」后面发给模型，不占用户输入框的字数、也不覆盖用户的话
+    const effExtra = [industryPreset?.hint, extra.value.trim()].filter(Boolean).join('；')
     const effBgDetail = isGeoTheme.value ? 'shared' : bgDetail.value
     const r = useMaterial
       ? await generateDeckFromMaterial(
           { file: matFile.value ?? undefined, pastedText: matText.value.trim() || undefined },
           sections.value,
           theme.value,
-          extra.value.trim(),
+          effExtra,
           aiBg.value,
           photos,
           refPal,
@@ -179,7 +195,7 @@ async function genDeck() {
           topic.value.trim(),
           sections.value,
           theme.value,
-          extra.value.trim(),
+          effExtra,
           aiBg.value,
           photos,
           refPal,
@@ -383,6 +399,23 @@ async function runConvert() {
           <span class="shrink-0 text-xs text-gray-500">章节数</span>
           <el-slider v-model="sections" :min="2" :max="6" :step="1" show-stops :show-tooltip="false" class="!flex-1" />
           <span class="w-4 text-xs text-gray-400">{{ sections }}</span>
+        </div>
+        <div>
+          <p class="mb-1 text-xs text-gray-500">
+            所属行业（可选）
+            <span class="text-gray-300">· 只是带个默认配色/版式偏好，下面还能自己改</span>
+          </p>
+          <div class="grid grid-cols-4 gap-1.5">
+            <button
+              v-for="ind in DECK_INDUSTRIES"
+              :key="ind.key"
+              class="rounded-md border px-1.5 py-1 text-[11px] transition"
+              :class="industry === ind.key ? 'border-violet-500 bg-violet-50 text-violet-600' : 'border-gray-200 text-gray-500'"
+              @click="pickIndustry(ind.key)"
+            >
+              {{ ind.label }}
+            </button>
+          </div>
         </div>
         <div>
           <p class="mb-1 text-xs text-gray-500">配色主题</p>

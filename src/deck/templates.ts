@@ -463,6 +463,139 @@ function lineChart(t: DeckTheme, items: { label: string; value: number }[]): str
     ${dots}
   </svg>${vlabels}${xlabels}</div>`
 }
+/** 雷达图：3~6 个维度的评估/评分，单一系列，value 0~100。
+ * 标签用 HTML div 叠在 SVG 上（不用 <text>）——量图元的 measureSlide 只认 HTML 文字节点，
+ * 这样导出 PPTX 时维度名/分数是真实可编辑文本框，不是烧进背景位图里的死像素。 */
+function radarChart(t: DeckTheme, items: { label: string; value: number }[]): string {
+  const rows = items.slice(0, 6)
+  const n = rows.length
+  const size = 420
+  const c = size / 2
+  const maxR = c - 96
+  const ptAt = (i: number, r: number) => {
+    const a = ((-90 + (360 / n) * i) * Math.PI) / 180
+    return { x: c + r * Math.cos(a), y: c + r * Math.sin(a) }
+  }
+  const ring = (frac: number) =>
+    rows
+      .map((_, i) => ptAt(i, maxR * frac))
+      .map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`)
+      .join(' ')
+  const grid = [0.33, 0.66, 1]
+    .map((f) => `<polygon points="${ring(f)}" fill="none" stroke="${t.ink}14" stroke-width="1.5"/>`)
+    .join('')
+  const axes = rows
+    .map((_, i) => {
+      const p = ptAt(i, maxR)
+      return `<line x1="${c}" y1="${c}" x2="${p.x.toFixed(1)}" y2="${p.y.toFixed(1)}" stroke="${t.ink}14" stroke-width="1.5"/>`
+    })
+    .join('')
+  const vals = rows.map((r) => Math.max(0, Math.min(100, Number(r.value) || 0)))
+  const pts = rows.map((_, i) => ptAt(i, maxR * (vals[i] / 100)))
+  const dataPoly = pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
+  const dots = pts
+    .map((p) => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="6" fill="${t.primary}" stroke="#fff" stroke-width="2.5"/>`)
+    .join('')
+  const labels = rows
+    .map((r, i) => {
+      const p = ptAt(i, maxR + 52)
+      const side = Math.abs(p.x - c) < 10 ? 'c' : p.x > c ? 'l' : 'r'
+      return `<div class="rdl rdl-${side}" style="left:${((p.x / size) * 100).toFixed(2)}%;top:${((p.y / size) * 100).toFixed(2)}%">
+        <div class="rdln">${esc(short(r.label, 10))}</div><div class="rdlv">${esc(String(r.value))}</div>
+      </div>`
+    })
+    .join('')
+  return `<div class="radar"><div class="radar-box">
+    <svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">
+      ${grid}${axes}
+      <polygon points="${dataPoly}" fill="${t.primary}26" stroke="${t.primary}" stroke-width="3" stroke-linejoin="round"/>
+      ${dots}
+    </svg>${labels}
+  </div></div>`
+}
+/** 瀑布图：一连串正负增减，逐项累计到最终结果，value 可正可负 */
+function waterfallChart(t: DeckTheme, items: { label: string; value: number }[]): string {
+  const rows = items.slice(0, 7)
+  let running = 0
+  const bars = rows.map((r) => {
+    const v = Number(r.value) || 0
+    const start = running
+    running += v
+    return { label: r.label, value: v, start, end: running }
+  })
+  const W = 1000
+  const H = 420
+  const padL = 30
+  const padR = 30
+  const padT = 46
+  const padB = 56
+  const plotW = W - padL - padR
+  const plotH = H - padT - padB
+  const allVals = bars.flatMap((b) => [b.start, b.end])
+  const max = Math.max(...allVals, 0)
+  const min = Math.min(...allVals, 0)
+  const span = max - min || 1
+  const yAt = (v: number) => padT + plotH - ((v - min) / span) * plotH
+  const n = bars.length
+  const gap = 16
+  const bw = (plotW - gap * (n - 1)) / n
+  const barsHtml = bars
+    .map((b, i) => {
+      const x = padL + i * (bw + gap)
+      const y0 = yAt(Math.max(b.start, b.end))
+      const y1 = yAt(Math.min(b.start, b.end))
+      const h = Math.max(3, y1 - y0)
+      const pos = b.value >= 0
+      const color = pos ? t.primary : t.accent
+      return `<rect x="${x.toFixed(1)}" y="${y0.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="4" fill="${color}"/>`
+    })
+    .join('')
+  const vlabels = bars
+    .map((b, i) => {
+      const x = padL + i * (bw + gap) + bw / 2
+      const y0 = yAt(Math.max(b.start, b.end))
+      return `<div class="wfv" style="left:${((x / W) * 100).toFixed(2)}%;top:${(
+        (Math.max(4, y0 - 28) / H) *
+        100
+      ).toFixed(2)}%">${b.value >= 0 ? '+' : ''}${esc(String(b.value))}</div>`
+    })
+    .join('')
+  const connectors = bars
+    .slice(0, -1)
+    .map((b, i) => {
+      const x1 = padL + i * (bw + gap) + bw
+      const x2 = x1 + gap
+      const y = yAt(b.end)
+      return `<line x1="${x1.toFixed(1)}" y1="${y.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y.toFixed(1)}" stroke="${t.ink}22" stroke-width="1.5" stroke-dasharray="3 4"/>`
+    })
+    .join('')
+  const baseline = `<line x1="${padL}" y1="${yAt(0).toFixed(1)}" x2="${W - padR}" y2="${yAt(0).toFixed(1)}" stroke="${t.ink}14" stroke-width="1.5"/>`
+  const xlabels = bars
+    .map((b, i) => {
+      const x = padL + i * (bw + gap) + bw / 2
+      return `<div class="wfx" style="left:${((x / W) * 100).toFixed(2)}%">${esc(short(b.label, 10))}</div>`
+    })
+    .join('')
+  return `<div class="wchart"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${baseline}${connectors}${barsHtml}</svg>${vlabels}${xlabels}</div>`
+}
+/** 半圆仪表盘：单个 0~100 完成度/达成率。数字/说明用 HTML div（原因同雷达图，导出要保真实文本框）。 */
+function gaugeChart(t: DeckTheme, value: number, label: string): string {
+  const pct = Math.max(0, Math.min(100, Number(value) || 0))
+  const size = 340
+  const c = size / 2
+  const r = c - 24
+  const circ = Math.PI * r
+  const off = circ * (1 - pct / 100)
+  return `<div class="gauge"><div class="gauge-box" style="width:${size}px;height:${size / 2 + 8}px">
+    <svg viewBox="0 0 ${size} ${size / 2 + 8}" width="${size}" height="${size / 2 + 8}">
+      <path d="M 24 ${c} A ${r} ${r} 0 0 1 ${size - 24} ${c}" fill="none" stroke="${t.primary}16" stroke-width="26" stroke-linecap="round"/>
+      <path d="M 24 ${c} A ${r} ${r} 0 0 1 ${size - 24} ${c}" fill="none" stroke="${t.accent}" stroke-width="26"
+        stroke-linecap="round" stroke-dasharray="${circ.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}"/>
+    </svg>
+    <div class="gv">${esc(String(value))}</div>
+    <div class="gl">${esc(label)}</div>
+  </div></div>`
+}
 /** 数据表格：真实数字/状态必须代码画表格，不能靠生图 */
 function dataTable(t: DeckTheme, columns: string[], rows: string[][]): string {
   void t
@@ -525,6 +658,9 @@ export type DeckLayout =
   | 'bulb'
   | 'line'
   | 'table'
+  | 'radar'
+  | 'waterfall'
+  | 'gauge'
 export interface DeckSlideIn {
   /** LLM 判断的版式类型；缺失时按内容推断 */
   layout?: DeckLayout | string
@@ -532,7 +668,10 @@ export interface DeckSlideIn {
   en?: string
   intro?: string
   bullets?: string[]
-  data?: { kind: 'bar' | 'stat' | 'ring' | 'line'; items: { label: string; value: string | number }[] }
+  data?: {
+    kind: 'bar' | 'stat' | 'ring' | 'line' | 'radar' | 'waterfall' | 'gauge'
+    items: { label: string; value: string | number }[]
+  }
   /** 数据表格：columns 是表头，rows 每行长度跟 columns 一致 */
   table?: { columns: string[]; rows: string[][] }
   /** 对比页：左右两栏各一个观点组 */
@@ -776,6 +915,29 @@ function css(t: DeckTheme): string {
   .dtbl tbody td b{color:${t.primaryDk};font-weight:700}
   .dtbl tbody tr:last-child td{border-bottom:0}
   .dtbl tbody tr:nth-child(even){background:${t.primary}07}
+
+  /* 雷达图：多维度评估，代码画。radar-box 固定正方形，svg 和标签按同一套百分比坐标对齐 */
+  .radar{flex:1;display:flex;align-items:center;justify-content:center;margin-top:6px}
+  .radar-box{position:relative;width:420px;height:420px}
+  .radar-box svg{position:absolute;inset:0}
+  .radar .rdl{position:absolute;transform:translate(-50%,-50%);white-space:nowrap}
+  .radar .rdl-l{transform:translate(0,-50%)}
+  .radar .rdl-r{transform:translate(-100%,-50%)}
+  .radar .rdln{font-size:15px;color:${t.ink};text-align:center}
+  .radar .rdlv{font-size:16px;font-weight:800;color:${t.primaryDk};text-align:center}
+
+  /* 瀑布图：正负增减累计，代码画 */
+  .wchart{flex:1;position:relative;align-self:stretch;width:100%;margin-top:30px;margin-bottom:8px}
+  .wchart svg{position:absolute;inset:0;width:100%;height:100%}
+  .wchart .wfx{position:absolute;bottom:8px;transform:translateX(-50%);font-size:13.5px;color:#7c828d;white-space:nowrap}
+  .wchart .wfv{position:absolute;transform:translate(-50%,-100%);font-size:15px;font-weight:800;color:${t.primaryDk};white-space:nowrap;font-family:"Arial","Microsoft YaHei",sans-serif}
+
+  /* 半圆仪表盘：单个完成度/达成率，代码画 */
+  .gauge{flex:1;display:flex;align-items:center;justify-content:center;margin-top:10px}
+  .gauge-box{position:relative}
+  .gauge-box svg{display:block}
+  .gauge-box .gv{position:absolute;left:50%;top:56%;transform:translate(-50%,-50%);font-size:54px;font-weight:800;color:${t.primaryDk};font-family:"Arial","Microsoft YaHei",sans-serif}
+  .gauge-box .gl{position:absolute;left:50%;bottom:2px;transform:translateX(-50%);font-size:17px;color:${t.ink};white-space:nowrap}
 
   /* 对比页（两栏） */
   .cmp{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:38px;margin-top:30px;margin-bottom:8px;align-content:stretch;grid-auto-rows:1fr}
@@ -1375,6 +1537,22 @@ function chart(sl: DeckSlideIn, t: DeckTheme, en: string, o: DeckOutline): strin
       t,
       rows.map((r) => ({ label: r.label, value: Math.abs(parseFloat(String(r.value).replace(/[^0-9.\-]/g, '')) || 0) })),
     )
+  } else if (d.kind === 'radar') {
+    // 多维度评估/评分 → 雷达图，value 0~100
+    body = radarChart(
+      t,
+      rows.map((r) => ({ label: r.label, value: parseFloat(String(r.value).replace(/[^0-9.\-]/g, '')) || 0 })),
+    )
+  } else if (d.kind === 'waterfall') {
+    // 一连串正负增减，累计到最终结果 → 瀑布图，value 可正可负（保留符号，不能取绝对值）
+    body = waterfallChart(
+      t,
+      rows.map((r) => ({ label: r.label, value: parseFloat(String(r.value).replace(/[^0-9.\-]/g, '')) || 0 })),
+    )
+  } else if (d.kind === 'gauge') {
+    // 单个完成度/达成率 → 半圆仪表盘，只用第一项
+    const r0 = rows[0] || { label: '', value: 0 }
+    body = gaugeChart(t, parseFloat(String(r0.value).replace(/[^0-9.\-]/g, '')) || 0, r0.label)
   } else {
     const nums = rows.map((r) => Math.abs(parseFloat(String(r.value).replace(/[^0-9.\-]/g, '')) || 0))
     const mx = Math.max(...nums, 1)
@@ -1465,6 +1643,9 @@ const CONTENT_LAYOUTS = new Set([
   'bulb',
   'line',
   'table',
+  'radar',
+  'waterfall',
+  'gauge',
 ])
 
 function spokeLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
@@ -1531,7 +1712,12 @@ export function resolveLayout(sl: DeckSlideIn): string {
     big_number: 'big_number',
   }
   if (lay in need && (sl[need[lay]] == null || typeof sl[need[lay]] !== 'object')) lay = ''
-  if ((lay === 'bar' || lay === 'stats' || lay === 'rings' || lay === 'line') && !sl.data?.items?.length) lay = ''
+  if (
+    (lay === 'bar' || lay === 'stats' || lay === 'rings' || lay === 'line' ||
+      lay === 'radar' || lay === 'waterfall' || lay === 'gauge') &&
+    !sl.data?.items?.length
+  )
+    lay = ''
   if (lay === 'table' && !(sl.table?.columns?.length && sl.table?.rows?.length)) lay = ''
   if (
     (lay === 'spoke' || lay === 'hive' || lay === 'cycle' || lay === 'bulb') &&
@@ -1546,6 +1732,9 @@ export function resolveLayout(sl: DeckSlideIn): string {
   if (sl.table?.columns?.length && sl.table?.rows?.length) return 'table'
   if (sl.data?.kind === 'ring' && sl.data.items?.length) return 'rings'
   if (sl.data?.kind === 'line' && sl.data.items?.length) return 'line'
+  if (sl.data?.kind === 'radar' && sl.data.items?.length) return 'radar'
+  if (sl.data?.kind === 'waterfall' && sl.data.items?.length) return 'waterfall'
+  if (sl.data?.kind === 'gauge' && sl.data.items?.length) return 'gauge'
   if (sl.swot && (sl.swot.s?.length || sl.swot.w?.length || sl.swot.o?.length || sl.swot.t?.length))
     return 'swot'
   if (sl.matrix?.cells?.length) return 'matrix'
@@ -1584,7 +1773,11 @@ export function composeDeck(o: DeckOutline): { styleTag: string; slides: string[
       else if (lay === 'diamond') slides.push(diamondLayout(sl, en, o))
       else if (lay === 'bulb') slides.push(bulbLayout(sl, en, o))
       else if (lay === 'table') slides.push(tableLayout(sl, en, o))
-      else if (lay === 'bar' || lay === 'stats' || lay === 'line') slides.push(chart(sl, t, en, o))
+      else if (
+        lay === 'bar' || lay === 'stats' || lay === 'line' ||
+        lay === 'radar' || lay === 'waterfall' || lay === 'gauge'
+      )
+        slides.push(chart(sl, t, en, o))
       else if (lay === 'big_number') slides.push(bigNumber(sl, en, o))
       else if (lay === 'image_text') {
         slides.push(content(sl, en, o, imgFlip))

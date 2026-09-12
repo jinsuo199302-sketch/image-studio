@@ -800,6 +800,12 @@ _DECK_JSON_SPEC = (
     '- "rings"：2~5 个百分比数据,适合做成环形进度。填 data:{"kind":"ring","items":[{"label":"标签","value":75}]}(value 是 0~100 的数)\n'
     '- "bar"：多项数值需要横向对比。填 data:{"kind":"bar","items":[{"label":"标签","value":85}]}(数字要真实,编不出别用)\n'
     '- "line"：3~7 个时间点/阶段的数值走势(涨跌趋势、预测曲线)。填 data:{"kind":"line","items":[{"label":"2024","value":1050}]}(数字要真实或合理推算,不要瞎编精确到个位的假数字)\n'
+    '- "radar"：3~6 个维度的能力/表现综合评估(个人能力雷达图、多维度评分对比这类)。'
+    '填 data:{"kind":"radar","items":[{"label":"维度名","value":85}]}(value 是 0~100 的数,3~6 项,数字要合理)\n'
+    '- "waterfall"：一连串正负增减、逐项累计到一个最终结果(成本构成、预算执行明细、收入增减拆解这类)。'
+    '填 data:{"kind":"waterfall","items":[{"label":"项目名","value":120}]}(value 可正可负,3~7 项,数字要真实或合理推算,不要瞎编)\n'
+    '- "gauge"：这一页核心是单个 0~100 的完成度/达成率,想要仪表盘视觉(区别于 big_number 的纯数字强调)。'
+    '填 data:{"kind":"gauge","items":[{"label":"一句说明","value":72}]}(只填一项,value 是 0~100 的数)\n'
     '- "table"：适合用表格对比的多行多列结构化信息(比如多个方案/场景在几个维度上的对比)。'
     '填 table:{"columns":["列名1","列名2",...](2~5列),"rows":[["单元格","单元格",...],...]}(3~6 行,每行长度=columns 长度,第一列通常是行标题)\n'
     '- "spoke"：围绕一个核心概念展开 3~6 个方面/维度/组成部分,彼此并列。title 写核心概念,填 bullets(3~6 条,每条 4~14 字的短语)\n'
@@ -813,8 +819,8 @@ _DECK_JSON_SPEC = (
     '- "swot"：专门的 SWOT 态势分析。填 swot:{"s":[],"w":[],"o":[],"t":[]}(每项 2~4 条)\n'
     "cover / section_divider / closing 由系统自动排,不用你选。\n"
     "分布要求:同一份大纲里 layout 至少出现 4 种以上,不要每页都是 cards;"
-    "compare/matrix/swot/big_number/spoke/hive/cycle/tree/diamond/bulb/line/table 各最多 1~2 页,只在真契合时用；"
-    "table/line 涉及具体数字/结构化对比,内容里有靠谱数据支撑才用,别为了凑版式种类编数字。\n"
+    "compare/matrix/swot/big_number/spoke/hive/cycle/tree/diamond/bulb/line/table/radar/waterfall/gauge 各最多 1~2 页,只在真契合时用；"
+    "table/line/radar/waterfall/gauge 涉及具体数字/结构化对比,内容里有靠谱数据支撑才用,别为了凑版式种类编数字。\n"
     "palette 必须是 5 个协调的十六进制色，符合主题气质、对比度足够（正文色要能在背景浅色上看清）；"
     "en 字段是给版式当装饰小字用的英文，要贴切、地道。\n"
     "cover_image_prompt：描述一张能直接当商业 PPT 封面的完整设计图。参考市面成品模板的做法——"
@@ -1162,7 +1168,7 @@ async def design_deck(
 _ALLOWED_REF_LAYOUTS = {
     "cards", "list", "timeline", "spoke", "hive", "cycle",
     "matrix", "swot", "gallery", "stats", "bar", "big_number", "quote",
-    "tree", "diamond", "bulb", "line", "table",
+    "tree", "diamond", "bulb", "line", "table", "radar", "waterfall", "gauge",
 }
 
 
@@ -1361,7 +1367,7 @@ palette：5 个十六进制色，代表整体配色气质（不是逐像素取�
 mood：例「沉稳的商务深蓝」「科技感的青色调」。
 
 layouts：这套模板"经常出现"的通用图解类型，只能从这个固定列表里选（这些是行业通用的 SmartArt 类别，不是描述某一页）：
-  cards（并列要点块）/ list（编号清单）/ timeline（流程时间轴）/ spoke（中心辐射）/ hive（蜂窝六边形群）/ cycle（循环箭头）/ matrix（四象限）/ swot / gallery（多图并排）/ stats（关键指标）/ bar（条形对比）/ big_number（单个大数字）/ quote（金句）/ tree（树状分支图）/ diamond（菱形宫格图标）/ bulb（灯泡放射要点）/ line（折线趋势图）/ table（数据表格）
+  cards（并列要点块）/ list（编号清单）/ timeline（流程时间轴）/ spoke（中心辐射）/ hive（蜂窝六边形群）/ cycle（循环箭头）/ matrix（四象限）/ swot / gallery（多图并排）/ stats（关键指标）/ bar（条形对比）/ big_number（单个大数字）/ quote（金句）/ tree（树状分支图）/ diamond（菱形宫格图标）/ bulb（灯泡放射要点）/ line（折线趋势图）/ table（数据表格）/ radar（雷达图）/ waterfall（瀑布图）/ gauge（半圆仪表盘）
 density：整份看下来页面平均有多满——airy 留白多 / balanced 适中 / packed 信息量大铺得满。
 motif：占主导的装饰形状家族——hexagon 六边形 / circle 圆与圆环 / arrow 箭头 / wedge 斜切色块 / line 细线 / mixed 混合。
 

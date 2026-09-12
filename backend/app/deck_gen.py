@@ -754,8 +754,8 @@ def build_deck(outline: dict, theme_key: str = "red", bg: dict | None = None) ->
                 slides.append(_matrix(t, i, ttl, en, mx, page, cbg))
             elif lay == "compare" and cmp:
                 slides.append(_compare(t, i, ttl, en, cmp, page, cbg))
-            elif lay in ("bar", "stats", "rings", "line") and d and d.get("items"):
-                k = "stat" if d.get("kind") == "ring" else "bar"  # python 备用路把 ring/line 都当 bar 画
+            elif lay in ("bar", "stats", "rings", "line", "radar", "waterfall", "gauge") and d and d.get("items"):
+                k = "stat" if d.get("kind") == "ring" else "bar"  # python 备用路把 ring/line/radar/waterfall/gauge 都简化画成 bar
                 slides.append(_chart(t, i, ttl, en, k, d.get("items") or [], page, cbg))
             elif lay == "big_number" and bn:
                 slides.append(_big_number(t, i, ttl, en, bn, page, cbg))
@@ -785,7 +785,7 @@ def build_deck(outline: dict, theme_key: str = "red", bg: dict | None = None) ->
 _CONTENT_LAYOUTS = {
     "cards", "list", "quote", "timeline", "big_number", "stats", "bar", "rings",
     "compare", "matrix", "swot", "image_text", "spoke", "hive", "cycle", "gallery",
-    "tree", "diamond", "bulb", "line", "table",
+    "tree", "diamond", "bulb", "line", "table", "radar", "waterfall", "gauge",
 }
 
 
@@ -795,7 +795,9 @@ def resolve_layout(sl: dict) -> str:
     _need = {"swot": "swot", "matrix": "matrix", "compare": "compare", "big_number": "big_number"}
     if lay in _need and not isinstance(sl.get(_need[lay]), dict):
         lay = ""
-    if lay in ("bar", "stats", "rings", "line") and not (isinstance(sl.get("data"), dict) and sl["data"].get("items")):
+    if lay in ("bar", "stats", "rings", "line", "radar", "waterfall", "gauge") and not (
+        isinstance(sl.get("data"), dict) and sl["data"].get("items")
+    ):
         lay = ""
     if lay == "table" and not (isinstance(sl.get("table"), dict) and sl["table"].get("rows")):
         lay = ""
@@ -813,6 +815,8 @@ def resolve_layout(sl: dict) -> str:
         return "rings"
     if isinstance(sl.get("data"), dict) and sl["data"].get("kind") == "line" and sl["data"].get("items"):
         return "line"
+    if isinstance(sl.get("data"), dict) and sl["data"].get("kind") in ("radar", "waterfall", "gauge") and sl["data"].get("items"):
+        return sl["data"]["kind"]
     # 兜底推断（老数据 / 模型没给 layout）
     if isinstance(sl.get("swot"), dict) and any(sl["swot"].get(k) for k in ("s", "w", "o", "t")):
         return "swot"

@@ -354,7 +354,10 @@ export interface DeckOutlineRaw {
       en?: string
       intro?: string
       bullets?: string[]
-      data?: { kind: 'bar' | 'stat' | 'ring' | 'line'; items: { label: string; value: string | number }[] }
+      data?: {
+        kind: 'bar' | 'stat' | 'ring' | 'line' | 'radar' | 'waterfall' | 'gauge'
+        items: { label: string; value: string | number }[]
+      }
       table?: { columns: string[]; rows: string[][] }
       compare?: { left: { heading: string; points: string[] }; right: { heading: string; points: string[] } }
       swot?: { s: string[]; w: string[]; o: string[]; t: string[] }
