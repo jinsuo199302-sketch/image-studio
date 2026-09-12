@@ -895,19 +895,24 @@ function css(t: DeckTheme): string {
 
   .ico{display:block}
 
-  /* 卡片（2~6 条）——图标徽标形状按序号轮换九种排版常用造型，不再清一色圆角方块 */
-  .cards{display:grid;gap:28px;flex:1;margin-top:36px;align-content:center}
-  .card{border:1px solid #e4e7ec;border-top:3px solid ${t.primary};border-radius:16px;padding:30px 28px;display:flex;flex-direction:column;align-items:flex-start;gap:16px;background:#fff}
+  /* 卡片（2~6 条）——图标徽标形状按序号轮换九种排版常用造型，不再清一色圆角方块。
+     徽标跟 POINT 序号挤在同一行当"页眉"（.hd），不再单独占一整行——之前图标是 60px 大方块、
+     独立占一整层，把能留给正文的高度先吃掉一块，内容一多就得靠字号自动缩小硬扛；
+     现在图标缩到 40px 跟文字同行，省下来的高度直接还给正文，形状好看的同时也从根上
+     减少了正文被迫缩字号的情况。 */
+  .cards{display:grid;gap:26px;flex:1;margin-top:34px;align-content:center}
+  .card{border:1px solid #e4e7ec;border-top:3px solid ${t.primary};border-radius:16px;padding:24px 26px;display:flex;flex-direction:column;align-items:flex-start;gap:14px;background:#fff}
   .card:nth-child(even){border-top-color:${t.accent}}
-  .card .ic{width:60px;height:60px;flex:none;border-radius:15px;background:${t.primary}12;color:${t.primary};display:flex;align-items:center;justify-content:center}
+  .card .hd{display:flex;align-items:center;gap:12px}
+  .card .ic{width:40px;height:40px;flex:none;border-radius:11px;background:${t.primary}12;color:${t.primary};display:flex;align-items:center;justify-content:center}
   .card .ic.rd{border-radius:50%}
-  .card .ic.di{border-radius:12px;transform:rotate(45deg)}
+  .card .ic.di{border-radius:9px;transform:rotate(45deg)}
   .card .ic.di svg{transform:rotate(-45deg)}
-  .card .ic.sq{border-radius:3px}
-  .card .ic.rc{width:74px;height:52px;border-radius:12px}
+  .card .ic.sq{border-radius:2px}
+  .card .ic.rc{width:50px;height:34px;border-radius:9px}
   .card .ic.hx{border-radius:0;clip-path:polygon(25% 3%,75% 3%,100% 50%,75% 97%,25% 97%,0% 50%)}
   /* 齿轮——真实阶梯状轮齿（8 齿），GEAR_CLIP 是 gearClipPath() 算出来的多边形，
-     跟 Material Icons 的 settings 图标同一种简化画法，60px 尺寸下边缘依然干净 */
+     跟 Material Icons 的 settings 图标同一种简化画法，40px 尺寸下边缘依然干净 */
   .card .ic.gr{border-radius:0;clip-path:${GEAR_CLIP}}
   /* 盾牌——常见的"安全/保障/认证"类徽标造型 */
   .card .ic.sh{border-radius:0;clip-path:polygon(50% 0%,100% 15%,100% 55%,50% 100%,0% 55%,0% 15%)}
@@ -1141,7 +1146,7 @@ function css(t: DeckTheme): string {
   .geo .cards{align-content:stretch;grid-auto-rows:1fr;margin-top:26px;gap:24px}
   .geo .cards .card{background:${t.primary};border:0;color:#fff;justify-content:flex-start;gap:18px;padding:34px 28px;position:relative;overflow:hidden}
   .geo .cards .card:nth-child(even){background:${t.primaryDk}}
-  .geo .cards .card .ic{width:64px;height:64px;background:rgba(255,255,255,.14);color:#fff}
+  .geo .cards .card .ic{width:44px;height:44px;background:rgba(255,255,255,.14);color:#fff}
   .geo .cards .card .num{color:${t.accent};font-size:11px}
   .geo .cards .card .ct{color:rgba(255,255,255,.94);font-size:16px}
   .geo .cards .card .bn{position:absolute;right:16px;bottom:-24px;font-size:118px;line-height:1;font-weight:800;color:rgba(255,255,255,.10);font-family:"Arial","Microsoft YaHei",sans-serif}
@@ -1517,9 +1522,9 @@ function content(sl: DeckSlideIn, en: string, o: DeckOutline, imgFlip = false, l
     body = `<div class="cards" style="grid-template-columns:repeat(${cols},1fr)">${cards
       .map(
         (b, i) =>
-          `<div class="card"><div class="ic ${iconShape(shapeOffset + i)}">${ic(b, i, geo ? 34 : 30)}</div><div class="num">POINT ${pad2(
+          `<div class="card"><div class="hd"><div class="ic ${iconShape(shapeOffset + i)}">${ic(b, i, geo ? 22 : 20)}</div><div class="num">POINT ${pad2(
             i + 1,
-          )}</div><div class="ct" style="font-size:${ctFs}px;line-height:${ctLh}">${para(b)}</div>${geo ? `<div class="bn">${pad2(i + 1)}</div>` : ''}</div>`,
+          )}</div></div><div class="ct" style="font-size:${ctFs}px;line-height:${ctLh}">${para(b)}</div>${geo ? `<div class="bn">${pad2(i + 1)}</div>` : ''}</div>`,
       )
       .join('')}</div>`
   } else {
