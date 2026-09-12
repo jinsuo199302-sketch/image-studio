@@ -2,7 +2,7 @@
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { composeDeck, type DeckOutline, type DeckTheme } from '../../deck/templates'
-import { slidesToPptx } from '../../deck/toPptx'
+import { slidesToPptx, type VideoAttachment } from '../../deck/toPptx'
 import { saveFile } from '../../utils/saveFile'
 import type { DeckOutlineRaw } from '../../services/designApi'
 
@@ -69,13 +69,66 @@ onMounted(() => {
 onBeforeUnmount(() => ro?.disconnect())
 
 const busy = ref(false)
+
+// 插入视频：跟大纲内容无关的手动挂件，导出前选"第几页 + 本地视频/YouTube 链接"
+interface VideoItem extends VideoAttachment {
+  label: string
+}
+const videos = ref<VideoItem[]>([])
+const videoSlideNo = ref(1)
+const videoMode = ref<'file' | 'online'>('file')
+const videoUrl = ref('')
+const videoInput = ref<HTMLInputElement>()
+const videoBusy = ref(false)
+
+function readAsDataUrl(f: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(String(r.result))
+    r.onerror = () => reject(r.error)
+    r.readAsDataURL(f)
+  })
+}
+async function pickVideoFile(e: Event) {
+  const f = (e.target as HTMLInputElement).files?.[0]
+  ;(e.target as HTMLInputElement).value = ''
+  if (!f) return
+  if (f.size > 60 * 1024 * 1024) {
+    ElMessage.warning('视频最大 60MB（要以 base64 塞进 pptx，太大会导致文件巨大、卡顿）')
+    return
+  }
+  videoBusy.value = true
+  try {
+    const data = await readAsDataUrl(f)
+    videos.value.push({ slideIndex: videoSlideNo.value - 1, kind: 'file', src: data, label: f.name })
+    ElMessage.success('已添加，下载时会一起打进 pptx')
+  } catch {
+    ElMessage.error('视频读取失败')
+  } finally {
+    videoBusy.value = false
+  }
+}
+function addVideoLink() {
+  const url = videoUrl.value.trim()
+  if (!url) return
+  videos.value.push({ slideIndex: videoSlideNo.value - 1, kind: 'online', src: url, label: url })
+  videoUrl.value = ''
+}
+function rmVideo(i: number) {
+  videos.value.splice(i, 1)
+}
+
 async function download() {
   const stage = stageRef.value
   if (!stage) return
   busy.value = true
   try {
     const els = Array.from(stage.querySelectorAll<HTMLElement>('.slide'))
-    const blob = await slidesToPptx(els, props.outline.title)
+    const blob = await slidesToPptx(
+      els,
+      props.outline.title,
+      videos.value.map(({ slideIndex, kind, src }) => ({ slideIndex, kind, src })),
+    )
     await saveFile(`${props.outline.title || '演示文稿'}.pptx`, blob)
     ElMessage.success('PPTX 已导出')
   } catch (e) {
@@ -94,6 +147,60 @@ defineExpose({ download })
       <span class="text-xs font-medium text-gray-600">共 {{ composed.slides.length }} 页</span>
       <el-button size="small" type="primary" :loading="busy" @click="download">下载 PPTX</el-button>
     </div>
+
+    <details class="mb-2 rounded-lg border border-gray-200 bg-gray-50/60 p-2 text-xs">
+      <summary class="cursor-pointer text-gray-500">
+        + 插入视频（可选{{ videos.length ? `，已加 ${videos.length} 段` : '' }}）
+      </summary>
+      <div class="mt-2 space-y-2">
+        <p class="text-[11px] text-gray-400">跟大纲内容无关的手动挂件，导出的 pptx 里能在 PowerPoint 里直接播放。</p>
+        <div class="flex items-center gap-1.5">
+          <span class="shrink-0 text-gray-500">贴到第</span>
+          <el-input-number
+            v-model="videoSlideNo"
+            :min="1"
+            :max="composed.slides.length"
+            size="small"
+            controls-position="right"
+            class="!w-20"
+          />
+          <span class="shrink-0 text-gray-500">页</span>
+        </div>
+        <div class="flex gap-1.5">
+          <button
+            v-for="m in (['file', 'online'] as const)"
+            :key="m"
+            class="flex-1 rounded-md border px-2 py-1 transition"
+            :class="videoMode === m ? 'border-violet-500 bg-violet-50 text-violet-600' : 'border-gray-200 text-gray-500'"
+            @click="videoMode = m"
+          >
+            {{ m === 'file' ? '本地视频' : 'YouTube 链接' }}
+          </button>
+        </div>
+        <template v-if="videoMode === 'file'">
+          <input ref="videoInput" type="file" accept="video/*" class="hidden" @change="pickVideoFile" />
+          <el-button size="small" :loading="videoBusy" class="!w-full" @click="videoInput?.click()">
+            选择视频文件（最大 60MB）
+          </el-button>
+        </template>
+        <template v-else>
+          <div class="flex gap-1.5">
+            <el-input v-model="videoUrl" size="small" placeholder="https://www.youtube.com/embed/xxxx" />
+            <el-button size="small" type="primary" plain @click="addVideoLink">添加</el-button>
+          </div>
+        </template>
+        <div v-if="videos.length" class="space-y-1">
+          <div
+            v-for="(v, i) in videos"
+            :key="i"
+            class="flex items-center justify-between rounded border border-gray-200 bg-white px-2 py-1"
+          >
+            <span class="truncate text-gray-600">第 {{ v.slideIndex + 1 }} 页 · {{ v.label }}</span>
+            <button class="ml-2 shrink-0 text-gray-400 hover:text-red-400" @click="rmVideo(i)">移除</button>
+          </div>
+        </div>
+      </div>
+    </details>
 
     <div class="space-y-2">
       <div

@@ -469,9 +469,9 @@ function lineChart(t: DeckTheme, items: { label: string; value: number }[]): str
 function radarChart(t: DeckTheme, items: { label: string; value: number }[]): string {
   const rows = items.slice(0, 6)
   const n = rows.length
-  const size = 420
+  const size = 480
   const c = size / 2
-  const maxR = c - 96
+  const maxR = c - 108
   const ptAt = (i: number, r: number) => {
     const a = ((-90 + (360 / n) * i) * Math.PI) / 180
     return { x: c + r * Math.cos(a), y: c + r * Math.sin(a) }
@@ -482,23 +482,23 @@ function radarChart(t: DeckTheme, items: { label: string; value: number }[]): st
       .map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`)
       .join(' ')
   const grid = [0.33, 0.66, 1]
-    .map((f) => `<polygon points="${ring(f)}" fill="none" stroke="${t.ink}14" stroke-width="1.5"/>`)
+    .map((f) => `<polygon points="${ring(f)}" fill="none" stroke="${t.ink}16" stroke-width="2"/>`)
     .join('')
   const axes = rows
     .map((_, i) => {
       const p = ptAt(i, maxR)
-      return `<line x1="${c}" y1="${c}" x2="${p.x.toFixed(1)}" y2="${p.y.toFixed(1)}" stroke="${t.ink}14" stroke-width="1.5"/>`
+      return `<line x1="${c}" y1="${c}" x2="${p.x.toFixed(1)}" y2="${p.y.toFixed(1)}" stroke="${t.ink}16" stroke-width="2"/>`
     })
     .join('')
   const vals = rows.map((r) => Math.max(0, Math.min(100, Number(r.value) || 0)))
   const pts = rows.map((_, i) => ptAt(i, maxR * (vals[i] / 100)))
   const dataPoly = pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
   const dots = pts
-    .map((p) => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="6" fill="${t.primary}" stroke="#fff" stroke-width="2.5"/>`)
+    .map((p) => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="8" fill="${t.primary}" stroke="#fff" stroke-width="3"/>`)
     .join('')
   const labels = rows
     .map((r, i) => {
-      const p = ptAt(i, maxR + 52)
+      const p = ptAt(i, maxR + 58)
       const side = Math.abs(p.x - c) < 10 ? 'c' : p.x > c ? 'l' : 'r'
       return `<div class="rdl rdl-${side}" style="left:${((p.x / size) * 100).toFixed(2)}%;top:${((p.y / size) * 100).toFixed(2)}%">
         <div class="rdln">${esc(short(r.label, 10))}</div><div class="rdlv">${esc(String(r.value))}</div>
@@ -508,7 +508,7 @@ function radarChart(t: DeckTheme, items: { label: string; value: number }[]): st
   return `<div class="radar"><div class="radar-box">
     <svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">
       ${grid}${axes}
-      <polygon points="${dataPoly}" fill="${t.primary}26" stroke="${t.primary}" stroke-width="3" stroke-linejoin="round"/>
+      <polygon points="${dataPoly}" fill="${t.primary}2e" stroke="${t.primary}" stroke-width="4" stroke-linejoin="round"/>
       ${dots}
     </svg>${labels}
   </div></div>`
@@ -581,15 +581,15 @@ function waterfallChart(t: DeckTheme, items: { label: string; value: number }[])
 /** 半圆仪表盘：单个 0~100 完成度/达成率。数字/说明用 HTML div（原因同雷达图，导出要保真实文本框）。 */
 function gaugeChart(t: DeckTheme, value: number, label: string): string {
   const pct = Math.max(0, Math.min(100, Number(value) || 0))
-  const size = 340
+  const size = 560
   const c = size / 2
-  const r = c - 24
+  const r = c - 32
   const circ = Math.PI * r
   const off = circ * (1 - pct / 100)
-  return `<div class="gauge"><div class="gauge-box" style="width:${size}px;height:${size / 2 + 8}px">
-    <svg viewBox="0 0 ${size} ${size / 2 + 8}" width="${size}" height="${size / 2 + 8}">
-      <path d="M 24 ${c} A ${r} ${r} 0 0 1 ${size - 24} ${c}" fill="none" stroke="${t.primary}16" stroke-width="26" stroke-linecap="round"/>
-      <path d="M 24 ${c} A ${r} ${r} 0 0 1 ${size - 24} ${c}" fill="none" stroke="${t.accent}" stroke-width="26"
+  return `<div class="gauge"><div class="gauge-box" style="width:${size}px;height:${size / 2 + 12}px">
+    <svg viewBox="0 0 ${size} ${size / 2 + 12}" width="${size}" height="${size / 2 + 12}">
+      <path d="M 32 ${c} A ${r} ${r} 0 0 1 ${size - 32} ${c}" fill="none" stroke="${t.primary}16" stroke-width="38" stroke-linecap="round"/>
+      <path d="M 32 ${c} A ${r} ${r} 0 0 1 ${size - 32} ${c}" fill="none" stroke="${t.accent}" stroke-width="38"
         stroke-linecap="round" stroke-dasharray="${circ.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}"/>
     </svg>
     <div class="gv">${esc(String(value))}</div>
@@ -825,7 +825,7 @@ function css(t: DeckTheme): string {
   .head .fl::before,.head .fl::after{content:"";width:30px;height:3px;background:${t.accent}}
   .head .en{margin-top:8px}
   /* 导语按中文办公稿：左对齐、首行空两格（缩进写在文本里，导出到 PPT 也保留） */
-  .intro{text-align:left;color:#7f7f7f;font-size:15px;line-height:1.72;margin:20px 0 0}
+  .intro{text-align:left;color:#7f7f7f;font-size:17px;line-height:1.7;margin:20px 0 0}
   /* 内容页统一的淡雅底纹（代码画，全篇一致；无 AI 内容底图时用） */
   .cbg{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden}
   .cbg i{position:absolute;display:block}
@@ -853,7 +853,7 @@ function css(t: DeckTheme): string {
   .card{border:1px solid #e4e7ec;border-radius:16px;padding:30px 28px;display:flex;flex-direction:column;align-items:flex-start;gap:16px;background:#fff}
   .card .ic{width:60px;height:60px;flex:none;border-radius:15px;background:${t.primary}12;color:${t.primary};display:flex;align-items:center;justify-content:center}
   .card .num{font-size:12px;letter-spacing:2px;font-weight:800;color:${t.accent}}
-  .card .ct{font-size:16px;line-height:1.64;text-align:left;align-self:stretch;color:${t.ink}}
+  .card .ct{font-size:18px;line-height:1.6;text-align:left;align-self:stretch;color:${t.ink}}
 
   /* 清单（4~5 条） */
   .list{flex:1;margin-top:30px;display:flex;flex-direction:column;justify-content:center;gap:6px}
@@ -861,7 +861,7 @@ function css(t: DeckTheme): string {
   .row:last-child{border-bottom:0}
   .row .ic{width:44px;height:44px;flex:none;border-radius:12px;background:${t.primary}0f;color:${t.primary};display:flex;align-items:center;justify-content:center}
   .row .n{font-size:12px;font-weight:800;color:${t.accent};letter-spacing:1px;flex:none;width:24px}
-  .row .rt{font-size:16px;line-height:1.55;color:${t.ink}}
+  .row .rt{font-size:18px;line-height:1.5;color:${t.ink}}
   /* geo 风清单：整条撑满 + 交替底色 + 粗色左条 + 大号序号 */
   .geo .list{margin-top:24px;gap:14px;justify-content:space-evenly}
   .geo .list .row{border-bottom:0;padding:18px 26px;gap:22px;background:${t.primary}0c;border-left:5px solid ${t.primary};border-radius:0 12px 12px 0}
@@ -891,40 +891,42 @@ function css(t: DeckTheme): string {
   .kpi .it + .it{border-left:1px solid #e4e7ec}
   .kpi .v{font-size:58px;font-weight:800;color:${t.primary};line-height:1}
   .kpi .bd{width:30px;height:3px;background:${t.accent};margin:12px auto 8px}
-  .kpi .k{font-size:15px;color:#666}
+  .kpi .k{font-size:17px;color:#666}
 
   /* 横向条形图 */
   .bars{flex:1;margin-top:34px;display:flex;flex-direction:column;justify-content:center;gap:20px}
   .bar{display:flex;align-items:center;gap:18px}
-  .bar .bl{width:190px;font-size:15px;text-align:right;flex:none;color:#555}
+  .bar .bl{width:190px;font-size:17px;text-align:right;flex:none;color:#555}
   .bar .track{flex:1;height:16px;background:#eceff4;border-radius:8px;position:relative}
   .bar .fill{position:absolute;left:0;top:0;height:16px;border-radius:8px}
-  .bar .bv{width:64px;font-size:16px;font-weight:800;color:${t.primary};flex:none}
+  .bar .bv{width:64px;font-size:18px;font-weight:800;color:${t.primary};flex:none}
 
   /* 折线图：真实数字，代码画 */
   .lchart{flex:1;position:relative;align-self:stretch;width:100%;margin-top:24px;margin-bottom:8px}
   .lchart svg{position:absolute;inset:0;width:100%;height:100%}
-  .lchart .lcx{position:absolute;bottom:8px;transform:translateX(-50%);font-size:13.5px;color:#7c828d;white-space:nowrap}
-  .lchart .lcv{position:absolute;transform:translate(-50%,-100%);font-size:15px;font-weight:800;color:${t.primaryDk};white-space:nowrap;font-family:"Arial","Microsoft YaHei",sans-serif}
+  .lchart .lcx{position:absolute;bottom:8px;transform:translateX(-50%);font-size:15px;color:#7c828d;white-space:nowrap}
+  .lchart .lcv{position:absolute;transform:translate(-50%,-100%);font-size:17px;font-weight:800;color:${t.primaryDk};white-space:nowrap;font-family:"Arial","Microsoft YaHei",sans-serif}
 
   /* 数据表格：真实数字/状态，代码画 */
   .dtbl{flex:1;margin-top:24px;align-self:center;width:100%;overflow:hidden;border-radius:12px;border:1px solid #e4e7ec}
-  .dtbl table{width:100%;border-collapse:collapse;font-size:14.5px}
-  .dtbl thead th{background:${t.primary};color:#fff;text-align:left;padding:15px 20px;font-weight:700;font-size:13.5px;letter-spacing:.3px}
-  .dtbl tbody td{padding:14px 20px;border-bottom:1px solid #eceef2;color:${t.ink};line-height:1.5}
+  .dtbl table{width:100%;border-collapse:collapse;font-size:16.5px}
+  .dtbl thead th{background:${t.primary};color:#fff;text-align:left;padding:22px 24px;font-weight:700;font-size:15px;letter-spacing:.3px}
+  .dtbl tbody td{padding:22px 24px;border-bottom:1px solid #eceef2;color:${t.ink};line-height:1.5}
   .dtbl tbody td b{color:${t.primaryDk};font-weight:700}
   .dtbl tbody tr:last-child td{border-bottom:0}
   .dtbl tbody tr:nth-child(even){background:${t.primary}07}
 
-  /* 雷达图：多维度评估，代码画。radar-box 固定正方形，svg 和标签按同一套百分比坐标对齐 */
+  /* 雷达图：多维度评估，代码画。radar-box 固定正方形，svg 和标签按同一套百分比坐标对齐。
+     ::before 画一张浅底卡片垫在下面（inset 留白），别让图表孤零零飘在一大片空白正文区里 */
   .radar{flex:1;display:flex;align-items:center;justify-content:center;margin-top:6px}
-  .radar-box{position:relative;width:420px;height:420px}
+  .radar-box{position:relative;width:480px;height:480px}
+  .radar-box::before{content:"";position:absolute;inset:-28px;background:${t.primary}07;border:1px solid ${t.primary}18;border-radius:24px;z-index:-1}
   .radar-box svg{position:absolute;inset:0}
   .radar .rdl{position:absolute;transform:translate(-50%,-50%);white-space:nowrap}
   .radar .rdl-l{transform:translate(0,-50%)}
   .radar .rdl-r{transform:translate(-100%,-50%)}
-  .radar .rdln{font-size:15px;color:${t.ink};text-align:center}
-  .radar .rdlv{font-size:16px;font-weight:800;color:${t.primaryDk};text-align:center}
+  .radar .rdln{font-size:17px;color:${t.ink};text-align:center}
+  .radar .rdlv{font-size:19px;font-weight:800;color:${t.primaryDk};text-align:center}
 
   /* 瀑布图：正负增减累计，代码画 */
   .wchart{flex:1;position:relative;align-self:stretch;width:100%;margin-top:30px;margin-bottom:8px}
@@ -932,12 +934,13 @@ function css(t: DeckTheme): string {
   .wchart .wfx{position:absolute;bottom:8px;transform:translateX(-50%);font-size:13.5px;color:#7c828d;white-space:nowrap}
   .wchart .wfv{position:absolute;transform:translate(-50%,-100%);font-size:15px;font-weight:800;color:${t.primaryDk};white-space:nowrap;font-family:"Arial","Microsoft YaHei",sans-serif}
 
-  /* 半圆仪表盘：单个完成度/达成率，代码画 */
+  /* 半圆仪表盘：单个完成度/达成率，代码画。同样垫一张浅底卡片增加视觉分量 */
   .gauge{flex:1;display:flex;align-items:center;justify-content:center;margin-top:10px}
   .gauge-box{position:relative}
+  .gauge-box::before{content:"";position:absolute;inset:-48px -44px -20px;background:${t.primary}07;border:1px solid ${t.primary}18;border-radius:28px;z-index:-1}
   .gauge-box svg{display:block}
-  .gauge-box .gv{position:absolute;left:50%;top:56%;transform:translate(-50%,-50%);font-size:54px;font-weight:800;color:${t.primaryDk};font-family:"Arial","Microsoft YaHei",sans-serif}
-  .gauge-box .gl{position:absolute;left:50%;bottom:2px;transform:translateX(-50%);font-size:17px;color:${t.ink};white-space:nowrap}
+  .gauge-box .gv{position:absolute;left:50%;top:56%;transform:translate(-50%,-50%);font-size:80px;font-weight:800;color:${t.primaryDk};font-family:"Arial","Microsoft YaHei",sans-serif}
+  .gauge-box .gl{position:absolute;left:50%;bottom:2px;transform:translateX(-50%);font-size:22px;color:${t.ink};white-space:nowrap}
 
   /* 对比页（两栏） */
   .cmp{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:38px;margin-top:30px;margin-bottom:8px;align-content:stretch;grid-auto-rows:1fr}
@@ -948,14 +951,14 @@ function css(t: DeckTheme): string {
   .cmp .col.a .ch{color:${t.primary}}
   .cmp .col.b .ch{color:${t.primaryDk}}
   .cmp .cd{width:26px;height:3px;background:${t.accent}}
-  .cmp .ci{font-size:15px;line-height:1.6}
+  .cmp .ci{font-size:17px;line-height:1.55}
 
   /* SWOT 四象限 */
   .swot{flex:1;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:20px;margin-top:32px}
   .swot .q{border-radius:14px;padding:22px 26px;display:flex;flex-direction:column;gap:10px;border:1px solid #e6e8ee}
   .swot .q .qh{font-size:16px;font-weight:800;letter-spacing:1px;display:flex;align-items:baseline;gap:10px}
   .swot .q .qh span{font-size:12px;font-weight:700;color:#9aa0ab}
-  .swot .q .qi{font-size:13.5px;line-height:1.55}
+  .swot .q .qi{font-size:15px;line-height:1.5}
   .swot .qs{background:${t.primary}12;border-color:${t.primary}44}
   .swot .qs .qh{color:${t.primaryDk}}
   .swot .qw{background:#d9534f10;border-color:#d9534f3a}
@@ -976,7 +979,7 @@ function css(t: DeckTheme): string {
   .mtx{flex:1;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:20px;margin-top:36px;position:relative}
   .mtx .q{border-radius:14px;padding:22px 26px;display:flex;flex-direction:column;gap:9px;border:1px solid #e6e8ee}
   .mtx .q .qh{font-size:16px;font-weight:800}
-  .mtx .q .qi{font-size:13.5px;line-height:1.55}
+  .mtx .q .qi{font-size:15px;line-height:1.5}
   .mtx .q0{background:${t.primary}12;border-color:${t.primary}40}
   .mtx .q0 .qh{color:${t.primaryDk}}
   .mtx .q1{background:${t.accent}18;border-color:${t.accent}50}
