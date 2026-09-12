@@ -742,10 +742,34 @@ function fitBodyFont(items: string[], base: number, floor: number): number {
 const CARD_COLS: Record<number, number> = { 1: 1, 2: 2, 3: 3, 4: 2, 5: 3, 6: 3 }
 const cardCols = (n: number) => CARD_COLS[n] || Math.min(3, Math.max(n, 1))
 
-/** 图标徽标形状按序号轮换——排版里常用的六种造型交替：圆角方（默认）/圆/菱形/直角方/
- * 圆角长方形/六边形（"齿轮"类机械感造型的替代，见 css() 里 .hx 的说明），不再整页清一色方块。 */
-const ICON_SHAPES = ['', 'rd', 'di', 'sq', 'rc', 'hx']
+/** 图标徽标形状按序号轮换——排版里常用的九种造型交替，不再整页清一色方块：
+ * 圆角方（默认）/圆/菱形/直角方/圆角长方形/六边形/齿轮/盾牌/有机圆点（blob）。 */
+const ICON_SHAPES = ['', 'rd', 'di', 'sq', 'rc', 'hx', 'gr', 'sh', 'bl']
 const iconShape = (i: number) => ICON_SHAPES[i % ICON_SHAPES.length]
+
+/** 极坐标转百分比坐标（圆心 50%,50%），拼 clip-path polygon 用。 */
+function polarPct(r: number, deg: number): string {
+  const rad = (deg * Math.PI) / 180
+  return `${(50 + r * Math.cos(rad)).toFixed(2)}% ${(50 + r * Math.sin(rad)).toFixed(2)}%`
+}
+
+/** 计算一个 N 齿齿轮的 clip-path 多边形——每个扇区前半段走外圆（齿）、后半段走内圆（齿槽），
+ * 是阶梯状轮廓（不是尖角），跟 Material Icons 的 settings 齿轮图标是同一种简化画法，
+ * 在 60px 徽标这个尺寸下比"真实斜齿"更清晰、边缘也更耐 JPEG 压缩。 */
+function gearClipPath(teeth: number, outerR: number, innerR: number): string {
+  const pts: string[] = []
+  const step = 360 / teeth
+  const toothW = step * 0.55
+  for (let i = 0; i < teeth; i++) {
+    const a0 = i * step
+    pts.push(polarPct(outerR, a0))
+    pts.push(polarPct(outerR, a0 + toothW))
+    pts.push(polarPct(innerR, a0 + toothW))
+    pts.push(polarPct(innerR, a0 + step))
+  }
+  return `polygon(${pts.join(',')})`
+}
+const GEAR_CLIP = gearClipPath(8, 47, 33)
 
 function css(t: DeckTheme): string {
   return `
@@ -871,7 +895,7 @@ function css(t: DeckTheme): string {
 
   .ico{display:block}
 
-  /* 卡片（2~6 条）——图标徽标形状按序号轮换六种排版常用造型，不再清一色圆角方块 */
+  /* 卡片（2~6 条）——图标徽标形状按序号轮换九种排版常用造型，不再清一色圆角方块 */
   .cards{display:grid;gap:28px;flex:1;margin-top:36px;align-content:center}
   .card{border:1px solid #e4e7ec;border-top:3px solid ${t.primary};border-radius:16px;padding:30px 28px;display:flex;flex-direction:column;align-items:flex-start;gap:16px;background:#fff}
   .card:nth-child(even){border-top-color:${t.accent}}
@@ -881,10 +905,14 @@ function css(t: DeckTheme): string {
   .card .ic.di svg{transform:rotate(-45deg)}
   .card .ic.sq{border-radius:3px}
   .card .ic.rc{width:74px;height:52px;border-radius:12px}
-  /* 六边形当"齿轮/机械感"造型的替代——真齿轮那圈锯齿在 60px 徽标里缩到最后会糊成一团（尤其
-     导出走 snapdom 光栅化+JPEG 压缩再打薄一层），六边形是同一类"工业/科技"联想里唯一在这个
-     尺寸下还能干净清出边缘的选择 */
   .card .ic.hx{border-radius:0;clip-path:polygon(25% 3%,75% 3%,100% 50%,75% 97%,25% 97%,0% 50%)}
+  /* 齿轮——真实阶梯状轮齿（8 齿），GEAR_CLIP 是 gearClipPath() 算出来的多边形，
+     跟 Material Icons 的 settings 图标同一种简化画法，60px 尺寸下边缘依然干净 */
+  .card .ic.gr{border-radius:0;clip-path:${GEAR_CLIP}}
+  /* 盾牌——常见的"安全/保障/认证"类徽标造型 */
+  .card .ic.sh{border-radius:0;clip-path:polygon(50% 0%,100% 15%,100% 55%,50% 100%,0% 55%,0% 15%)}
+  /* 有机圆点（blob）——现代扁平设计里常见的不规则圆角，四个角各不一样，不是正圆也不是方 */
+  .card .ic.bl{border-radius:63% 37% 54% 46%/43% 41% 59% 57%}
   .card .num{font-size:12px;letter-spacing:2px;font-weight:800;color:${t.accent}}
   .card .ct{font-size:18px;line-height:1.6;text-align:left;align-self:stretch;color:${t.ink}}
 
@@ -1252,6 +1280,10 @@ function geoDeco(t: DeckTheme, v = 0, motifKey = ''): string {
   return `<div class="geo-d">${big}<div class="dr">${dotRing(t, 130)}</div><div class="gbar"></div>${cnr}</div>`
 }
 let _geoIdx = 0
+/** cards 版式每出现一次就 +1（跟 _geoIdx 不同，不分 geo/plain 主题都计数）——图标形状轮换
+ * 用它当起始偏移，不然每页卡片都从第 0 张卡开始数，9 种形状里后面几种（齿轮/盾牌/blob）
+ * 因为单页最多 6 张卡（i 只到 5）永远轮不到，整个deck 看下去还是一样的前 6 种在重复。 */
+let _cardsIdx = 0
 
 /* ── 页型 ─────────────────────────────────────────────── */
 function gCover(o: DeckOutline): string {
@@ -1481,10 +1513,11 @@ function content(sl: DeckSlideIn, en: string, o: DeckOutline, imgFlip = false, l
     const ctBase = geo ? 16 : 18
     const ctFs = fitBodyFont(cards, ctBase, 14)
     const ctLh = ctFs < ctBase ? 1.45 : 1.6
+    const shapeOffset = _cardsIdx++ * 3 // 每张卡片页错开 3 个身位，几页看下来 9 种形状都露得到脸
     body = `<div class="cards" style="grid-template-columns:repeat(${cols},1fr)">${cards
       .map(
         (b, i) =>
-          `<div class="card"><div class="ic ${iconShape(i)}">${ic(b, i, geo ? 34 : 30)}</div><div class="num">POINT ${pad2(
+          `<div class="card"><div class="ic ${iconShape(shapeOffset + i)}">${ic(b, i, geo ? 34 : 30)}</div><div class="num">POINT ${pad2(
             i + 1,
           )}</div><div class="ct" style="font-size:${ctFs}px;line-height:${ctLh}">${para(b)}</div>${geo ? `<div class="bn">${pad2(i + 1)}</div>` : ''}</div>`,
       )
@@ -1806,6 +1839,7 @@ export function resolveLayout(sl: DeckSlideIn): string {
 export function composeDeck(o: DeckOutline): { styleTag: string; slides: string[] } {
   const t = o.theme
   _geoIdx = 0
+  _cardsIdx = 0
   const slides: string[] = [cover(o)]
   if (o.sections.length) slides.push(toc(o))
   let imgFlip = false
