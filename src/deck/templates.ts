@@ -737,6 +737,15 @@ function fitBodyFont(items: string[], base: number, floor: number): number {
   return Math.round(base - (base - floor) * t)
 }
 
+/** 卡片版式列数——不是简单“最多3列”，4 张卡按 3 列会排成 3+1，最后一张孤零零占一整行、
+ * 右边空两格，很难看。按张数挑一个排得下、行与行之间也大致匀称的列数（最多 6 张卡）。 */
+const CARD_COLS: Record<number, number> = { 1: 1, 2: 2, 3: 3, 4: 2, 5: 3, 6: 3 }
+const cardCols = (n: number) => CARD_COLS[n] || Math.min(3, Math.max(n, 1))
+
+/** 图标徽标形状按序号轮换——圆/圆角方/菱形三种交替，不再整页清一色圆角方块。 */
+const ICON_SHAPES = ['', 'rd', 'di']
+const iconShape = (i: number) => ICON_SHAPES[i % ICON_SHAPES.length]
+
 function css(t: DeckTheme): string {
   return `
   .slide{--m:96px;width:1280px;height:720px;position:relative;overflow:hidden;background:${t.paper};
@@ -861,10 +870,14 @@ function css(t: DeckTheme): string {
 
   .ico{display:block}
 
-  /* 卡片（2~3 条） */
+  /* 卡片（2~6 条）——图标徽标形状按序号轮换（圆/圆角方/菱形），不再清一色圆角方块 */
   .cards{display:grid;gap:28px;flex:1;margin-top:36px;align-content:center}
-  .card{border:1px solid #e4e7ec;border-radius:16px;padding:30px 28px;display:flex;flex-direction:column;align-items:flex-start;gap:16px;background:#fff}
+  .card{border:1px solid #e4e7ec;border-top:3px solid ${t.primary};border-radius:16px;padding:30px 28px;display:flex;flex-direction:column;align-items:flex-start;gap:16px;background:#fff}
+  .card:nth-child(even){border-top-color:${t.accent}}
   .card .ic{width:60px;height:60px;flex:none;border-radius:15px;background:${t.primary}12;color:${t.primary};display:flex;align-items:center;justify-content:center}
+  .card .ic.rd{border-radius:50%}
+  .card .ic.di{border-radius:12px;transform:rotate(45deg)}
+  .card .ic.di svg{transform:rotate(-45deg)}
   .card .num{font-size:12px;letter-spacing:2px;font-weight:800;color:${t.accent}}
   .card .ct{font-size:18px;line-height:1.6;text-align:left;align-self:stretch;color:${t.ink}}
 
@@ -1456,7 +1469,7 @@ function content(sl: DeckSlideIn, en: string, o: DeckOutline, imgFlip = false, l
     // items 在上面已经封顶 6 条——这里不再二次砍到 3 条，超过 3 张就自动换行到第二排，
     // 不能因为版式"通常"是 2~3 条卡片，就把 LLM 万一给多的内容悄悄丢掉
     const cards = items
-    const cols = Math.min(3, Math.max(cards.length, 1))
+    const cols = cardCols(cards.length)
     const geo = isGeo(o)
     const ctBase = geo ? 16 : 18
     const ctFs = fitBodyFont(cards, ctBase, 14)
@@ -1464,7 +1477,7 @@ function content(sl: DeckSlideIn, en: string, o: DeckOutline, imgFlip = false, l
     body = `<div class="cards" style="grid-template-columns:repeat(${cols},1fr)">${cards
       .map(
         (b, i) =>
-          `<div class="card"><div class="ic">${ic(b, i, geo ? 34 : 30)}</div><div class="num">POINT ${pad2(
+          `<div class="card"><div class="ic ${iconShape(i)}">${ic(b, i, geo ? 34 : 30)}</div><div class="num">POINT ${pad2(
             i + 1,
           )}</div><div class="ct" style="font-size:${ctFs}px;line-height:${ctLh}">${para(b)}</div>${geo ? `<div class="bn">${pad2(i + 1)}</div>` : ''}</div>`,
       )
