@@ -756,8 +756,8 @@ def build_deck(outline: dict, theme_key: str = "red", bg: dict | None = None) ->
                 slides.append(_matrix(t, i, ttl, en, mx, page, cbg))
             elif lay == "compare" and cmp:
                 slides.append(_compare(t, i, ttl, en, cmp, page, cbg))
-            elif lay in ("bar", "stats", "rings", "line", "radar", "waterfall", "gauge") and d and d.get("items"):
-                k = "stat" if d.get("kind") == "ring" else "bar"  # python 备用路把 ring/line/radar/waterfall/gauge 都简化画成 bar
+            elif lay in ("bar", "stats", "rings", "line", "radar", "waterfall", "gauge", "mountain") and d and d.get("items"):
+                k = "stat" if d.get("kind") == "ring" else "bar"  # python 备用路把 ring/line/radar/waterfall/gauge/mountain 都简化画成 bar
                 slides.append(_chart(t, i, ttl, en, k, d.get("items") or [], page, cbg))
             elif lay == "big_number" and bn:
                 slides.append(_big_number(t, i, ttl, en, bn, page, cbg))
@@ -773,9 +773,9 @@ def build_deck(outline: dict, theme_key: str = "red", bg: dict | None = None) ->
                     t, i, ttl, en, (sl.get("intro") or "").strip(),
                     [str(x).strip() for x in (sl.get("bullets") or []) if str(x).strip()],
                     page, cbg, img,
-                    "list" if lay in ("spoke", "hive", "tree", "bulb") else (
+                    "list" if lay in ("spoke", "hive", "tree", "bulb", "hex_chain") else (
                         "timeline" if lay == "cycle" else (
-                            "cards" if lay == "diamond" else (lay if lay in ("quote", "cards", "list", "timeline") else "")
+                            "cards" if lay in ("diamond", "pinwheel") else (lay if lay in ("quote", "cards", "list", "timeline") else "")
                         )
                     ),
                 ))
@@ -788,6 +788,7 @@ _CONTENT_LAYOUTS = {
     "cards", "list", "quote", "timeline", "big_number", "stats", "bar", "rings",
     "compare", "matrix", "swot", "image_text", "spoke", "hive", "cycle", "gallery",
     "tree", "diamond", "bulb", "line", "table", "radar", "waterfall", "gauge",
+    "mountain", "hex_chain", "pinwheel",
 }
 
 
@@ -797,13 +798,13 @@ def resolve_layout(sl: dict) -> str:
     _need = {"swot": "swot", "matrix": "matrix", "compare": "compare", "big_number": "big_number"}
     if lay in _need and not isinstance(sl.get(_need[lay]), dict):
         lay = ""
-    if lay in ("bar", "stats", "rings", "line", "radar", "waterfall", "gauge") and not (
+    if lay in ("bar", "stats", "rings", "line", "radar", "waterfall", "gauge", "mountain") and not (
         isinstance(sl.get("data"), dict) and sl["data"].get("items")
     ):
         lay = ""
     if lay == "table" and not (isinstance(sl.get("table"), dict) and sl["table"].get("rows")):
         lay = ""
-    if lay in ("spoke", "hive", "cycle", "bulb", "diamond") and len(
+    if lay in ("spoke", "hive", "cycle", "bulb", "diamond", "hex_chain", "pinwheel") and len(
         [b for b in (sl.get("bullets") or []) if str(b).strip()]
     ) < 3:
         lay = ""
@@ -817,7 +818,7 @@ def resolve_layout(sl: dict) -> str:
         return "rings"
     if isinstance(sl.get("data"), dict) and sl["data"].get("kind") == "line" and sl["data"].get("items"):
         return "line"
-    if isinstance(sl.get("data"), dict) and sl["data"].get("kind") in ("radar", "waterfall", "gauge") and sl["data"].get("items"):
+    if isinstance(sl.get("data"), dict) and sl["data"].get("kind") in ("radar", "waterfall", "gauge", "mountain") and sl["data"].get("items"):
         return sl["data"]["kind"]
     # 兜底推断（老数据 / 模型没给 layout）
     if isinstance(sl.get("swot"), dict) and any(sl["swot"].get(k) for k in ("s", "w", "o", "t")):

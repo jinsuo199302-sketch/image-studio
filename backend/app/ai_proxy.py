@@ -818,10 +818,22 @@ _DECK_JSON_SPEC = (
     '- "compare"：两个对象/方案/时期的对照。填 compare:{"left":{"heading":"左栏标题","points":["要点"]},"right":{"heading":"右栏标题","points":["要点"]}}(每栏 3~4 条)\n'
     '- "matrix"：按两个维度分成四类。填 matrix:{"xLabel":"横轴","yLabel":"纵轴","cells":[{"title":"象限名","items":["要点"]}]}(正好 4 个 cell)\n'
     '- "swot"：专门的 SWOT 态势分析。填 swot:{"s":[],"w":[],"o":[],"t":[]}(每项 2~4 条)\n'
+    '- "hex_chain"：3~6 个有先后顺序/递进关系的阶段,想要比 timeline 更有设计感的连接视觉(六边形节点+锯齿状虚线串联)。'
+    "填 bullets(3~6 条,每条必须是 4~12 字的短语,不能是完整句子——标签贴在固定尺寸的六边形图标上,字多会被裁掉)\n"
+    '- "pinwheel"：正好 3~4 个并列的维度/机制/优势,想要比 cards 更有活力的风车视觉。填 bullets(3~4 条,'
+    "每条建议写成「短语：说明」结构——冒号前 2~10 字会自动当标题、冒号后当正文；没有冒号就整句当正文，正文能正常换行、可以写一两句话)\n"
+    '- "mountain"：3~5 个百分比类指标对比,想要比 bar/stats 更有设计感的山丘曲线视觉。'
+    '填 data:{"kind":"mountain","items":[{"label":"标签","value":85}]}(跟 bar 一样是纯数字展示,标签本身要短,不要放长句)\n'
     "cover / section_divider / closing 由系统自动排,不用你选。\n"
     "分布要求:同一份大纲里 layout 至少出现 4 种以上,不要每页都是 cards;"
-    "compare/matrix/swot/big_number/spoke/hive/cycle/tree/diamond/bulb/line/table/radar/waterfall/gauge 各最多 1~2 页,只在真契合时用；"
-    "table/line/radar/waterfall/gauge 涉及具体数字/结构化对比,内容里有靠谱数据支撑才用,别为了凑版式种类编数字。\n"
+    "compare/matrix/swot/big_number/spoke/hive/cycle/tree/diamond/bulb/line/table/radar/waterfall/gauge/hex_chain/pinwheel/mountain 各最多 1~2 页,只在真契合时用；"
+    "table/line/radar/waterfall/gauge/mountain 涉及具体数字/结构化对比,内容里有靠谱数据支撑才用,别为了凑版式种类编数字。\n"
+    "版式要跟文字量倒着推,不是先选版式再硬塞文字进去:节点类版式(spoke/hive/tree/diamond/bulb/hex_chain)的标签贴在固定大小的图形节点上,"
+    "只能放几个字到十几个字的短语,一旦塞进整句话要么被截断丢字、要么系统直接把这页退回 list/cards 重排——内容本来就是完整长句就别选这些;"
+    "cards/list 每条要点有独立的文字区域,能装完整句子甚至一小段话,内容多、句子长就应该选它们；"
+    "pinwheel 的正文区域能正常换行,可以写中等长度的句子,但拆出来的标题部分(冒号前)也必须是短语,不能整句都堆在冒号前；"
+    "table/line/radar/waterfall/gauge/mountain/bar/stats 是数字型版式,标签也要短,别为了信息量塞长句进 label。"
+    "先数清楚这一页内容有几句话、每句大概多长,再倒推该用哪个版式,而不是拍脑袋选完版式再削字数凑进去。\n"
     "palette 必须是 5 个协调的十六进制色，符合主题气质、对比度足够（正文色要能在背景浅色上看清）；"
     "en 字段是给版式当装饰小字用的英文，要贴切、地道。\n"
     "cover_image_prompt：描述一张能直接当商业 PPT 封面的完整设计图。参考市面成品模板的做法——"

@@ -463,6 +463,70 @@ function lineChart(t: DeckTheme, items: { label: string; value: number }[]): str
     ${dots}
   </svg>${vlabels}${xlabels}</div>`
 }
+/** 数据山丘图：每项数据是一条独立的平滑钟形曲线（"小山丘"），山头高度按数值比例，
+ * 山脚一字排开在同一条基线上——比柱状图更有设计感，常见的"多项指标对比"版式
+ * （PresentationGO/SlideTeam 都有这类 mountain chart 模板，同一类做法）。
+ * 标签走 HTML div 叠加（不用 SVG <text>），导出仍是可编辑文本框。 */
+function mountainChart(t: DeckTheme, items: { label: string; value: number; raw: string }[]): string {
+  const rows = items.slice(0, 5)
+  const n = rows.length
+  const W = 1000
+  const H = 420
+  const padL = 60
+  const padR = 60
+  const padT = 92
+  const padB = 82
+  const plotW = W - padL - padR
+  const plotH = H - padT - padB
+  const base = H - padB
+  const vals = rows.map((r) => Math.max(0, r.value))
+  const max = Math.max(...vals, 1)
+  const seg = n > 0 ? plotW / n : plotW
+  const hillW = seg * 1.34 // 比等分格宽一点，山丘互相叠压出层次感
+  const hw = hillW / 2
+  const hills = rows.map((_r, i) => {
+    const cx = padL + seg * (i + 0.5)
+    const peakY = base - (vals[i] / max) * plotH
+    const path = `M ${(cx - hw).toFixed(1)} ${base} C ${(cx - hw * 0.55).toFixed(1)} ${base} ${(cx - hw * 0.42).toFixed(1)} ${peakY.toFixed(1)} ${cx.toFixed(1)} ${peakY.toFixed(1)} C ${(cx + hw * 0.42).toFixed(1)} ${peakY.toFixed(1)} ${(cx + hw * 0.55).toFixed(1)} ${base} ${(cx + hw).toFixed(1)} ${base} Z`
+    return { path, cx, peakY }
+  })
+  // 矮的山先画（压在下面），高的山后画、边缘盖过矮山一点，层叠更真实
+  const order = vals.map((_, i) => i).sort((a, b) => vals[a] - vals[b])
+  const gid = 'mt' + Math.random().toString(36).slice(2, 8)
+  const defs = [t.primary, t.accent]
+    .map(
+      (c, ci) => `<linearGradient id="${gid}${ci}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${c}" stop-opacity="0.88"/>
+        <stop offset="100%" stop-color="${c}" stop-opacity="0.5"/>
+      </linearGradient>`,
+    )
+    .join('')
+  const paths = order
+    .map((i) => `<path d="${hills[i].path}" fill="url(#${gid}${i % 2})" stroke="${i % 2 ? t.accent : t.primary}" stroke-width="2.5"/>`)
+    .join('')
+  const baseline = `<line x1="${padL - hw * 0.3}" y1="${base}" x2="${W - padR + hw * 0.3}" y2="${base}" stroke="${t.ink}22" stroke-width="2" stroke-dasharray="2 7"/>`
+  const peakLabels = hills
+    .map(
+      (h, i) =>
+        `<div class="mtv" style="left:${((h.cx / W) * 100).toFixed(2)}%;top:${((Math.max(6, h.peakY - 38) / H) * 100).toFixed(2)}%;color:${
+          i % 2 ? t.accent : t.primary
+        }">${esc(rows[i].raw)}</div>`,
+    )
+    .join('')
+  const footLabels = hills
+    .map(
+      (h, i) =>
+        `<div class="mtl" style="left:${((h.cx / W) * 100).toFixed(2)}%;top:${(((base + 16) / H) * 100).toFixed(2)}%">
+          <div class="mti">${icon(pickIcon(rows[i].label, i), 22)}</div>
+          <div class="mtt">${esc(short(rows[i].label, 12))}</div>
+        </div>`,
+    )
+    .join('')
+  return `<div class="mtchart"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    <defs>${defs}</defs>
+    ${baseline}${paths}
+  </svg>${peakLabels}${footLabels}</div>`
+}
 /** 雷达图：3~6 个维度的评估/评分，单一系列，value 0~100。
  * 标签用 HTML div 叠在 SVG 上（不用 <text>）——量图元的 measureSlide 只认 HTML 文字节点，
  * 这样导出 PPTX 时维度名/分数是真实可编辑文本框，不是烧进背景位图里的死像素。 */
@@ -596,6 +660,79 @@ function gaugeChart(t: DeckTheme, value: number, label: string): string {
     <div class="gl">${esc(label)}</div>
   </div></div>`
 }
+/** 六边形锯齿连接流程图：N 个节点（3~6）水平排开、纵向交替高低走出锯齿状，虚线依次
+ * 穿过每个节点；每个节点是一个六边形图标徽标 + 一行短标签。常见的"流程/阶段对比"版式。
+ * 标签走 HTML div 叠加（不用 SVG <text>），导出仍是可编辑文本框。 */
+function hexChain(t: DeckTheme, items: string[]): string {
+  const rows = items.slice(0, 6)
+  const n = rows.length
+  const W = 1000
+  const H = 460
+  const padX = 120
+  const midY = H / 2
+  const amp = 96
+  const xAt = (i: number) => (n <= 1 ? W / 2 : padX + ((W - 2 * padX) * i) / (n - 1))
+  const nodes = rows.map((b, i) => ({ x: xAt(i), y: midY + (i % 2 === 0 ? -amp : amp), b }))
+  const linePath = nodes.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ')
+  const dots = nodes
+    .map(
+      (p, i) =>
+        `<div class="hxn" style="left:${((p.x / W) * 100).toFixed(2)}%;top:${((p.y / H) * 100).toFixed(2)}%">
+          <div class="hxh" style="background:${i % 2 ? t.accent : t.primary}">${icon(pickIcon(p.b, i), 30)}</div>
+          <div class="hxtt">${esc(short(p.b, 16))}</div>
+        </div>`,
+    )
+    .join('')
+  return `<div class="hxchain"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    <path d="${linePath}" fill="none" stroke="${t.ink}30" stroke-width="3" stroke-dasharray="3 9" stroke-linecap="round"/>
+  </svg>${dots}</div>`
+}
+/** 环形风车图：4 片曲边扇叶绕中心排成风车状，中心留白一个小圆孔，每片一个序号；
+ * 图形居中，四角摆标题+正文——经典"风车图"模板的构图（不追求文字精确对齐到每片扇叶
+ * 的角度，那样反而在文字量不均时容易露怯）。 */
+/** bullet 常见结构是"短语：详细说明"（如"改善循环，直击病因：药物通过……"）——
+ * 有全角冒号就拿冒号前当标题、后面当正文；没有就退化成"截断短语当标题+全文当正文"。 */
+function splitTitleBody(s: string): { title: string; body: string } {
+  const i = s.indexOf('：')
+  if (i > 0 && i < 20) return { title: s.slice(0, i), body: s.slice(i + 1) }
+  return { title: short(s, 10), body: s }
+}
+
+function pinwheel(t: DeckTheme, items: string[]): string {
+  const rows = items.slice(0, 4).map(splitTitleBody)
+  while (rows.length < 4) rows.push({ title: '', body: '' })
+  const size = 460
+  const cx = size / 2
+  const cy = size / 2
+  const R = size * 0.4
+  const r0 = size * 0.09
+  const bladeD = `M ${(cx + r0).toFixed(1)} ${cy.toFixed(1)} C ${(cx + R * 0.3).toFixed(1)} ${(cy - R * 0.42).toFixed(1)} ${(cx + R * 0.92).toFixed(1)} ${(cy - R * 0.3).toFixed(1)} ${(cx + R).toFixed(1)} ${cy.toFixed(1)} C ${(cx + R * 0.86).toFixed(1)} ${(cy + R * 0.22).toFixed(1)} ${(cx + R * 0.3).toFixed(1)} ${(cy + R * 0.12).toFixed(1)} ${(cx + r0 * 0.25).toFixed(1)} ${(cy + r0 * 0.25).toFixed(1)} Z`
+  const gid = 'pw' + Math.random().toString(36).slice(2, 8)
+  const defs = `<linearGradient id="${gid}" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="${t.accent}"/><stop offset="100%" stop-color="${t.primary}"/>
+  </linearGradient>`
+  const blades = [0, 1, 2, 3]
+    .map((i) => `<path d="${bladeD}" transform="rotate(${i * 90} ${cx} ${cy})" fill="url(#${gid})" opacity="${(1 - i * 0.12).toFixed(2)}"/>`)
+    .join('')
+  const nums = [0, 1, 2, 3]
+    .map((i) => {
+      const mid = ((i * 90 + 40) * Math.PI) / 180
+      const nr = R * 0.6
+      const x = ((cx + nr * Math.cos(mid)) / size) * 100
+      const y = ((cy + nr * Math.sin(mid)) / size) * 100
+      return `<div class="pwn" style="left:${x.toFixed(2)}%;top:${y.toFixed(2)}%">${pad2(i + 1)}</div>`
+    })
+    .join('')
+  const hub = `<circle cx="${cx}" cy="${cy}" r="${(r0 * 0.85).toFixed(1)}" fill="#fff"/>`
+  const wheel = `<div class="pw-wheel"><svg viewBox="0 0 ${size} ${size}"><defs>${defs}</defs>${blades}${hub}</svg>${nums}</div>`
+  const cell = (r: { title: string; body: string }, align: 'l' | 'r') =>
+    `<div class="pwc pwc-${align}"><div class="pwt">${esc(r.title)}</div><div class="pwb">${para(r.body)}</div></div>`
+  return `<div class="pinwheel">
+    <div class="pwrow">${cell(rows[0], 'l')}${cell(rows[1], 'r')}</div>
+    ${wheel}
+    <div class="pwrow">${cell(rows[2], 'l')}${cell(rows[3], 'r')}</div>
+  </div>`
+}
 /** 数据表格：真实数字/状态必须代码画表格，不能靠生图 */
 function dataTable(t: DeckTheme, columns: string[], rows: string[][]): string {
   void t
@@ -661,6 +798,9 @@ export type DeckLayout =
   | 'radar'
   | 'waterfall'
   | 'gauge'
+  | 'mountain'
+  | 'hex_chain'
+  | 'pinwheel'
 export interface DeckSlideIn {
   /** LLM 判断的版式类型；缺失时按内容推断 */
   layout?: DeckLayout | string
@@ -669,7 +809,7 @@ export interface DeckSlideIn {
   intro?: string
   bullets?: string[]
   data?: {
-    kind: 'bar' | 'stat' | 'ring' | 'line' | 'radar' | 'waterfall' | 'gauge'
+    kind: 'bar' | 'stat' | 'ring' | 'line' | 'radar' | 'waterfall' | 'gauge' | 'mountain'
     items: { label: string; value: string | number }[]
   }
   /** 数据表格：columns 是表头，rows 每行长度跟 columns 一致 */
@@ -973,6 +1113,14 @@ function css(t: DeckTheme): string {
   .lchart .lcx{position:absolute;bottom:8px;transform:translateX(-50%);font-size:15px;color:#7c828d;white-space:nowrap}
   .lchart .lcv{position:absolute;transform:translate(-50%,-100%);font-size:17px;font-weight:800;color:${t.primaryDk};white-space:nowrap;font-family:"Arial","Microsoft YaHei",sans-serif}
 
+  /* 数据山丘图 */
+  .mtchart{flex:1;position:relative;align-self:stretch;width:100%;margin-top:20px}
+  .mtchart svg{position:absolute;inset:0;width:100%;height:100%}
+  .mtchart .mtv{position:absolute;transform:translate(-50%,-100%);font-size:22px;font-weight:800;white-space:nowrap;font-family:"Arial","Microsoft YaHei",sans-serif}
+  .mtchart .mtl{position:absolute;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:8px;width:130px}
+  .mtchart .mti{width:40px;height:40px;border-radius:50%;background:${t.primary}12;color:${t.primary};display:flex;align-items:center;justify-content:center;flex:none}
+  .mtchart .mtt{font-size:14px;color:${t.ink};text-align:center;white-space:nowrap}
+
   /* 数据表格：真实数字/状态，代码画 */
   .dtbl{flex:1;margin-top:24px;align-self:center;width:100%;overflow:hidden;border-radius:12px;border:1px solid #e4e7ec}
   .dtbl table{width:100%;border-collapse:collapse;font-size:16.5px}
@@ -1105,6 +1253,24 @@ function css(t: DeckTheme): string {
   .spoke .spn{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:8px;width:172px;text-align:center}
   .spoke .spn .spd{width:16px;height:16px;border-radius:50%;background:${t.accent};box-shadow:0 0 0 6px ${t.accent}22}
   .spoke .spn .spt{display:block;width:100%;font-size:14px;color:${t.ink};line-height:1.45;font-weight:600}
+
+  /* 六边形锯齿连接流程图 */
+  .hxchain{flex:1;position:relative;align-self:stretch;width:100%;margin-top:26px}
+  .hxchain svg{position:absolute;inset:0;width:100%;height:100%}
+  .hxchain .hxn{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;width:170px}
+  .hxchain .hxh{width:92px;height:92px;flex:none;clip-path:polygon(25% 3%,75% 3%,100% 50%,75% 97%,25% 97%,0% 50%);display:flex;align-items:center;justify-content:center;color:#fff;margin-bottom:16px}
+  .hxchain .hxtt{font-size:16px;font-weight:700;color:${t.ink};text-align:center;line-height:1.4}
+
+  /* 环形风车图 */
+  .pinwheel{flex:1;position:relative;display:flex;flex-direction:column;justify-content:space-between;margin-top:10px}
+  .pinwheel .pwrow{display:flex;justify-content:space-between;gap:40px}
+  .pinwheel .pwc{width:36%}
+  .pinwheel .pwc-r{text-align:right}
+  .pinwheel .pwt{font-size:19px;font-weight:700;color:${t.ink};margin-bottom:10px}
+  .pinwheel .pwb{font-size:14px;color:#7c828d;line-height:1.6}
+  .pinwheel .pw-wheel{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:300px;height:300px}
+  .pinwheel .pw-wheel svg{width:100%;height:100%}
+  .pinwheel .pwn{position:absolute;transform:translate(-50%,-50%);color:#fff;font-weight:800;font-size:24px;font-family:"Arial","Microsoft YaHei",sans-serif;text-shadow:0 1px 4px rgba(0,0,0,.35)}
 
   /* 六边形图片框 */
   .hexf{position:relative;width:340px;flex:none;aspect-ratio:1/1.1}
@@ -1618,6 +1784,16 @@ function chart(sl: DeckSlideIn, t: DeckTheme, en: string, o: DeckOutline): strin
       t,
       rows.map((r) => ({ label: r.label, value: Math.abs(parseFloat(String(r.value).replace(/[^0-9.\-]/g, '')) || 0) })),
     )
+  } else if (d.kind === 'mountain') {
+    // 多项指标对比，视觉上比柱状图更有设计感 → 山丘图，每项一座独立山头
+    body = mountainChart(
+      t,
+      rows.map((r) => ({
+        label: r.label,
+        value: Math.abs(parseFloat(String(r.value).replace(/[^0-9.\-]/g, '')) || 0),
+        raw: String(r.value),
+      })),
+    )
   } else if (d.kind === 'radar') {
     // 多维度评估/评分 → 雷达图，value 0~100
     body = radarChart(
@@ -1727,6 +1903,9 @@ const CONTENT_LAYOUTS = new Set([
   'radar',
   'waterfall',
   'gauge',
+  'mountain',
+  'hex_chain',
+  'pinwheel',
 ])
 
 function spokeLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
@@ -1767,6 +1946,16 @@ function cycleLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
   return bodySlide(o, `${head(sl, en, o)}${arrowRing(o.theme, center, items)}`)
 }
 
+function hexChainLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
+  const items = (sl.bullets || []).map((s) => s.trim()).filter(Boolean).slice(0, 6)
+  return bodySlide(o, `${head(sl, en, o)}${hexChain(o.theme, items)}`)
+}
+
+function pinwheelLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
+  const items = (sl.bullets || []).map((s) => s.trim()).filter(Boolean).slice(0, 4)
+  return bodySlide(o, `${head(sl, en, o)}${pinwheel(o.theme, items)}`)
+}
+
 /** 照片墙：2~3 张照片套几何图框 + 每张一句说明 */
 function galleryLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
   const pics = (sl.images || []).filter(Boolean).slice(0, 3)
@@ -1795,21 +1984,23 @@ export function resolveLayout(sl: DeckSlideIn): string {
   if (lay in need && (sl[need[lay]] == null || typeof sl[need[lay]] !== 'object')) lay = ''
   if (
     (lay === 'bar' || lay === 'stats' || lay === 'rings' || lay === 'line' ||
-      lay === 'radar' || lay === 'waterfall' || lay === 'gauge') &&
+      lay === 'radar' || lay === 'waterfall' || lay === 'gauge' || lay === 'mountain') &&
     !sl.data?.items?.length
   )
     lay = ''
   if (lay === 'table' && !(sl.table?.columns?.length && sl.table?.rows?.length)) lay = ''
-  // 节点类版式（spoke/hive/cycle/bulb/tree/diamond）的标签是贴在固定大小图形节点上的短语（10~16 字上限），
+  // 节点类版式（spoke/hive/cycle/bulb/tree/diamond/hex_chain）的标签是贴在固定大小图形节点上的短语（10~16 字上限），
   // 渲染时会用 short() 硬截断超长文字防止撑破图形——LLM 有时不听话给成整句，截断就会悄悄丢掉后半句。
   // 与其截断丢内容，不如整页直接退回 list/cards（能装下完整句子），交给下面的兜底推断重新选版式。
   const NODE_LABEL_MAX = 20
   const tooLongForNode = (bullets?: string[]) => (bullets || []).some((b) => b && b.trim().length > NODE_LABEL_MAX)
   if (
-    (lay === 'spoke' || lay === 'hive' || lay === 'cycle' || lay === 'bulb') &&
+    (lay === 'spoke' || lay === 'hive' || lay === 'cycle' || lay === 'bulb' || lay === 'hex_chain') &&
     ((sl.bullets || []).filter((b) => b && b.trim()).length < 3 || tooLongForNode(sl.bullets))
   )
     lay = ''
+  // 风车图正文不截断（走 splitTitleBody + para 正常换行），只要求条数够
+  if (lay === 'pinwheel' && (sl.bullets || []).filter((b) => b && b.trim()).length < 3) lay = ''
   if (
     lay === 'tree' &&
     ((sl.bullets || []).filter((b) => b && b.trim()).length < 2 || tooLongForNode(sl.bullets))
@@ -1829,6 +2020,7 @@ export function resolveLayout(sl: DeckSlideIn): string {
   if (sl.data?.kind === 'radar' && sl.data.items?.length) return 'radar'
   if (sl.data?.kind === 'waterfall' && sl.data.items?.length) return 'waterfall'
   if (sl.data?.kind === 'gauge' && sl.data.items?.length) return 'gauge'
+  if (sl.data?.kind === 'mountain' && sl.data.items?.length) return 'mountain'
   if (sl.swot && (sl.swot.s?.length || sl.swot.w?.length || sl.swot.o?.length || sl.swot.t?.length))
     return 'swot'
   if (sl.matrix?.cells?.length) return 'matrix'
@@ -1867,10 +2059,12 @@ export function composeDeck(o: DeckOutline): { styleTag: string; slides: string[
       else if (lay === 'tree') slides.push(treeLayout(sl, en, o))
       else if (lay === 'diamond') slides.push(diamondLayout(sl, en, o))
       else if (lay === 'bulb') slides.push(bulbLayout(sl, en, o))
+      else if (lay === 'hex_chain') slides.push(hexChainLayout(sl, en, o))
+      else if (lay === 'pinwheel') slides.push(pinwheelLayout(sl, en, o))
       else if (lay === 'table') slides.push(tableLayout(sl, en, o))
       else if (
         lay === 'bar' || lay === 'stats' || lay === 'line' ||
-        lay === 'radar' || lay === 'waterfall' || lay === 'gauge'
+        lay === 'radar' || lay === 'waterfall' || lay === 'gauge' || lay === 'mountain'
       )
         slides.push(chart(sl, t, en, o))
       else if (lay === 'big_number') slides.push(bigNumber(sl, en, o))
