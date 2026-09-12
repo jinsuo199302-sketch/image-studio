@@ -70,14 +70,13 @@ onBeforeUnmount(() => ro?.disconnect())
 
 const busy = ref(false)
 
-// 插入视频：跟大纲内容无关的手动挂件，导出前选"第几页 + 本地视频/YouTube 链接"
+// 插入视频：跟大纲内容无关的手动挂件，导出前选"第几页 + 本地视频"
+// （YouTube 链接去掉了——国内基本打不开，留着只是个没人能用的选项）
 interface VideoItem extends VideoAttachment {
   label: string
 }
 const videos = ref<VideoItem[]>([])
 const videoSlideNo = ref(1)
-const videoMode = ref<'file' | 'online'>('file')
-const videoUrl = ref('')
 const videoInput = ref<HTMLInputElement>()
 const videoBusy = ref(false)
 
@@ -107,12 +106,6 @@ async function pickVideoFile(e: Event) {
   } finally {
     videoBusy.value = false
   }
-}
-function addVideoLink() {
-  const url = videoUrl.value.trim()
-  if (!url) return
-  videos.value.push({ slideIndex: videoSlideNo.value - 1, kind: 'online', src: url, label: url })
-  videoUrl.value = ''
 }
 function rmVideo(i: number) {
   videos.value.splice(i, 1)
@@ -166,29 +159,10 @@ defineExpose({ download })
           />
           <span class="shrink-0 text-gray-500">页</span>
         </div>
-        <div class="flex gap-1.5">
-          <button
-            v-for="m in (['file', 'online'] as const)"
-            :key="m"
-            class="flex-1 rounded-md border px-2 py-1 transition"
-            :class="videoMode === m ? 'border-violet-500 bg-violet-50 text-violet-600' : 'border-gray-200 text-gray-500'"
-            @click="videoMode = m"
-          >
-            {{ m === 'file' ? '本地视频' : 'YouTube 链接' }}
-          </button>
-        </div>
-        <template v-if="videoMode === 'file'">
-          <input ref="videoInput" type="file" accept="video/*" class="hidden" @change="pickVideoFile" />
-          <el-button size="small" :loading="videoBusy" class="!w-full" @click="videoInput?.click()">
-            选择视频文件（最大 60MB）
-          </el-button>
-        </template>
-        <template v-else>
-          <div class="flex gap-1.5">
-            <el-input v-model="videoUrl" size="small" placeholder="https://www.youtube.com/embed/xxxx" />
-            <el-button size="small" type="primary" plain @click="addVideoLink">添加</el-button>
-          </div>
-        </template>
+        <input ref="videoInput" type="file" accept="video/*" class="hidden" @change="pickVideoFile" />
+        <el-button size="small" :loading="videoBusy" class="!w-full" @click="videoInput?.click()">
+          选择视频文件（最大 60MB）
+        </el-button>
         <div v-if="videos.length" class="space-y-1">
           <div
             v-for="(v, i) in videos"
