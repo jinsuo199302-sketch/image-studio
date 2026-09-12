@@ -344,6 +344,7 @@ export interface DeckOutlineRaw {
   mood?: string
   cover_image?: string
   cover_features?: { value: string; label: string; en?: string }[]
+  cover_meta?: string
   style_hint?: { density?: string; motif?: string }
   sections: {
     heading: string

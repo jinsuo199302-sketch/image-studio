@@ -707,6 +707,8 @@ export interface DeckOutline {
   coverImage?: string
   /** 封面亮点规格条（产品/方案发布类）：3~4 个 */
   coverFeatures?: { value: string; label: string; en?: string }[]
+  /** 资料原文里带的汇报人/单位/日期这类署名信息，原样显示在封面；没有就留空白下划线占位 */
+  coverMeta?: string
   /** 参考图归类出来的排版倾向（只影响装饰母题轮换和疏密，版面尺寸位置仍全部本引擎算） */
   style_hint?: { density?: 'airy' | 'balanced' | 'packed' | string; motif?: string }
 }
@@ -1242,7 +1244,7 @@ function gCover(o: DeckOutline): string {
       <h1>${esc(o.title)}</h1><div class="tick"></div>
       ${o.subtitle ? `<div class="sub">${esc(o.subtitle)}</div>` : ''}
       ${featStrip}
-      ${feats.length ? '' : '<div class="meta"><div>汇报单位：____________</div><div>汇报时间：____________</div></div>'}
+      ${feats.length ? '' : `<div class="meta">${o.coverMeta ? esc(o.coverMeta) : '<div>汇报单位：____________</div><div>汇报时间：____________</div>'}</div>`}
     </div></div>`
 }
 
@@ -1298,7 +1300,7 @@ function cover(o: DeckOutline): string {
       <h1>${esc(o.title)}</h1><div class="tick"></div>
       ${o.subtitle ? `<div class="sub">${esc(o.subtitle)}</div>` : ''}
       ${featStrip}
-      ${feats.length ? '' : '<div class="meta"><div>汇报单位：____________</div><div>汇报时间：____________</div></div>'}
+      ${feats.length ? '' : `<div class="meta">${o.coverMeta ? esc(o.coverMeta) : '<div>汇报单位：____________</div><div>汇报时间：____________</div>'}</div>`}
     </div></div>`
 }
 

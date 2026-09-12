@@ -62,6 +62,8 @@ def normalize_outline_text(outline: dict) -> dict:
     outline["title"] = fix_short(outline.get("title", ""))
     if outline.get("subtitle"):
         outline["subtitle"] = fix_short(outline["subtitle"])
+    if outline.get("cover_meta"):
+        outline["cover_meta"] = str(outline["cover_meta"]).strip()
     for sec in outline.get("sections") or []:
         sec["heading"] = fix_short(sec.get("heading", ""))
         for sl in sec.get("slides") or []:

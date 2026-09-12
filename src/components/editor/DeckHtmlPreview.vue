@@ -50,6 +50,7 @@ const composed = computed(() => {
     bg: props.bg ?? null,
     coverImage: props.outline.cover_image,
     coverFeatures: props.outline.cover_features,
+    coverMeta: props.outline.cover_meta,
     style_hint: props.outline.style_hint,
   }
   return composeDeck(o)
