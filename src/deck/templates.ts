@@ -895,9 +895,14 @@ function fitBodyFont(items: string[], base: number, floor: number): number {
 const CARD_COLS: Record<number, number> = { 1: 1, 2: 2, 3: 3, 4: 2, 5: 3, 6: 3 }
 const cardCols = (n: number) => CARD_COLS[n] || Math.min(3, Math.max(n, 1))
 
-/** 图标徽标形状按序号轮换——排版里常用的九种造型交替，不再整页清一色方块：
- * 圆角方（默认）/圆/菱形/直角方/圆角长方形/六边形/齿轮/盾牌/有机圆点（blob）。 */
-const ICON_SHAPES = ['', 'rd', 'di', 'sq', 'rc', 'hx', 'gr', 'sh', 'bl']
+/** 图标徽标形状按序号轮换九种造型。排列顺序有讲究——起始偏移每次固定跳 3
+ * （`_cardsIdx++ * 3`），意味着同一页卡片/清单里出现的永远是某个固定 3 个一组
+ * （下标 0-2、3-5 或 6-8 这三组之一）；如果同一组里凑巧两个都是"圆乎乎"的形状
+ * （比如默认圆角方跟正圆 rd 排在一起），配上图标本身很多也是圆形轮廓（circle-check
+ * 这类很常见），两个徽标会长得像双胞胎——用户反馈"感觉边框都差不多"就是真实生成的
+ * pptx 里踩了这个坑（实测到默认形状和正圆形状被分到同一组，肉眼确实分不清）。
+ * 这里手动把每组 3 个都搭配成"尖角/圆/独特轮廓"三选一，组内绝不放两个圆乎乎的形状。 */
+const ICON_SHAPES = ['sq', 'hx', 'rd', 'gr', 'di', 'rc', 'sh', 'bl', '']
 const iconShape = (i: number) => ICON_SHAPES[i % ICON_SHAPES.length]
 
 /** 极坐标转百分比坐标（圆心 50%,50%），拼 clip-path polygon 用。 */
@@ -1057,7 +1062,7 @@ function css(t: DeckTheme): string {
   .card{border:1px solid #e4e7ec;border-top:3px solid ${t.primary};border-radius:16px;padding:24px 26px;display:flex;flex-direction:column;align-items:flex-start;gap:14px;background:${tintToWhite(t.primary, 0.89)}}
   .card:nth-child(even){border-top-color:${t.accent};background:${tintToWhite(t.accent, 0.89)}}
   .card .hd{display:flex;align-items:center;gap:12px}
-  .card .ic{width:40px;height:40px;flex:none;border-radius:11px;background:${t.primary}12;color:${t.primary};display:flex;align-items:center;justify-content:center}
+  .card .ic{width:40px;height:40px;flex:none;border-radius:7px;background:${t.primary}12;color:${t.primary};display:flex;align-items:center;justify-content:center}
   /* 形状轮换规则跟 .row .ic（清单版式的图标徽标）共用同一套，不然清单页永远只有
      一种圆角方块——之前只顾着卡片，清单反而漏了，用户反馈"加了那么多造型实际只见到
      一两种"，根源就是这个：大部分内容其实走清单版式，卡片只是少数几页。 */
@@ -1084,7 +1089,7 @@ function css(t: DeckTheme): string {
   .row{display:flex;align-items:center;gap:20px;padding:15px 18px;border-bottom:1px solid #ebedf1;border-radius:10px}
   .row:last-child{border-bottom:0}
   .row:nth-child(even){background:${tintToWhite(t.primary, 0.95)}}
-  .row .ic{width:44px;height:44px;flex:none;border-radius:12px;background:${t.primary}0f;color:${t.primary};display:flex;align-items:center;justify-content:center}
+  .row .ic{width:44px;height:44px;flex:none;border-radius:8px;background:${t.primary}0f;color:${t.primary};display:flex;align-items:center;justify-content:center}
   .row:nth-child(3n+2) .ic{background:${t.accent}12;color:${t.accent}}
   .row .n{font-size:12px;font-weight:800;color:${t.accent};letter-spacing:1px;flex:none;width:24px}
   .row .rt{font-size:18px;line-height:1.5;color:${t.ink}}
