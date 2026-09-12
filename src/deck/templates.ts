@@ -1725,13 +1725,26 @@ export function resolveLayout(sl: DeckSlideIn): string {
   )
     lay = ''
   if (lay === 'table' && !(sl.table?.columns?.length && sl.table?.rows?.length)) lay = ''
+  // 节点类版式（spoke/hive/cycle/bulb/tree/diamond）的标签是贴在固定大小图形节点上的短语（10~16 字上限），
+  // 渲染时会用 short() 硬截断超长文字防止撑破图形——LLM 有时不听话给成整句，截断就会悄悄丢掉后半句。
+  // 与其截断丢内容，不如整页直接退回 list/cards（能装下完整句子），交给下面的兜底推断重新选版式。
+  const NODE_LABEL_MAX = 20
+  const tooLongForNode = (bullets?: string[]) => (bullets || []).some((b) => b && b.trim().length > NODE_LABEL_MAX)
   if (
     (lay === 'spoke' || lay === 'hive' || lay === 'cycle' || lay === 'bulb') &&
-    (sl.bullets || []).filter((b) => b && b.trim()).length < 3
+    ((sl.bullets || []).filter((b) => b && b.trim()).length < 3 || tooLongForNode(sl.bullets))
   )
     lay = ''
-  if (lay === 'tree' && (sl.bullets || []).filter((b) => b && b.trim()).length < 2) lay = ''
-  if (lay === 'diamond' && (sl.bullets || []).filter((b) => b && b.trim()).length < 3) lay = ''
+  if (
+    lay === 'tree' &&
+    ((sl.bullets || []).filter((b) => b && b.trim()).length < 2 || tooLongForNode(sl.bullets))
+  )
+    lay = ''
+  if (
+    lay === 'diamond' &&
+    ((sl.bullets || []).filter((b) => b && b.trim()).length < 3 || tooLongForNode(sl.bullets))
+  )
+    lay = ''
   if (lay === 'gallery' && (sl.images || []).filter(Boolean).length < 2) lay = ''
   if (CONTENT_LAYOUTS.has(lay)) return lay
   if ((sl.images || []).filter(Boolean).length >= 2) return 'gallery'
