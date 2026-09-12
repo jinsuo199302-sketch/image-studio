@@ -137,7 +137,11 @@ function addTextBox(slide: PptxGenJS.Slide, p: Prim): void {
     x: tx,
     y: p.y * IN_PER_PX_H,
     w: tw,
-    h: p.vcenter ? h : wrap ? Math.max(h, fs * lh * IN_PER_PX_H * 1.3) : fs * lh * IN_PER_PX_H * 1.35,
+    // 多行换行文本额外留一整行缓冲：量的是浏览器里的实际折行高度，但 PowerPoint 是另一套排版
+    // 引擎（换行规则/字距计算都不同），同一款字体也可能多折一行；pptxgenjs 的 shrink-on-overflow
+    // 只在人在 PowerPoint 里手动改字才会重算，文件刚打开时不会自动生效，所以这里只能靠留足高度
+    // 缓冲去兜底——不是 100% 杜绝溢出，是把"实际多折一行"这种最常见的情况先兜住。
+    h: p.vcenter ? h : wrap ? Math.max(h + fs * lh * IN_PER_PX_H, fs * lh * IN_PER_PX_H * 1.3) : fs * lh * IN_PER_PX_H * 1.35,
     fontSize: fs * 0.75,
     bold: p.bold,
     italic: p.italic,

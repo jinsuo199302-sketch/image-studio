@@ -726,6 +726,17 @@ const short = (s: string, n = 16) => (s.length > n ? s.slice(0, n - 1) + '…' :
 
 const pad2 = (n: number) => String(n).padStart(2, '0')
 
+/** 卡片/清单正文按这组里最长一条的字数自动降字号——.slide 是固定 720px 高、overflow:hidden，
+ * 文字明显偏多时字号不跟着降，卡片/清单会被撑高到画布外直接截掉。同组统一取一个字号（不逐条
+ * 各缩各的），排版看着才齐整，不会一行大字一行小字。 */
+function fitBodyFont(items: string[], base: number, floor: number): number {
+  const maxLen = Math.max(0, ...items.map((s) => s.length))
+  if (maxLen <= 40) return base
+  if (maxLen >= 80) return floor
+  const t = (maxLen - 40) / 40
+  return Math.round(base - (base - floor) * t)
+}
+
 function css(t: DeckTheme): string {
   return `
   .slide{--m:96px;width:1280px;height:720px;position:relative;overflow:hidden;background:${t.paper};
@@ -1447,19 +1458,23 @@ function content(sl: DeckSlideIn, en: string, o: DeckOutline, imgFlip = false, l
     const cards = items
     const cols = Math.min(3, Math.max(cards.length, 1))
     const geo = isGeo(o)
+    const ctBase = geo ? 16 : 18
+    const ctFs = fitBodyFont(cards, ctBase, 14)
+    const ctLh = ctFs < ctBase ? 1.45 : 1.6
     body = `<div class="cards" style="grid-template-columns:repeat(${cols},1fr)">${cards
       .map(
         (b, i) =>
           `<div class="card"><div class="ic">${ic(b, i, geo ? 34 : 30)}</div><div class="num">POINT ${pad2(
             i + 1,
-          )}</div><div class="ct">${para(b)}</div>${geo ? `<div class="bn">${pad2(i + 1)}</div>` : ''}</div>`,
+          )}</div><div class="ct" style="font-size:${ctFs}px;line-height:${ctLh}">${para(b)}</div>${geo ? `<div class="bn">${pad2(i + 1)}</div>` : ''}</div>`,
       )
       .join('')}</div>`
   } else {
+    const rtFs = fitBodyFont(items, 18, 15)
     body = `<div class="list">${items
       .map(
         (b, i) =>
-          `<div class="row"><div class="ic">${ic(b, i, 22)}</div><span class="n">${pad2(i + 1)}</span><div class="rt">${esc(b)}</div></div>`,
+          `<div class="row"><div class="ic">${ic(b, i, 22)}</div><span class="n">${pad2(i + 1)}</span><div class="rt" style="font-size:${rtFs}px">${esc(b)}</div></div>`,
       )
       .join('')}</div>`
   }
