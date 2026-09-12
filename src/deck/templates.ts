@@ -742,8 +742,9 @@ function fitBodyFont(items: string[], base: number, floor: number): number {
 const CARD_COLS: Record<number, number> = { 1: 1, 2: 2, 3: 3, 4: 2, 5: 3, 6: 3 }
 const cardCols = (n: number) => CARD_COLS[n] || Math.min(3, Math.max(n, 1))
 
-/** 图标徽标形状按序号轮换——圆/圆角方/菱形三种交替，不再整页清一色圆角方块。 */
-const ICON_SHAPES = ['', 'rd', 'di']
+/** 图标徽标形状按序号轮换——排版里常用的六种造型交替：圆角方（默认）/圆/菱形/直角方/
+ * 圆角长方形/六边形（"齿轮"类机械感造型的替代，见 css() 里 .hx 的说明），不再整页清一色方块。 */
+const ICON_SHAPES = ['', 'rd', 'di', 'sq', 'rc', 'hx']
 const iconShape = (i: number) => ICON_SHAPES[i % ICON_SHAPES.length]
 
 function css(t: DeckTheme): string {
@@ -870,7 +871,7 @@ function css(t: DeckTheme): string {
 
   .ico{display:block}
 
-  /* 卡片（2~6 条）——图标徽标形状按序号轮换（圆/圆角方/菱形），不再清一色圆角方块 */
+  /* 卡片（2~6 条）——图标徽标形状按序号轮换六种排版常用造型，不再清一色圆角方块 */
   .cards{display:grid;gap:28px;flex:1;margin-top:36px;align-content:center}
   .card{border:1px solid #e4e7ec;border-top:3px solid ${t.primary};border-radius:16px;padding:30px 28px;display:flex;flex-direction:column;align-items:flex-start;gap:16px;background:#fff}
   .card:nth-child(even){border-top-color:${t.accent}}
@@ -878,6 +879,12 @@ function css(t: DeckTheme): string {
   .card .ic.rd{border-radius:50%}
   .card .ic.di{border-radius:12px;transform:rotate(45deg)}
   .card .ic.di svg{transform:rotate(-45deg)}
+  .card .ic.sq{border-radius:3px}
+  .card .ic.rc{width:74px;height:52px;border-radius:12px}
+  /* 六边形当"齿轮/机械感"造型的替代——真齿轮那圈锯齿在 60px 徽标里缩到最后会糊成一团（尤其
+     导出走 snapdom 光栅化+JPEG 压缩再打薄一层），六边形是同一类"工业/科技"联想里唯一在这个
+     尺寸下还能干净清出边缘的选择 */
+  .card .ic.hx{border-radius:0;clip-path:polygon(25% 3%,75% 3%,100% 50%,75% 97%,25% 97%,0% 50%)}
   .card .num{font-size:12px;letter-spacing:2px;font-weight:800;color:${t.accent}}
   .card .ct{font-size:18px;line-height:1.6;text-align:left;align-self:stretch;color:${t.ink}}
 
