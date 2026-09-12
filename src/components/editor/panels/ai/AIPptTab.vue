@@ -71,6 +71,16 @@ const cwSubject = ref('数学')
 const cwGrade = ref('三年级')
 const cwSemester = ref<'上册' | '下册'>('上册')
 const cwLesson = ref('')
+// 课件内容来源：填课题（AI 自己出内容）或传资料（老师已经整理好的图片/文字/文档，
+// AI 只重新组织结构、不能编内容）——跟顶层"填主题/传资料"是同一个思路，复用同一套
+// matFile/matText 状态和上传逻辑，不用再声明一套
+const cwSource = ref<'topic' | 'material'>('topic')
+/** 资料模式下追加的一句提醒——防止 AI 把"按教学环节组织"理解成"可以为了凑环节编内容"，
+ * 资料里没有的例题/练习题不能瞎编，只能整理老师已经给的内容。 */
+const CW_EXTRA_MATERIAL_NOTE =
+  '这次是老师上传的现成资料（教案/讲义/图片扫描件等），把资料内容分配进上面这几个教学' +
+  '环节时只做结构整理，不能编造资料里没有的例题、数据或练习题；资料本来没有的环节（比如' +
+  '没给课堂练习题）可以由你酌情补充，但补充的内容要明显标注是补充、不是资料原文。'
 /** 固定的教学环节指导，塞进 extra 最前面（用户自己写的补充要求接在后面，不覆盖）——
  * 复习导入/新课讲解/例题精讲/课堂练习/课堂小结/作业布置这套节奏是教学法本身，不是随便
  * 排的版式顺序，交给通用大纲 prompt 自由发挥大概率排不出来，必须明确写清楚。 */
@@ -174,8 +184,10 @@ function rmPhoto(i: number) {
 }
 
 async function genDeck() {
-  const useMaterial = aiSource.value === 'material'
   const useCourseware = aiSource.value === 'courseware'
+  // 课件模式下"传资料"跟顶层"传资料"是同一件事（老师上传的现成材料），走的是
+  // generateDeckFromMaterial 那条链路；课件+填课题 / 顶层填主题 都走 generateDeck
+  const useMaterial = aiSource.value === 'material' || (useCourseware && cwSource.value === 'material')
   if (useMaterial) {
     if (!matFile.value && matText.value.trim().length < 20) {
       ElMessage.warning('上传资料文件，或粘贴至少几句文字')
@@ -215,9 +227,16 @@ async function genDeck() {
       : industryPreset
         ? { layouts: industryPreset.layouts, density: industryPreset.density, motif: industryPreset.motif }
         : {}
-    // 课件模式：固定的教学环节要求放最前面，行业氛围提示+用户自己写的补充要求接在后面
+    // 课件模式：固定的教学环节要求放最前面（传资料时额外加一句"不能编内容"提醒），
+    // 行业氛围提示+用户自己写的补充要求接在后面
+    const cwSourceNote = useMaterial ? CW_EXTRA_MATERIAL_NOTE : ''
+    // 课件+传资料时资料本身没有"课题"这个概念，把教材版本/学科/年级信息塞进 extra
+    // 当背景提示（不强制，帮 AI 判断难度和措辞），而不是拼进不存在的 topic 字段
+    const cwContextNote = useCourseware
+      ? `资料背景：${cwEdition.value}${cwSubject.value}${cwGrade.value}${cwSemester.value}${cwSource.value === 'topic' ? `《${cwLesson.value.trim()}》` : ''}。`
+      : ''
     const effExtra = useCourseware
-      ? [CW_EXTRA_TEMPLATE, extra.value.trim()].filter(Boolean).join('；')
+      ? [cwContextNote, CW_EXTRA_TEMPLATE, cwSourceNote, extra.value.trim()].filter(Boolean).join('；')
       : [industryPreset?.hint, extra.value.trim()].filter(Boolean).join('；')
     const effTopic = useCourseware
       ? `${cwEdition.value}${cwSubject.value}${cwGrade.value}${cwSemester.value}《${cwLesson.value.trim()}》教学课件`
@@ -229,7 +248,7 @@ async function genDeck() {
     const r = useMaterial
       ? await generateDeckFromMaterial(
           { file: matFile.value ?? undefined, pastedText: matText.value.trim() || undefined },
-          sections.value,
+          effSections,
           theme.value,
           effExtra,
           aiBg.value,
@@ -354,7 +373,9 @@ async function runConvert() {
               : aiSource === 'material'
                 ? '传资料 / 粘长文 / 上传现成 PPT → AI 提炼内容并按新主题重新设计，内容来自你的资料'
                 : aiSource === 'courseware'
-                  ? '填教材版本+课题 → AI 按课堂教学环节（导入/新课/例题/练习/小结/作业）排一套课件'
+                  ? cwSource === 'material'
+                    ? '传教案/图片/文档 → AI 按课堂教学环节重新整理，不编造资料没有的内容'
+                    : '填教材版本+课题 → AI 按课堂教学环节（导入/新课/例题/练习/小结/作业）排一套课件'
                   : '填主题 → AI 排一套幻灯片，可下载 PPTX 在 PowerPoint 里改'
           "
           :type="authStore.isAuthenticated ? 'success' : 'info'"
@@ -419,7 +440,59 @@ async function runConvert() {
               </button>
             </div>
           </div>
-          <el-input v-model="cwLesson" size="small" placeholder="课题，例：分数的简单计算" maxlength="30" />
+          <div class="flex gap-1.5">
+            <button
+              v-for="s in (['topic', 'material'] as const)"
+              :key="s"
+              class="flex-1 rounded-md border px-2 py-1 text-[11px] transition"
+              :class="cwSource === s ? 'border-violet-500 bg-violet-50 text-violet-600' : 'border-gray-200 text-gray-500'"
+              @click="cwSource = s"
+            >
+              {{ s === 'topic' ? '填课题' : '传资料（教案/图片/文档）' }}
+            </button>
+          </div>
+          <el-input
+            v-if="cwSource === 'topic'"
+            v-model="cwLesson"
+            size="small"
+            placeholder="课题，例：分数的简单计算"
+            maxlength="30"
+          />
+          <template v-else>
+            <input
+              ref="matFileInput"
+              type="file"
+              accept=".docx,.pdf,.pptx,.txt,.md,image/*"
+              class="hidden"
+              @change="pickMatFile"
+            />
+            <div
+              v-if="!matFile"
+              class="flex h-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-gray-300 text-gray-400 transition hover:border-violet-400 hover:text-violet-500"
+              @click="matFileInput?.click()"
+            >
+              <el-icon :size="20"><UploadFilled /></el-icon>
+              <span class="text-[11px]">上传教案 / 讲义 / 图片扫描件（拍照或截图也行）</span>
+            </div>
+            <div
+              v-else
+              class="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-2 text-xs"
+            >
+              <span class="truncate text-gray-600">{{ matFile.name }}</span>
+              <button class="ml-2 shrink-0 text-gray-400 hover:text-red-400" @click="matFile = null">
+                <el-icon :size="13"><Close /></el-icon>
+              </button>
+            </div>
+            <el-input
+              v-model="matText"
+              type="textarea"
+              :rows="4"
+              size="small"
+              maxlength="24000"
+              :placeholder="matFile ? '（已选文件，这里可留空）也可以直接粘贴补充文字' : '或直接把教案 / 讲稿文字粘贴进来'"
+            />
+            <el-input v-model="cwLesson" size="small" placeholder="课题（可选，帮 AI 更好理解资料）" maxlength="30" />
+          </template>
         </template>
 
         <el-input
@@ -600,7 +673,9 @@ async function runConvert() {
             aiSource === 'topic'
               ? !topic.trim()
               : aiSource === 'courseware'
-                ? !cwLesson.trim()
+                ? cwSource === 'topic'
+                  ? !cwLesson.trim()
+                  : !matFile && matText.trim().length < 20
                 : !matFile && matText.trim().length < 20
           "
           @click="genDeck"
