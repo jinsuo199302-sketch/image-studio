@@ -510,6 +510,17 @@ export async function deckToPptx(slides: DeckSlide[], theme: string, title: stri
   return authPostJsonBlob('/design/deck/pptx', { slides, theme, title }, 'PPTX 导出失败')
 }
 
+/**
+ * 图片型 PPT（每页都是截图/图片拼的，选不中文字）→ 逐页拆图层重排成可编辑 PPTX。
+ * 复用手抄报拆分引擎，跟传资料生成一样走异步轮询、结果同样是 DeckResult（无 outline，走代码排版预览）。
+ */
+export async function convertImagePptx(file: File): Promise<DeckResult> {
+  const form = new FormData()
+  form.append('file', file, file.name || 'slides.pptx')
+  const { jobId } = await authPostForm<{ jobId: string }>('/design/pptx-to-editable', form, 'PPT 转换失败')
+  return pollDeckJob(jobId)
+}
+
 /** 可拆分手抄报里替换单个元素：一句提示词 → 一张透明底小图 */
 export async function regenerateElement(prompt: string, style = 'color'): Promise<{ src: string; assetId: string }> {
   return authPostJson<{ src: string; assetId: string }>(

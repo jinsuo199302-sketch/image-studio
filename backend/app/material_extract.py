@@ -56,6 +56,36 @@ def _from_pdf(data: bytes) -> str:
     return "\n\n".join(parts)
 
 
+def _from_pptx(data: bytes) -> str:
+    """现成 PPT →一段文字，按页留标题/要点，喂给大纲模型重新设计（"美化 PPT"用）。"""
+    import io
+
+    from pptx import Presentation
+
+    prs = Presentation(io.BytesIO(data))
+    parts: list[str] = []
+    for slide in prs.slides:
+        lines: list[str] = []
+        title = ""
+        title_shape = getattr(slide.shapes, "title", None)
+        title_id = title_shape.shape_id if title_shape is not None else None
+        if title_shape is not None and title_shape.has_text_frame:
+            title = title_shape.text_frame.text.strip()
+        for shape in slide.shapes:
+            # slide.shapes.title 每次访问都返回新包装对象，`is` 比不出来，只能比 shape_id
+            if shape.shape_id == title_id or not shape.has_text_frame:
+                continue
+            for para in shape.text_frame.paragraphs:
+                t = "".join(r.text for r in para.runs).strip() or para.text.strip()
+                if t:
+                    lines.append(t)
+        if not title and lines:
+            title = lines.pop(0)
+        if title or lines:
+            parts.append("\n".join(([f"## {title}"] if title else []) + lines))
+    return "\n\n".join(parts)
+
+
 def extract_material(filename: str, content_type: str, data: bytes) -> str:
     """支持 .docx / .pdf / .txt / .md。返回清洗后的纯文本，最多 MAX_CHARS 字。
     解析失败或格式不支持抛 ValueError（调用方转成 400）。"""
@@ -66,12 +96,16 @@ def extract_material(filename: str, content_type: str, data: bytes) -> str:
             text = _from_docx(data)
         elif name.endswith(".pdf") or ct == "application/pdf":
             text = _from_pdf(data)
+        elif name.endswith(".pptx") or "officedocument.presentationml" in ct:
+            text = _from_pptx(data)
         elif name.endswith((".txt", ".md", ".markdown")) or ct.startswith("text/"):
             text = data.decode("utf-8", errors="replace")
         elif name.endswith(".doc"):
             raise ValueError("旧版 .doc 不支持，请另存为 .docx 再上传")
+        elif name.endswith(".ppt"):
+            raise ValueError("旧版 .ppt 不支持，请另存为 .pptx 再上传")
         else:
-            raise ValueError("只支持 Word(.docx)、PDF、txt 文本，或直接粘贴文字")
+            raise ValueError("只支持 Word(.docx)、PDF、PPT(.pptx)、txt 文本，或直接粘贴文字")
     except ValueError:
         raise
     except Exception as e:  # noqa: BLE001

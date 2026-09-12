@@ -2022,6 +2022,110 @@ async def design_decompose(
     return {"jobId": job_id}
 
 
+MAX_CONVERT_SLIDES = 12
+
+
+def _extract_full_bleed_slide_images(pptx_bytes: bytes, min_coverage: float = 0.8) -> list[bytes]:
+    """"截图型 PPT"（每页就是一张铺满整页的图片，截图/图片拼的、没法编辑那种）→
+    每页的图片字节，按页序排好。要求每一页都得是这种整页图——只要有一页本来就是正常的可编辑
+    文字页，就报错说第几页不满足，不做"部分转换"（语义含糊，不如让用户明确知道这工具是干嘛的）。"""
+    from pptx import Presentation
+    from pptx.enum.shapes import MSO_SHAPE_TYPE
+
+    try:
+        prs = Presentation(io.BytesIO(pptx_bytes))
+    except Exception as e:  # noqa: BLE001
+        raise ValueError(f"PPT 文件打不开：{e}") from e
+
+    slides = list(prs.slides)
+    if not slides:
+        raise ValueError("这份 PPT 没有幻灯片")
+    if len(slides) > MAX_CONVERT_SLIDES:
+        raise ValueError(f"最多支持 {MAX_CONVERT_SLIDES} 页（这份有 {len(slides)} 页）")
+
+    slide_area = prs.slide_width * prs.slide_height
+    out: list[bytes] = []
+    for i, slide in enumerate(slides, 1):
+        best = None
+        best_area = 0
+        for shape in slide.shapes:
+            if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
+                area = shape.width * shape.height
+                if area > best_area:
+                    best_area, best = area, shape
+        if best is None or slide_area <= 0 or best_area / slide_area < min_coverage:
+            raise ValueError(f"第 {i} 页不是整页截图——这个功能只处理「每页都是一张图」的 PPT")
+        out.append(best.image.blob)
+    return out
+
+
+async def _do_pptx_convert(db, user, slide_images: list[bytes], style_key: str) -> dict:
+    """逐页复用手抄报的拆图层引擎（_do_decompose），拼回一套「AI PPT」结果结构——
+    跟 deck_gen 的 slides 数组（background + elements + w/h）完全同格式，下载 PPTX
+    直接走已有的 deck_gen.deck_to_pptx，不用另写导出器。"""
+    slides: list[dict] = []
+    for img_bytes in slide_images:
+        await _check_not_sensitive_document(img_bytes, "image/png", "PPT 转可编辑")
+        dec = await _do_decompose(db, user, img_bytes, deck_gen.W, deck_gen.H, style_key)
+        slides.append({
+            "background": dec["background"],
+            "elements": dec["elements"],
+            "w": deck_gen.W,
+            "h": deck_gen.H,
+        })
+    return {"title": "转换后的 PPT", "theme": "auto", "slides": slides}
+
+
+async def _run_pptx_convert_job(job_id, user_id, ticket, slide_images: list[bytes], style_key: str):
+    from app.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        user = db.query(models.User).filter(models.User.id == user_id).first()
+        if user is None:
+            raise RuntimeError("用户不存在")
+        result = await _do_pptx_convert(db, user, slide_images, style_key)
+        _HANDOUT_JOBS[job_id] = {"status": "done", "result": result, "user_id": user_id}
+    except Exception as e:  # noqa: BLE001
+        try:
+            user = db.query(models.User).filter(models.User.id == user_id).first()
+            if user:
+                billing.refund_ticket(db, user, ticket)
+        except Exception:
+            pass
+        detail = str(e.detail) if isinstance(e, HTTPException) else f"转换失败：{e}"
+        _HANDOUT_JOBS[job_id] = {"status": "error", "detail": detail, "user_id": user_id}
+    finally:
+        db.close()
+
+
+@router.post("/design/pptx-to-editable")
+async def design_pptx_to_editable(
+    file: UploadFile = File(...),
+    style: str = Form("color"),
+    user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """上传"图片型 PPT"——每页都是截图/图片拼的、在 PowerPoint 里选不中文字那种——
+    逐页拆图层（复用手抄报拆分引擎）重新拼成一套原生形状/文本框的可编辑 PPTX。
+    异步，轮询同 handout（/design/handout/job/{id}）。"""
+    _require_openlux()
+    raw = await file.read()
+    if len(raw) > 40 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="文件太大（上限 40MB）")
+    try:
+        slide_images = _extract_full_bleed_slide_images(raw)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    ticket = billing.consume(db, user, "PPT转可编辑")
+    job_id = uuid.uuid4().hex
+    _HANDOUT_JOBS[job_id] = {"status": "pending", "user_id": user.id}
+    _prune_handout_jobs()
+    asyncio.create_task(_run_pptx_convert_job(job_id, user.id, ticket, slide_images, style))
+    return {"jobId": job_id}
+
+
 @router.get("/assets")
 def list_generated_assets(
     category: str | None = None,

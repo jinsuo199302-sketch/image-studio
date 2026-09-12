@@ -9,6 +9,7 @@ import {
   uploadDeckPhotos,
   analyzeDeckReference,
   deckToPptx,
+  convertImagePptx,
   type DeckResult,
   type DeckPhoto,
   type DeckRefStyle,
@@ -21,7 +22,7 @@ import { useAuthStore } from '../../../../stores/auth'
 import SlidePreview from '../../SlidePreview.vue'
 import DeckHtmlPreview from '../../DeckHtmlPreview.vue'
 
-type Mode = 'ai' | 'text' | 'image'
+type Mode = 'ai' | 'text' | 'image' | 'convert'
 const mode = ref<Mode>('ai')
 const busy = ref(false)
 const authStore = useAuthStore()
@@ -235,19 +236,48 @@ function rmImg(i: number) {
   URL.revokeObjectURL(imgs.value[i].url)
   imgs.value.splice(i, 1)
 }
+
+// ── 截图型 PPT 转可编辑（新）─────────────────────────────
+const convertFile = ref<File | null>(null)
+const convertFileInput = ref<HTMLInputElement>()
+function pickConvertFile(e: Event) {
+  const f = (e.target as HTMLInputElement).files?.[0]
+  ;(e.target as HTMLInputElement).value = ''
+  if (!f) return
+  if (f.size > 40 * 1024 * 1024) {
+    ElMessage.warning('文件最大 40MB')
+    return
+  }
+  convertFile.value = f
+}
+async function runConvert() {
+  if (!convertFile.value) return
+  generating.value = true
+  deck.value = null
+  try {
+    const r = await convertImagePptx(convertFile.value)
+    await preloadSlideImages(r.slides as unknown as SlideData[])
+    deck.value = r
+    await nextTick()
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '转换失败，请重试')
+  } finally {
+    generating.value = false
+  }
+}
 </script>
 
 <template>
   <div class="flex h-full flex-col">
     <div class="flex gap-1.5 px-3 pt-3">
       <button
-        v-for="m in (['ai', 'text', 'image'] as const)"
+        v-for="m in (['ai', 'text', 'image', 'convert'] as const)"
         :key="m"
-        class="flex-1 rounded-full border px-2.5 py-1 text-xs transition"
+        class="flex-1 rounded-full border px-2 py-1 text-[11px] transition"
         :class="mode === m ? 'border-violet-500 bg-violet-50 text-violet-600' : 'border-gray-200 text-gray-500'"
         @click="mode = m"
       >
-        {{ m === 'ai' ? 'AI 生成' : m === 'text' ? '文字转PPT' : '图片转PPT' }}
+        {{ m === 'ai' ? 'AI 生成' : m === 'text' ? '文字转PPT' : m === 'image' ? '图片转PPT' : '截图转可编辑' }}
       </button>
     </div>
 
@@ -259,7 +289,7 @@ function rmImg(i: number) {
             !authStore.isAuthenticated
               ? '演示模式：登录后使用'
               : aiSource === 'material'
-                ? '传资料 / 粘长文 → AI 提炼主题并重组成幻灯片，内容来自你的资料'
+                ? '传资料 / 粘长文 / 上传现成 PPT → AI 提炼内容并按新主题重新设计，内容来自你的资料'
                 : '填主题 → AI 排一套幻灯片，可下载 PPTX 在 PowerPoint 里改'
           "
           :type="authStore.isAuthenticated ? 'success' : 'info'"
@@ -291,7 +321,7 @@ function rmImg(i: number) {
           <input
             ref="matFileInput"
             type="file"
-            accept=".docx,.pdf,.txt,.md,image/*"
+            accept=".docx,.pdf,.pptx,.txt,.md,image/*"
             class="hidden"
             @change="pickMatFile"
           />
@@ -301,7 +331,7 @@ function rmImg(i: number) {
             @click="matFileInput?.click()"
           >
             <el-icon :size="20"><UploadFilled /></el-icon>
-            <span class="text-[11px]">上传 Word / PDF / txt / 图片（拍照或截图）</span>
+            <span class="text-[11px]">上传 Word / PDF / 现成 PPT / txt / 图片（拍照或截图）</span>
           </div>
           <div
             v-else
@@ -448,44 +478,6 @@ function rmImg(i: number) {
               : '生成 PPT'
           }}
         </el-button>
-
-        <template v-if="deck">
-          <div class="pt-1 text-xs font-medium text-gray-600">{{ deck.title }}</div>
-
-          <!-- 主：CSS 模板排版 → 浏览器转可编辑 PPTX -->
-          <DeckHtmlPreview v-if="deck.outline" :outline="deck.outline" :theme-key="deck.theme" :bg="deck.bg" />
-          <p v-if="deck.outline" class="text-[11px] text-gray-400">
-            下载的 PPTX 是原生形状/文本框，文字、配色、排版都能在 PowerPoint 里改。
-          </p>
-
-          <!-- 备用：纯代码排版版（形状更简，个别环境兼容性更好） -->
-          <details v-if="deck.outline" class="rounded-lg border border-gray-200 bg-gray-50/60 p-2">
-            <summary class="cursor-pointer text-[11px] text-gray-500">备用：代码排版版（{{ deck.slides.length }} 页）</summary>
-            <div class="mt-2 flex justify-end">
-              <el-button size="small" plain :loading="busy" @click="downloadDeck">下载这一版</el-button>
-            </div>
-            <div class="mt-2 space-y-2">
-              <div v-for="(s, i) in deck.slides" :key="i" class="relative">
-                <span class="absolute left-1 top-1 z-10 rounded bg-black/45 px-1 text-[10px] text-white">{{ i + 1 }}</span>
-                <SlidePreview :slide="s as unknown as SlideData" :width="360" />
-              </div>
-            </div>
-          </details>
-
-          <!-- 兜底：老数据没有 outline 时退回代码版为主 -->
-          <template v-if="!deck.outline">
-            <div class="flex items-center justify-between">
-              <span class="text-xs text-gray-500">{{ deck.slides.length }} 页</span>
-              <el-button size="small" type="primary" plain :loading="busy" @click="downloadDeck">下载 PPTX</el-button>
-            </div>
-            <div class="space-y-2">
-              <div v-for="(s, i) in deck.slides" :key="i" class="relative">
-                <span class="absolute left-1 top-1 z-10 rounded bg-black/45 px-1 text-[10px] text-white">{{ i + 1 }}</span>
-                <SlidePreview :slide="s as unknown as SlideData" :width="360" />
-              </div>
-            </div>
-          </template>
-        </template>
       </template>
 
       <!-- ============ 文字转 PPT ============ -->
@@ -512,7 +504,7 @@ function rmImg(i: number) {
       </template>
 
       <!-- ============ 图片转 PPT ============ -->
-      <template v-else>
+      <template v-else-if="mode === 'image'">
         <el-alert title="每张图片一页。本地生成。" type="info" :closable="false" show-icon />
         <input ref="imgInput" type="file" accept="image/*" multiple class="hidden" @change="pickImgs" />
         <div
@@ -550,6 +542,79 @@ function rmImg(i: number) {
         >
           生成 PPT
         </el-button>
+      </template>
+
+      <!-- ============ 截图型 PPT 转可编辑 ============ -->
+      <template v-else-if="mode === 'convert'">
+        <el-alert
+          title="给「每页都是一张整图，PowerPoint 里选不中文字」的截图型 PPT 用：AI 逐页拆出文字和插画，重排成原生可编辑形状。最多 12 页，比例差异大的可能会拉伸。"
+          type="info"
+          :closable="false"
+          show-icon
+        />
+        <input ref="convertFileInput" type="file" accept=".pptx" class="hidden" @change="pickConvertFile" />
+        <div
+          v-if="!convertFile"
+          class="flex h-24 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-gray-300 text-gray-400 transition hover:border-violet-400 hover:text-violet-500"
+          @click="convertFileInput?.click()"
+        >
+          <el-icon :size="22"><UploadFilled /></el-icon>
+          <span class="text-xs">上传截图型 PPT（.pptx）</span>
+        </div>
+        <div v-else class="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-2 text-xs">
+          <span class="truncate text-gray-600">{{ convertFile.name }}</span>
+          <button class="ml-2 shrink-0 text-gray-400 hover:text-red-400" @click="convertFile = null">
+            <el-icon :size="13"><Close /></el-icon>
+          </button>
+        </div>
+        <el-button
+          type="primary"
+          class="!w-full !bg-violet-500 !border-none"
+          :loading="generating"
+          :disabled="!convertFile"
+          @click="runConvert"
+        >
+          {{ generating ? 'AI 拆图层中…（每页约需十几秒）' : '开始转换' }}
+        </el-button>
+      </template>
+
+      <!-- ============ 生成结果（AI 生成 / 截图转可编辑 共用）============ -->
+      <template v-if="deck && (mode === 'ai' || mode === 'convert')">
+        <div class="pt-1 text-xs font-medium text-gray-600">{{ deck.title }}</div>
+
+        <!-- 主：CSS 模板排版 → 浏览器转可编辑 PPTX -->
+        <DeckHtmlPreview v-if="deck.outline" :outline="deck.outline" :theme-key="deck.theme" :bg="deck.bg" />
+        <p v-if="deck.outline" class="text-[11px] text-gray-400">
+          下载的 PPTX 是原生形状/文本框，文字、配色、排版都能在 PowerPoint 里改。
+        </p>
+
+        <!-- 备用：纯代码排版版（形状更简，个别环境兼容性更好） -->
+        <details v-if="deck.outline" class="rounded-lg border border-gray-200 bg-gray-50/60 p-2">
+          <summary class="cursor-pointer text-[11px] text-gray-500">备用：代码排版版（{{ deck.slides.length }} 页）</summary>
+          <div class="mt-2 flex justify-end">
+            <el-button size="small" plain :loading="busy" @click="downloadDeck">下载这一版</el-button>
+          </div>
+          <div class="mt-2 space-y-2">
+            <div v-for="(s, i) in deck.slides" :key="i" class="relative">
+              <span class="absolute left-1 top-1 z-10 rounded bg-black/45 px-1 text-[10px] text-white">{{ i + 1 }}</span>
+              <SlidePreview :slide="s as unknown as SlideData" :width="360" />
+            </div>
+          </div>
+        </details>
+
+        <!-- 兜底：老数据没有 outline 时退回代码版为主（截图转可编辑走的就是这条） -->
+        <template v-if="!deck.outline">
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-gray-500">{{ deck.slides.length }} 页</span>
+            <el-button size="small" type="primary" plain :loading="busy" @click="downloadDeck">下载 PPTX</el-button>
+          </div>
+          <div class="space-y-2">
+            <div v-for="(s, i) in deck.slides" :key="i" class="relative">
+              <span class="absolute left-1 top-1 z-10 rounded bg-black/45 px-1 text-[10px] text-white">{{ i + 1 }}</span>
+              <SlidePreview :slide="s as unknown as SlideData" :width="360" />
+            </div>
+          </div>
+        </template>
       </template>
     </div>
   </div>
