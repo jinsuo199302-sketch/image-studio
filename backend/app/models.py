@@ -120,6 +120,22 @@ class AppSetting(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class BgJob(Base):
+    """异步生成任务（AI PPT/手抄报/参考图分析等，凡是"提交后台任务，前端轮询结果"这套
+    模式）的状态——原来是存在进程内存的字典里，进程一重启（部署/崩溃）内存就清空，正在
+    轮询的任务会变成"任务不存在或已过期"。改存这张表后，重启也不会丢正在跑的任务。
+    payload 是 result（成功）或 detail（失败）等除 status/user_id 外的其余字段，
+    读出来时会跟 status/user_id 拼回一个字典，跟以前存在内存字典里的形状完全一样。"""
+    __tablename__ = "bg_jobs"
+
+    id = Column(String, primary_key=True, index=True)
+    user_id = Column(String, nullable=False, default="", index=True)
+    status = Column(String, nullable=False, default="pending", index=True)
+    payload = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class GeneratedAsset(Base):
     """AI 生成的图片素材（目前只有"参考图生成"的背景图会自动存），私有——只有生成者自己能看到/删除。
     只存 file_name（磁盘上的相对文件名），不存完整 URL，域名/端口变了也不用改数据。"""

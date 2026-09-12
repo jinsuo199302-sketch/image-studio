@@ -545,8 +545,87 @@ async def design_handout(
         raise
 
 
-# job_id -> {status: pending|done|error, result?, detail?, user_id, ts}
-_HANDOUT_JOBS: dict[str, dict] = {}
+class _JobStore:
+    """异步任务状态字典，接口跟普通 dict 一样（`store[id] = {...}` / `.get()` / `.items()` /
+    `.pop()` / `len()`），但落在 `bg_jobs` 表里而不是进程内存——之前存内存字典，进程一重启
+    （部署 / 崩溃）内存清空，还在轮询的任务就变成"任务不存在或已过期"，2026-09-13 真实
+    出过一次（部署过程中撞上一个正在跑的生成任务，日志里能看到 stop 之后紧跟着一个 404）。
+    每次读写各自开关一个短生命周期的 db session，请求协程和后台任务协程都能直接用，
+    不用关心传不传 session 进来——这也是没有直接改造成"到处传 db 参数"的原因，
+    这个类往下几十处调用点一行都不用改。"""
+
+    def __setitem__(self, job_id: str, value: dict) -> None:
+        from app.database import SessionLocal
+
+        db = SessionLocal()
+        try:
+            status = str(value.get("status", "pending"))
+            user_id = str(value.get("user_id", ""))
+            payload = {k: v for k, v in value.items() if k not in ("status", "user_id")}
+            row = db.get(models.BgJob, job_id)
+            if row is None:
+                row = models.BgJob(id=job_id)
+                db.add(row)
+            row.status = status
+            row.user_id = user_id
+            row.payload = payload
+            db.commit()
+        finally:
+            db.close()
+
+    def _row_to_dict(self, row: "models.BgJob") -> dict:
+        d = dict(row.payload or {})
+        d["status"] = row.status
+        d["user_id"] = row.user_id
+        return d
+
+    def get(self, job_id: str, default=None):
+        from app.database import SessionLocal
+
+        db = SessionLocal()
+        try:
+            row = db.get(models.BgJob, job_id)
+            return self._row_to_dict(row) if row is not None else default
+        finally:
+            db.close()
+
+    def items(self):
+        from app.database import SessionLocal
+
+        db = SessionLocal()
+        try:
+            return [(row.id, self._row_to_dict(row)) for row in db.query(models.BgJob).all()]
+        finally:
+            db.close()
+
+    def pop(self, job_id: str, default=None):
+        from app.database import SessionLocal
+
+        db = SessionLocal()
+        try:
+            row = db.get(models.BgJob, job_id)
+            if row is None:
+                return default
+            d = self._row_to_dict(row)
+            db.delete(row)
+            db.commit()
+            return d
+        finally:
+            db.close()
+
+    def __len__(self) -> int:
+        from app.database import SessionLocal
+
+        db = SessionLocal()
+        try:
+            return db.query(models.BgJob).count()
+        finally:
+            db.close()
+
+
+# job_id -> {status: pending|done|error, result?, detail?, user_id}——存数据库（bg_jobs 表），
+# 不是进程内存，见 _JobStore 上面的说明
+_HANDOUT_JOBS = _JobStore()
 
 
 def _prune_handout_jobs(keep: int = 40) -> None:
