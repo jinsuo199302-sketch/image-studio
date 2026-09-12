@@ -55,7 +55,34 @@ const THEMES = [
   { key: 'slate', label: '沉稳蓝灰' },
   { key: 'teal', label: '青碧' },
 ]
-const aiSource = ref<'topic' | 'material'>('topic')
+const aiSource = ref<'topic' | 'material' | 'courseware'>('topic')
+
+// ── 教学课件（第一步：通用教学流程，复用现有引擎，不做卡通视觉/精确数学图形）──
+// 教材版本/学科/年级/学期/课题拼成一句 topic，外加一段固定的"教学环节"要求塞进 extra，
+// 复用 generateDeck 同一条链路，不需要新接口、新组件。
+const CW_EDITIONS = ['人教版', '北师大版', '苏教版', '西师大版', '青岛版', '冀教版', '通用']
+const CW_SUBJECTS = ['语文', '数学', '英语', '物理', '化学', '生物', '历史', '地理', '道德与法治', '科学', '通用']
+const CW_GRADES = [
+  '一年级', '二年级', '三年级', '四年级', '五年级', '六年级',
+  '七年级', '八年级', '九年级', '高一', '高二', '高三',
+]
+const cwEdition = ref('人教版')
+const cwSubject = ref('数学')
+const cwGrade = ref('三年级')
+const cwSemester = ref<'上册' | '下册'>('上册')
+const cwLesson = ref('')
+/** 固定的教学环节指导，塞进 extra 最前面（用户自己写的补充要求接在后面，不覆盖）——
+ * 复习导入/新课讲解/例题精讲/课堂练习/课堂小结/作业布置这套节奏是教学法本身，不是随便
+ * 排的版式顺序，交给通用大纲 prompt 自由发挥大概率排不出来，必须明确写清楚。 */
+const CW_EXTRA_TEMPLATE =
+  '这是一份中小学课堂教学课件（不是企业商务汇报），请按真实课堂教学环节组织内容，' +
+  'sections 依次是：复习导入（简要回顾旧知/引出课题）、新课讲解（拆解本课核心知识点，' +
+  '分点讲清楚概念和原理）、例题精讲（给出 1~2 道典型例题，写清完整解题过程和正确答案，' +
+  '数字必须算对）、课堂练习（配 3~5 道供学生当堂练习的题目，只出题不给答案，' +
+  '或者给答案但要跟题目分开标注）、课堂小结（提炼本课要点，语言精炼便于学生记忆）、' +
+  '作业布置（2~3 条课后作业）——不要生硬套用企业汇报那种"背景/优势/规划"式章节；' +
+  '语言要适合课堂讲解、贴合学生认知水平，例题和练习题的学科内容必须准确无误，' +
+  '不能出现知识性错误。'
 const topic = ref('')
 const sections = ref(4)
 const theme = ref('auto')
@@ -148,9 +175,15 @@ function rmPhoto(i: number) {
 
 async function genDeck() {
   const useMaterial = aiSource.value === 'material'
+  const useCourseware = aiSource.value === 'courseware'
   if (useMaterial) {
     if (!matFile.value && matText.value.trim().length < 20) {
       ElMessage.warning('上传资料文件，或粘贴至少几句文字')
+      return
+    }
+  } else if (useCourseware) {
+    if (!cwLesson.value.trim()) {
+      ElMessage.warning('先填课题（比如：分数的简单计算）')
       return
     }
   } else if (!topic.value.trim()) {
@@ -165,7 +198,13 @@ async function genDeck() {
       photos = await uploadDeckPhotos(deckPhotos.value.map((p) => p.file))
     }
     const refPal = refStyle.value?.palette ?? []
-    const industryPreset = industry.value ? findDeckIndustry(industry.value) : undefined
+    // 课件模式没有单独的行业预设，直接固定用"教育培训"那套（清新绿+书本/灯泡剪影），
+    // 用户选了别的配色主题（theme.value）时以用户选的为准，这里只提供版式/氛围倾向
+    const industryPreset = useCourseware
+      ? findDeckIndustry('education')
+      : industry.value
+        ? findDeckIndustry(industry.value)
+        : undefined
     // 参考图是直接分析上传图得出的，比行业预设这种通用兜底更具体——同时有的话参考图优先
     const refHints = refStyle.value
       ? {
@@ -176,8 +215,16 @@ async function genDeck() {
       : industryPreset
         ? { layouts: industryPreset.layouts, density: industryPreset.density, motif: industryPreset.motif }
         : {}
-    // 行业提示拼在用户自己写的「补充要求」后面发给模型，不占用户输入框的字数、也不覆盖用户的话
-    const effExtra = [industryPreset?.hint, extra.value.trim()].filter(Boolean).join('；')
+    // 课件模式：固定的教学环节要求放最前面，行业氛围提示+用户自己写的补充要求接在后面
+    const effExtra = useCourseware
+      ? [CW_EXTRA_TEMPLATE, extra.value.trim()].filter(Boolean).join('；')
+      : [industryPreset?.hint, extra.value.trim()].filter(Boolean).join('；')
+    const effTopic = useCourseware
+      ? `${cwEdition.value}${cwSubject.value}${cwGrade.value}${cwSemester.value}《${cwLesson.value.trim()}》教学课件`
+      : topic.value.trim()
+    // 教学环节固定 6 个（复习导入/新课讲解/例题精讲/课堂练习/课堂小结/作业布置），
+    // 不用用户在"填主题"模式下调的章节数滑块
+    const effSections = useCourseware ? 6 : sections.value
     const effBgDetail = isGeoTheme.value ? 'shared' : bgDetail.value
     const r = useMaterial
       ? await generateDeckFromMaterial(
@@ -192,8 +239,8 @@ async function genDeck() {
           effBgDetail,
         )
       : await generateDeck(
-          topic.value.trim(),
-          sections.value,
+          effTopic,
+          effSections,
           theme.value,
           effExtra,
           aiBg.value,
@@ -306,7 +353,9 @@ async function runConvert() {
               ? '演示模式：登录后使用'
               : aiSource === 'material'
                 ? '传资料 / 粘长文 / 上传现成 PPT → AI 提炼内容并按新主题重新设计，内容来自你的资料'
-                : '填主题 → AI 排一套幻灯片，可下载 PPTX 在 PowerPoint 里改'
+                : aiSource === 'courseware'
+                  ? '填教材版本+课题 → AI 按课堂教学环节（导入/新课/例题/练习/小结/作业）排一套课件'
+                  : '填主题 → AI 排一套幻灯片，可下载 PPTX 在 PowerPoint 里改'
           "
           :type="authStore.isAuthenticated ? 'success' : 'info'"
           :closable="false"
@@ -315,15 +364,63 @@ async function runConvert() {
 
         <div class="flex gap-1.5">
           <button
-            v-for="s in (['topic', 'material'] as const)"
+            v-for="s in (['topic', 'material', 'courseware'] as const)"
             :key="s"
             class="flex-1 rounded-md border px-2 py-1 text-[11px] transition"
             :class="aiSource === s ? 'border-violet-500 bg-violet-50 text-violet-600' : 'border-gray-200 text-gray-500'"
             @click="aiSource = s"
           >
-            {{ s === 'topic' ? '填主题' : '传资料 / 粘长文' }}
+            {{ s === 'topic' ? '填主题' : s === 'material' ? '传资料 / 粘长文' : '教学课件' }}
           </button>
         </div>
+
+        <template v-if="aiSource === 'courseware'">
+          <div>
+            <p class="mb-1 text-xs text-gray-500">教材版本</p>
+            <div class="grid grid-cols-4 gap-1.5">
+              <button
+                v-for="ed in CW_EDITIONS"
+                :key="ed"
+                class="rounded-md border px-1.5 py-1 text-[11px] transition"
+                :class="cwEdition === ed ? 'border-violet-500 bg-violet-50 text-violet-600' : 'border-gray-200 text-gray-500'"
+                @click="cwEdition = ed"
+              >
+                {{ ed }}
+              </button>
+            </div>
+          </div>
+          <div>
+            <p class="mb-1 text-xs text-gray-500">学科</p>
+            <div class="grid grid-cols-4 gap-1.5">
+              <button
+                v-for="sub in CW_SUBJECTS"
+                :key="sub"
+                class="rounded-md border px-1.5 py-1 text-[11px] transition"
+                :class="cwSubject === sub ? 'border-violet-500 bg-violet-50 text-violet-600' : 'border-gray-200 text-gray-500'"
+                @click="cwSubject = sub"
+              >
+                {{ sub }}
+              </button>
+            </div>
+          </div>
+          <div class="flex gap-1.5">
+            <el-select v-model="cwGrade" size="small" class="!flex-1">
+              <el-option v-for="g in CW_GRADES" :key="g" :label="g" :value="g" />
+            </el-select>
+            <div class="flex flex-1 gap-1.5">
+              <button
+                v-for="sm in (['上册', '下册'] as const)"
+                :key="sm"
+                class="flex-1 rounded-md border px-2 py-1 text-[11px] transition"
+                :class="cwSemester === sm ? 'border-violet-500 bg-violet-50 text-violet-600' : 'border-gray-200 text-gray-500'"
+                @click="cwSemester = sm"
+              >
+                {{ sm }}
+              </button>
+            </div>
+          </div>
+          <el-input v-model="cwLesson" size="small" placeholder="课题，例：分数的简单计算" maxlength="30" />
+        </template>
 
         <el-input
           v-if="aiSource === 'topic'"
@@ -333,7 +430,7 @@ async function runConvert() {
           maxlength="40"
         />
 
-        <template v-else>
+        <template v-else-if="aiSource === 'material'">
           <input
             ref="matFileInput"
             type="file"
@@ -395,12 +492,15 @@ async function runConvert() {
           </button>
         </div>
 
-        <div class="flex items-center gap-3">
+        <div v-if="aiSource !== 'courseware'" class="flex items-center gap-3">
           <span class="shrink-0 text-xs text-gray-500">章节数</span>
           <el-slider v-model="sections" :min="2" :max="6" :step="1" show-stops :show-tooltip="false" class="!flex-1" />
           <span class="w-4 text-xs text-gray-400">{{ sections }}</span>
         </div>
-        <div>
+        <p v-else class="text-[11px] text-gray-400">
+          教学环节固定 6 步：复习导入 · 新课讲解 · 例题精讲 · 课堂练习 · 课堂小结 · 作业布置
+        </p>
+        <div v-if="aiSource !== 'courseware'">
           <p class="mb-1 text-xs text-gray-500">
             所属行业（可选）
             <span class="text-gray-300">· 只是带个默认配色/版式偏好，下面还能自己改</span>
@@ -465,7 +565,9 @@ async function runConvert() {
           :placeholder="
             aiSource === 'material'
               ? '补充要求（可选）：例 面向家长、控制在 10 页内、语气正式'
-              : '补充要求（可选）：例 面向小学生、突出案例、语气正式'
+              : aiSource === 'courseware'
+                ? '补充要求（可选）：例 多配练习题、突出实际生活应用'
+                : '补充要求（可选）：例 面向小学生、突出案例、语气正式'
           "
         />
         <label class="flex cursor-pointer items-start gap-2 rounded-md border border-gray-200 p-2 text-xs">
@@ -494,7 +596,13 @@ async function runConvert() {
           type="primary"
           class="!w-full !bg-violet-500 !border-none"
           :loading="generating"
-          :disabled="aiSource === 'topic' ? !topic.trim() : !matFile && matText.trim().length < 20"
+          :disabled="
+            aiSource === 'topic'
+              ? !topic.trim()
+              : aiSource === 'courseware'
+                ? !cwLesson.trim()
+                : !matFile && matText.trim().length < 20
+          "
           @click="genDeck"
         >
           {{
