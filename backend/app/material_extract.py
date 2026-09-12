@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 
-MAX_CHARS = 12000  # 交给 LLM 的资料上限，超了截断（一份 PPT 的素材够用了）
+MAX_CHARS = 24000  # 交给 LLM 的资料上限，超了截断——病例报告/学术材料这类专业文档可能较长，给够空间
 
 # 买来的/没填完的 PPT 模板常见两类垃圾，混进资料文本会把大纲模型带偏：
 # 1. PowerPoint 占位符提示语——模板没填的坑，不是真内容

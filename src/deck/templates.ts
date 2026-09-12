@@ -1440,9 +1440,12 @@ function content(sl: DeckSlideIn, en: string, o: DeckOutline, imgFlip = false, l
   } else if (branch === 'quote') {
     body = `<div class="quote"><div class="q">"</div><div class="qt">${esc(items[0] || '')}</div><div class="tick"></div></div>`
   } else if (branch === 'cards') {
-    const cards = items.slice(0, 3)
+    // items 在上面已经封顶 6 条——这里不再二次砍到 3 条，超过 3 张就自动换行到第二排，
+    // 不能因为版式"通常"是 2~3 条卡片，就把 LLM 万一给多的内容悄悄丢掉
+    const cards = items
+    const cols = Math.min(3, Math.max(cards.length, 1))
     const geo = isGeo(o)
-    body = `<div class="cards" style="grid-template-columns:repeat(${Math.max(cards.length, 1)},1fr)">${cards
+    body = `<div class="cards" style="grid-template-columns:repeat(${cols},1fr)">${cards
       .map(
         (b, i) =>
           `<div class="card"><div class="ic">${ic(b, i, geo ? 34 : 30)}</div><div class="num">POINT ${pad2(

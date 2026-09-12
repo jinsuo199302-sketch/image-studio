@@ -363,7 +363,7 @@ async function runConvert() {
             type="textarea"
             :rows="4"
             size="small"
-            maxlength="12000"
+            maxlength="24000"
             :placeholder="matFile ? '（已选文件，这里可留空）也可以直接粘贴补充文字' : '或直接把备课稿 / 讲话稿 / 材料粘贴进来'"
           />
         </template>

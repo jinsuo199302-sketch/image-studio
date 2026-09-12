@@ -1215,6 +1215,8 @@ def _persist_photo(db: Session, user_id: str, image_bytes: bytes) -> str:
 
 async def _transcribe_image_text(image_bytes: bytes, media_type: str) -> str:
     """图片（拍照/截图的备课资料）→ 逐字转录的纯文本，交给大纲模型重组。"""
+    from app import material_extract
+
     data, ct = _shrink_jpeg(image_bytes, max_px=1600, quality=82)
     b64 = base64.b64encode(data).decode()
     res = await _post_openlux(
@@ -1240,7 +1242,7 @@ async def _transcribe_image_text(image_bytes: bytes, media_type: str) -> str:
     text = (res.json().get("choices", [{}])[0].get("message", {}).get("content") or "").strip()
     if len(text) < 20:
         raise HTTPException(status_code=422, detail="没能从图片里读到足够的文字，换张更清晰的试试")
-    return text[:12000]
+    return text[: material_extract.MAX_CHARS]
 
 
 async def _tag_deck_photos(image_list: list[bytes]) -> list[str]:
