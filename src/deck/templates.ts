@@ -1056,8 +1056,10 @@ function css(t: DeckTheme): string {
   .card .ic.gr{border-radius:0;clip-path:${GEAR_CLIP}}
   /* 盾牌——常见的"安全/保障/认证"类徽标造型 */
   .card .ic.sh{border-radius:0;clip-path:polygon(50% 0%,100% 15%,100% 55%,50% 100%,0% 55%,0% 15%)}
-  /* 有机圆点（blob）——现代扁平设计里常见的不规则圆角，四个角各不一样，不是正圆也不是方 */
-  .card .ic.bl{border-radius:63% 37% 54% 46%/43% 41% 59% 57%}
+  /* 有机圆点（blob）——从 blobmaker.app 生成的一个真实贝塞尔曲线 blob 采样 18 个点、
+     归一化成百分比多边形（不是随手拍脑袋的 border-radius 数值），percentage polygon
+     天然按盒子实际尺寸缩放，40px/44px 两种徽标尺寸下比例都对，不会走样 */
+  .card .ic.bl{border-radius:0;clip-path:polygon(97.8% 84.5%,88.1% 94.5%,72.7% 99.6%,54.3% 100.0%,35.3% 95.9%,18.3% 87.7%,5.9% 75.4%,0.0% 59.8%,0.2% 42.7%,5.5% 26.0%,14.9% 11.9%,27.5% 2.6%,42.1% 0.0%,57.7% 5.5%,72.9% 17.6%,86.0% 33.9%,95.6% 52.1%,100.0% 69.7%)}
   .card .num{font-size:12px;letter-spacing:2px;font-weight:800;color:${t.accent}}
   .card .ct{font-size:18px;line-height:1.6;text-align:left;align-self:stretch;color:${t.ink}}
 
