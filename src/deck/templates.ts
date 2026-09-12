@@ -1058,29 +1058,34 @@ function css(t: DeckTheme): string {
   .card:nth-child(even){border-top-color:${t.accent};background:${tintToWhite(t.accent, 0.89)}}
   .card .hd{display:flex;align-items:center;gap:12px}
   .card .ic{width:40px;height:40px;flex:none;border-radius:11px;background:${t.primary}12;color:${t.primary};display:flex;align-items:center;justify-content:center}
-  .card .ic.rd{border-radius:50%}
-  .card .ic.di{border-radius:9px;transform:rotate(45deg)}
-  .card .ic.di svg{transform:rotate(-45deg)}
-  .card .ic.sq{border-radius:2px}
-  .card .ic.rc{width:50px;height:34px;border-radius:9px}
-  .card .ic.hx{border-radius:0;clip-path:polygon(25% 3%,75% 3%,100% 50%,75% 97%,25% 97%,0% 50%)}
+  /* 形状轮换规则跟 .row .ic（清单版式的图标徽标）共用同一套，不然清单页永远只有
+     一种圆角方块——之前只顾着卡片，清单反而漏了，用户反馈"加了那么多造型实际只见到
+     一两种"，根源就是这个：大部分内容其实走清单版式，卡片只是少数几页。 */
+  .card .ic.rd,.row .ic.rd{border-radius:50%}
+  .card .ic.di,.row .ic.di{border-radius:9px;transform:rotate(45deg)}
+  .card .ic.di svg,.row .ic.di svg{transform:rotate(-45deg)}
+  .card .ic.sq,.row .ic.sq{border-radius:2px}
+  .card .ic.rc,.row .ic.rc{width:50px;height:34px;border-radius:9px}
+  .card .ic.hx,.row .ic.hx{border-radius:0;clip-path:polygon(25% 3%,75% 3%,100% 50%,75% 97%,25% 97%,0% 50%)}
   /* 齿轮——真实阶梯状轮齿（8 齿），GEAR_CLIP 是 gearClipPath() 算出来的多边形，
      跟 Material Icons 的 settings 图标同一种简化画法，40px 尺寸下边缘依然干净 */
-  .card .ic.gr{border-radius:0;clip-path:${GEAR_CLIP}}
+  .card .ic.gr,.row .ic.gr{border-radius:0;clip-path:${GEAR_CLIP}}
   /* 盾牌——常见的"安全/保障/认证"类徽标造型 */
-  .card .ic.sh{border-radius:0;clip-path:polygon(50% 0%,100% 15%,100% 55%,50% 100%,0% 55%,0% 15%)}
+  .card .ic.sh,.row .ic.sh{border-radius:0;clip-path:polygon(50% 0%,100% 15%,100% 55%,50% 100%,0% 55%,0% 15%)}
   /* 有机圆点（blob）——从 blobmaker.app 生成的一个真实贝塞尔曲线 blob 采样 18 个点、
      归一化成百分比多边形（不是随手拍脑袋的 border-radius 数值），percentage polygon
      天然按盒子实际尺寸缩放，40px/44px 两种徽标尺寸下比例都对，不会走样 */
-  .card .ic.bl{border-radius:0;clip-path:polygon(97.8% 84.5%,88.1% 94.5%,72.7% 99.6%,54.3% 100.0%,35.3% 95.9%,18.3% 87.7%,5.9% 75.4%,0.0% 59.8%,0.2% 42.7%,5.5% 26.0%,14.9% 11.9%,27.5% 2.6%,42.1% 0.0%,57.7% 5.5%,72.9% 17.6%,86.0% 33.9%,95.6% 52.1%,100.0% 69.7%)}
+  .card .ic.bl,.row .ic.bl{border-radius:0;clip-path:polygon(97.8% 84.5%,88.1% 94.5%,72.7% 99.6%,54.3% 100.0%,35.3% 95.9%,18.3% 87.7%,5.9% 75.4%,0.0% 59.8%,0.2% 42.7%,5.5% 26.0%,14.9% 11.9%,27.5% 2.6%,42.1% 0.0%,57.7% 5.5%,72.9% 17.6%,86.0% 33.9%,95.6% 52.1%,100.0% 69.7%)}
   .card .num{font-size:12px;letter-spacing:2px;font-weight:800;color:${t.accent}}
   .card .ct{font-size:18px;line-height:1.6;text-align:left;align-self:stretch;color:${t.ink}}
 
   /* 清单（4~5 条） */
   .list{flex:1;margin-top:30px;display:flex;flex-direction:column;justify-content:center;gap:6px}
-  .row{display:flex;align-items:center;gap:20px;padding:15px 0;border-bottom:1px solid #ebedf1}
+  .row{display:flex;align-items:center;gap:20px;padding:15px 18px;border-bottom:1px solid #ebedf1;border-radius:10px}
   .row:last-child{border-bottom:0}
+  .row:nth-child(even){background:${tintToWhite(t.primary, 0.95)}}
   .row .ic{width:44px;height:44px;flex:none;border-radius:12px;background:${t.primary}0f;color:${t.primary};display:flex;align-items:center;justify-content:center}
+  .row:nth-child(3n+2) .ic{background:${t.accent}12;color:${t.accent}}
   .row .n{font-size:12px;font-weight:800;color:${t.accent};letter-spacing:1px;flex:none;width:24px}
   .row .rt{font-size:18px;line-height:1.5;color:${t.ink}}
   /* geo 风清单：整条撑满 + 交替底色 + 粗色左条 + 大号序号 */
@@ -1710,10 +1715,11 @@ function content(sl: DeckSlideIn, en: string, o: DeckOutline, imgFlip = false, l
       .join('')}</div>`
   } else {
     const rtFs = fitBodyFont(items, 18, 15)
+    const listShapeOffset = _cardsIdx++ * 3
     body = `<div class="list">${items
       .map(
         (b, i) =>
-          `<div class="row"><div class="ic">${ic(b, i, 22)}</div><span class="n">${pad2(i + 1)}</span><div class="rt" style="font-size:${rtFs}px">${esc(b)}</div></div>`,
+          `<div class="row"><div class="ic ${iconShape(listShapeOffset + i)}">${ic(b, i, 22)}</div><span class="n">${pad2(i + 1)}</span><div class="rt" style="font-size:${rtFs}px">${esc(b)}</div></div>`,
       )
       .join('')}</div>`
   }
