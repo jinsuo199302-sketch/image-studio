@@ -6,7 +6,21 @@
 
 from __future__ import annotations
 
+import re
+
 MAX_CHARS = 12000  # 交给 LLM 的资料上限，超了截断（一份 PPT 的素材够用了）
+
+# 买来的/没填完的 PPT 模板常见两类垃圾，混进资料文本会把大纲模型带偏：
+# 1. PowerPoint 占位符提示语——模板没填的坑，不是真内容
+# 2. 图标字体的裸字母残留——模板用了自定义图标字体，换机器打开字体丢了，图标显示成字母
+_PPTX_PLACEHOLDER_RE = re.compile(
+    r"^[点单]?[击此][处此]?(添加|输入|键入)(标题|文本|文字|副标题|内容)$|^在此[处]?(输入|键入)(文字|文本)?$"
+)
+_PPTX_GLYPH_JUNK_RE = re.compile(r"^[A-Za-z]{1,2}$")
+
+
+def _is_pptx_junk_line(t: str) -> bool:
+    return bool(_PPTX_PLACEHOLDER_RE.match(t) or _PPTX_GLYPH_JUNK_RE.match(t))
 
 
 def _clean(text: str) -> str:
@@ -71,13 +85,15 @@ def _from_pptx(data: bytes) -> str:
         title_id = title_shape.shape_id if title_shape is not None else None
         if title_shape is not None and title_shape.has_text_frame:
             title = title_shape.text_frame.text.strip()
+            if _is_pptx_junk_line(title):
+                title = ""
         for shape in slide.shapes:
             # slide.shapes.title 每次访问都返回新包装对象，`is` 比不出来，只能比 shape_id
             if shape.shape_id == title_id or not shape.has_text_frame:
                 continue
             for para in shape.text_frame.paragraphs:
                 t = "".join(r.text for r in para.runs).strip() or para.text.strip()
-                if t:
+                if t and not _is_pptx_junk_line(t):
                     lines.append(t)
         if not title and lines:
             title = lines.pop(0)
