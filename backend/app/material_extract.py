@@ -70,6 +70,29 @@ def _from_pdf(data: bytes) -> str:
     return "\n\n".join(parts)
 
 
+def _collect_shape_text(shapes, title_id: int | None, depth: int = 0) -> list[str]:
+    """递归收集一组形状里的文字，包括"组合"（Group）图形里嵌套的——很多专业模板会把
+    "图标+文字"这类元素打包成组合，只扫最外层形状会把这些内容全部漏掉（实测踩过：
+    一份真实病例报告表面上只有几百字，实际正文全在组合图形里，多达几千字没被读到）。
+    深度限制纯粹是防御性的，正常模板顶多嵌套几层。"""
+    if depth > 12:
+        return []
+    lines: list[str] = []
+    for shape in shapes:
+        if shape.shape_id == title_id:
+            continue
+        if getattr(shape, "shape_type", None) is not None and shape.shape_type == 6:  # MSO_SHAPE_TYPE.GROUP
+            lines.extend(_collect_shape_text(shape.shapes, title_id, depth + 1))
+            continue
+        if not shape.has_text_frame:
+            continue
+        for para in shape.text_frame.paragraphs:
+            t = "".join(r.text for r in para.runs).strip() or para.text.strip()
+            if t and not _is_pptx_junk_line(t):
+                lines.append(t)
+    return lines
+
+
 def _from_pptx(data: bytes) -> str:
     """现成 PPT →一段文字，按页留标题/要点，喂给大纲模型重新设计（"美化 PPT"用）。"""
     import io
@@ -79,7 +102,6 @@ def _from_pptx(data: bytes) -> str:
     prs = Presentation(io.BytesIO(data))
     parts: list[str] = []
     for slide in prs.slides:
-        lines: list[str] = []
         title = ""
         title_shape = getattr(slide.shapes, "title", None)
         title_id = title_shape.shape_id if title_shape is not None else None
@@ -87,14 +109,7 @@ def _from_pptx(data: bytes) -> str:
             title = title_shape.text_frame.text.strip()
             if _is_pptx_junk_line(title):
                 title = ""
-        for shape in slide.shapes:
-            # slide.shapes.title 每次访问都返回新包装对象，`is` 比不出来，只能比 shape_id
-            if shape.shape_id == title_id or not shape.has_text_frame:
-                continue
-            for para in shape.text_frame.paragraphs:
-                t = "".join(r.text for r in para.runs).strip() or para.text.strip()
-                if t and not _is_pptx_junk_line(t):
-                    lines.append(t)
+        lines = _collect_shape_text(slide.shapes, title_id)
         if not title and lines:
             title = lines.pop(0)
         if title or lines:
