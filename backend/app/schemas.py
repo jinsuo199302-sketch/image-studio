@@ -170,6 +170,8 @@ class DeckRequest(BaseModel):
     ref_layouts: list[str] = []
     ref_density: str = ""
     ref_motif: str = ""
+    # 非几何风 ai_bg 的正文底图详细度：shared=全篇复用一张(默认) / section=每章节一张 / slide=每页一张
+    bg_detail: str = "shared"
 
 
 class DeckPptxRequest(BaseModel):

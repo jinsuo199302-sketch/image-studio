@@ -12,6 +12,7 @@ import {
   type DeckResult,
   type DeckPhoto,
   type DeckRefStyle,
+  type DeckBgDetail,
 } from '../../../../services/designApi'
 import { preloadSlideImages, type SlideData } from '../../../../utils/slideRender'
 import { prepareUpload } from '../../../../utils/prepImage'
@@ -59,6 +60,13 @@ const theme = ref('auto')
 const extra = ref('')
 const aiBg = ref(false)
 const isGeoTheme = computed(() => theme.value === 'geoblue')
+// 正文底图详细度：只有非几何风 + 勾了 AI 生成整套背景 才有意义（几何风的 aiBg 是配图，不是整页背景）
+const bgDetail = ref<DeckBgDetail>('shared')
+const BG_DETAIL_OPTS: { value: DeckBgDetail; label: string; hint: string }[] = [
+  { value: 'shared', label: '全篇复用（快，约 2~4 分钟）', hint: '封面/章节/正文各一张，正文页背景都一样' },
+  { value: 'section', label: '每章节一张（中等，约 4~7 分钟）', hint: '每个章节的正文页换一张贴合该章节的图' },
+  { value: 'slide', label: '每页独立配图（最丰富，约 8~15 分钟）', hint: '每一页正文都单独配一张贴合这页内容的图，风格可能不如前两档统一' },
+]
 const deck = ref<DeckResult | null>(null)
 const generating = ref(false)
 
@@ -153,6 +161,7 @@ async function genDeck() {
           motif: refStyle.value.motif ?? '',
         }
       : {}
+    const effBgDetail = isGeoTheme.value ? 'shared' : bgDetail.value
     const r = useMaterial
       ? await generateDeckFromMaterial(
           { file: matFile.value ?? undefined, pastedText: matText.value.trim() || undefined },
@@ -163,6 +172,7 @@ async function genDeck() {
           photos,
           refPal,
           refHints,
+          effBgDetail,
         )
       : await generateDeck(
           topic.value.trim(),
@@ -173,6 +183,7 @@ async function genDeck() {
           photos,
           refPal,
           refHints,
+          effBgDetail,
         )
     await preloadSlideImages(r.slides as unknown as SlideData[])
     deck.value = r
@@ -405,6 +416,17 @@ function rmImg(i: number) {
             <span class="text-[11px] text-gray-400">AI 按主题画好背景，我们叠文字和图标；多花 2~4 分钟</span>
           </span>
         </label>
+        <div v-if="aiBg && !isGeoTheme" class="rounded-md border border-gray-200 p-2 text-xs">
+          <div class="mb-1.5 text-gray-600">正文底图详细度</div>
+          <el-radio-group v-model="bgDetail" class="!flex !flex-col !gap-1.5">
+            <el-radio v-for="opt in BG_DETAIL_OPTS" :key="opt.value" :value="opt.value" class="!m-0 !h-auto !items-start !py-0.5">
+              <div class="whitespace-normal text-left leading-tight">
+                <div class="text-gray-700">{{ opt.label }}</div>
+                <div class="text-[11px] text-gray-400">{{ opt.hint }}</div>
+              </div>
+            </el-radio>
+          </el-radio-group>
+        </div>
         <el-button
           type="primary"
           class="!w-full !bg-violet-500 !border-none"
@@ -415,7 +437,11 @@ function rmImg(i: number) {
           {{
             generating
               ? aiBg
-                ? 'AI 画背景 + 排版中…（约 2~4 分钟）'
+                ? !isGeoTheme && bgDetail === 'slide'
+                  ? 'AI 逐页画背景 + 排版中…（约 8~15 分钟）'
+                  : !isGeoTheme && bgDetail === 'section'
+                    ? 'AI 画背景 + 排版中…（约 4~7 分钟）'
+                    : 'AI 画背景 + 排版中…（约 2~4 分钟）'
                 : aiSource === 'material'
                   ? 'AI 提炼重组中…（约 1~3 分钟）'
                   : 'AI 排版中…（约 20~40 秒）'

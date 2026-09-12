@@ -549,6 +549,8 @@ export interface DeckSlideIn {
   image?: string
   /** 一组照片 URL（正好 2~3 张）——gallery 版式：几何图框照片墙 */
   images?: string[]
+  /** 这一页专属的 AI 正文底图（按章节/按页独立配图模式）——非几何风优先用它，没有就退回 outline.bg.content 那张共用底图 */
+  bg?: string
 }
 export interface DeckSection {
   heading: string
@@ -1562,9 +1564,12 @@ export function composeDeck(o: DeckOutline): { styleTag: string; slides: string[
   const slides: string[] = [cover(o)]
   if (o.sections.length) slides.push(toc(o))
   let imgFlip = false
+  // 按章节/按页独立配图模式：outline.bg.content 是共用兜底那张，sl.bg（如果有）优先
+  const sharedContentBg = o.bg?.content
   o.sections.forEach((sec, si) => {
     slides.push(section(sec, si + 1, o.sections.length, o))
     sec.slides.forEach((sl) => {
+      if (o.bg || sl.bg) o.bg = { ...(o.bg || {}), content: sl.bg || sharedContentBg }
       const en = EN[si % EN.length]
       const lay = resolveLayout(sl)
       if (lay === 'swot') slides.push(swot(sl, en, o))

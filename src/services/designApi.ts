@@ -354,7 +354,8 @@ export interface DeckOutlineRaw {
       en?: string
       intro?: string
       bullets?: string[]
-      data?: { kind: 'bar' | 'stat' | 'ring'; items: { label: string; value: string | number }[] }
+      data?: { kind: 'bar' | 'stat' | 'ring' | 'line'; items: { label: string; value: string | number }[] }
+      table?: { columns: string[]; rows: string[][] }
       compare?: { left: { heading: string; points: string[] }; right: { heading: string; points: string[] } }
       swot?: { s: string[]; w: string[]; o: string[]; t: string[] }
       big_number?: { value: string; label?: string; note?: string }
@@ -362,6 +363,7 @@ export interface DeckOutlineRaw {
       icons?: string[]
       image?: string
       images?: string[]
+      bg?: string
     }[]
   }[]
 }
@@ -442,7 +444,10 @@ async function pollRefJob(jobId: string): Promise<DeckRefStyle> {
   throw new Error('识别超时，请重试')
 }
 
-/** AI 生成 PPT：主题 → 一套幻灯片。aiBg=true 时后端另出 3 张整页背景图，走异步轮询。 */
+/** 正文底图详细度（非几何风 ai_bg 才有意义）：shared=全篇复用一张(快) / section=每章节一张 / slide=每页一张(最慢最丰富) */
+export type DeckBgDetail = 'shared' | 'section' | 'slide'
+
+/** AI 生成 PPT：主题 → 一套幻灯片。aiBg=true 时后端另出整页背景图，走异步轮询。 */
 export async function generateDeck(
   topic: string,
   sections: number,
@@ -452,6 +457,7 @@ export async function generateDeck(
   photos: DeckPhoto[] = [],
   palette: string[] = [],
   refHints: DeckRefHints = {},
+  bgDetail: DeckBgDetail = 'shared',
 ): Promise<DeckResult> {
   const r = await authPostJson<DeckResult & { jobId?: string }>(
     '/design/deck',
@@ -460,6 +466,7 @@ export async function generateDeck(
       ref_layouts: refHints.layouts ?? [],
       ref_density: refHints.density ?? '',
       ref_motif: refHints.motif ?? '',
+      bg_detail: bgDetail,
     },
     'PPT 生成失败',
   )
@@ -479,6 +486,7 @@ export async function generateDeckFromMaterial(
   photos: DeckPhoto[] = [],
   palette: string[] = [],
   refHints: DeckRefHints = {},
+  bgDetail: DeckBgDetail = 'shared',
 ): Promise<DeckResult> {
   const form = new FormData()
   if (input.file) form.append('file', input.file, input.file.name || 'material')
@@ -487,6 +495,7 @@ export async function generateDeckFromMaterial(
   form.append('theme', theme)
   form.append('extra', extra)
   form.append('ai_bg', String(aiBg))
+  form.append('bg_detail', bgDetail)
   if (photos.length) form.append('photos_json', JSON.stringify(photos))
   if (palette.length === 5) form.append('palette_json', JSON.stringify(palette))
   if (refHints.layouts?.length || refHints.density || refHints.motif) {

@@ -976,6 +976,58 @@ def _persist_bg_kit(db: Session, user_id: str, raw_kit: dict) -> dict:
     return out
 
 
+_BG_DETAIL_SEM = asyncio.Semaphore(4)  # 按章节/按页配图时限流，别一次性把上游打爆
+
+
+async def _gen_per_page_content_bg(outline: dict, detail: str, db: Session, user_id: str) -> str | None:
+    """正文底图不整篇复用一张，改成按章节(detail=section)或按页(detail=slide)各生成一张，
+    挂到对应 slide 的 "bg" 字段——templates.ts 里 sl.bg 优先，没有才退回共用那张。
+    每张的 prompt = 跟封面同一套视觉语言的基础描述 + 这页/这章节的主题当"呼应"提示，
+    保证风格统一、内容各不相同。并发但限流；单张失败跳过，不影响其它页。
+    返回第一张生成成功的 URL，当整体兜底（万一某页没配上）。"""
+    pal = "、".join(str(c) for c in (outline.get("palette") or [])[:4]) or "自定协调配色"
+    mood = (outline.get("mood") or "简洁现代的商务风").strip()
+    topic = (outline.get("title") or "").strip()
+    guard = _DECK_ART_GUARD.format(pal=pal, mood=mood)
+    base = (outline.get("content_image_prompt") or "").strip() or _DECK_ART_FALLBACK["content"].format(
+        topic=topic or "演示主题"
+    )
+
+    groups: list[tuple[list[dict], str]] = []  # (这组共用一张图的 slide 列表, 主题提示词)
+    for sec in outline.get("sections") or []:
+        heading = (sec.get("heading") or "").strip()
+        slides = [s for s in (sec.get("slides") or []) if isinstance(s, dict)]
+        if not slides:
+            continue
+        if detail == "section":
+            groups.append((slides, heading))
+        else:  # "slide"
+            for sl in slides[:4]:
+                hint = (sl.get("title") or heading).strip()
+                groups.append(([sl], hint))
+
+    async def gen_one(hint: str) -> bytes | None:
+        prompt = f"{base}，画面意象呼应「{hint}」\n{guard}" if hint else f"{base}\n{guard}"
+        async with _BG_DETAIL_SEM:
+            try:
+                return await _gen_image_bytes(prompt, "1536x1024", attempts=1, timeout=150)
+            except Exception:
+                return None
+
+    raws = await asyncio.gather(*[gen_one(hint) for _, hint in groups])
+    fallback_url: str | None = None
+    for (slides, _), raw in zip(groups, raws):
+        if not raw:
+            continue
+        asset = _persist_asset_bytes(db, user_id, "deck-bg", raw)
+        url = f"/api/ai/generated/{asset.file_name}"
+        if fallback_url is None:
+            fallback_url = url
+        for sl in slides:
+            sl["bg"] = url
+    return fallback_url
+
+
 _DECK_PHOTO_GUARD = (
     " Realistic professional photograph, natural lighting, single clear subject, "
     "some clean negative space, no text, no watermark, no logo, no collage, not an illustration."
@@ -1001,7 +1053,7 @@ async def _gen_deck_spot_photos(prompts: list[str], db: Session, user_id: str) -
 
 async def _run_deck_job(
     job_id, user_id, ticket, topic, n, theme, extra, ai_bg, material="", photos=None, palette=None,
-    ref_layouts=None, ref_density="", ref_motif="",
+    ref_layouts=None, ref_density="", ref_motif="", bg_detail="shared",
 ):
     from app.database import SessionLocal
 
@@ -1029,8 +1081,14 @@ async def _run_deck_job(
         outline = _attach_deck_photos(outline, photos)
         bg = None
         if ai_bg and not is_geo:
-            raw_kit = await _gen_deck_cover_kit(outline)
+            detail = bg_detail if bg_detail in ("section", "slide") else "shared"
+            raw_kit = await _gen_deck_cover_kit(outline, want_content_bg=(detail == "shared"))
             bg = _persist_bg_kit(db, user_id, raw_kit)
+            if detail != "shared":
+                # 正文底图改按章节/按页各配一张，挂到每个 slide 的 "bg"；用第一张生成成功的当兜底
+                fallback = await _gen_per_page_content_bg(outline, detail, db, user_id)
+                if fallback:
+                    bg["content"] = fallback
         slides = deck_gen.build_deck(outline, theme, bg)
         _HANDOUT_JOBS[job_id] = {
             "status": "done",
@@ -1086,15 +1144,16 @@ async def design_deck(
     ref_layouts, ref_density, ref_motif = _clean_ref_hints(
         payload.ref_layouts, payload.ref_density, payload.ref_motif
     )
+    bg_detail = payload.bg_detail if payload.bg_detail in ("section", "slide") else "shared"
 
-    # 一律走异步 job：大纲(+可选生图)可能要 1~3 分钟，同步返回会被 nginx 网关超时掐断
+    # 一律走异步 job：大纲(+可选生图)可能要 1~3 分钟（按页配图能到 10 分钟+），同步返回会被 nginx 网关超时掐断
     job_id = uuid.uuid4().hex
     _HANDOUT_JOBS[job_id] = {"status": "pending", "user_id": user.id}
     _prune_handout_jobs()
     asyncio.create_task(
         _run_deck_job(
             job_id, user.id, ticket, topic, n, payload.theme, extra, ai_bg, "", photos, ref_pal,
-            ref_layouts, ref_density, ref_motif,
+            ref_layouts, ref_density, ref_motif, bg_detail,
         )
     )
     return {"jobId": job_id}
@@ -1403,6 +1462,7 @@ async def design_deck_material(
     photos_json: str = Form(""),
     palette_json: str = Form(""),
     ref_hints_json: str = Form(""),
+    bg_detail: str = Form("shared"),
     user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -1458,6 +1518,7 @@ async def design_deck_material(
     await _moderate_text(material[:2000] + " " + extra.strip()[:200])
     n = min(6, max(2, sections))
     ai_bg2 = bool(ai_bg)  # 几何风时 = AI 按主题配图；非几何风 = AI 整页底图
+    bg_detail2 = bg_detail if bg_detail in ("section", "slide") else "shared"
     ticket = billing.consume(db, user, "AIPPT")
 
     job_id = uuid.uuid4().hex
@@ -1466,7 +1527,7 @@ async def design_deck_material(
     asyncio.create_task(
         _run_deck_job(
             job_id, user.id, ticket, "", n, theme, extra.strip()[:300], ai_bg2, material, photos, ref_pal,
-            ref_layouts, ref_density, ref_motif,
+            ref_layouts, ref_density, ref_motif, bg_detail2,
         )
     )
     return {"jobId": job_id}

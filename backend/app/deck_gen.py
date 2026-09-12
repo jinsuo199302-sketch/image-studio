@@ -747,7 +747,7 @@ def build_deck(outline: dict, theme_key: str = "red", bg: dict | None = None) ->
             ttl = (sl.get("title") or "").strip()
             en = (sl.get("en") or "").strip()
             lay = resolve_layout(sl)
-            cbg = bg.get("content")
+            cbg = sl.get("bg") if isinstance(sl.get("bg"), str) else bg.get("content")  # 按页/按章节独立配图优先
             if lay == "swot" and sw:
                 slides.append(_swot(t, i, ttl, en, sw, page, cbg))
             elif lay == "matrix" and mx:
