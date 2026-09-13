@@ -33,8 +33,9 @@ export interface DeckTheme {
   ink: string
   /** 'geo' = 纯几何图形装饰风（白底 + 同心圆弧/圆点圈/环形进度，不用 AI 大图）
    * 'liti' = 极简微立体（近乎无色相，柔光内凹外凸投影模拟折纸/浮雕质感，不用 AI 大图）
-   * 'dangzheng' = 党政红金（金色五角星+金线装饰，复用 AI 背景图管线，跟 plain 一样能配实景照片） */
-  style?: 'plain' | 'geo' | 'liti' | 'dangzheng'
+   * 'dangzheng' = 党政红金（金色五角星+金线装饰，复用 AI 背景图管线，跟 plain 一样能配实景照片）
+   * 'ink' = 水墨中国风（水墨山影+朱红印章+Long Cang 手写标题，不用 AI 大图） */
+  style?: 'plain' | 'geo' | 'liti' | 'dangzheng' | 'ink'
 }
 
 /* ── 几何装饰 SVG（geo 风格用，全篇复用同一套母题）────────────── */
@@ -1203,6 +1204,24 @@ function css(t: DeckTheme): string {
   .s-cover.dangzheng.on-bg .scrim{background:linear-gradient(90deg,rgba(40,10,14,.86) 46%,rgba(40,10,14,0))}
   .s-cover.dangzheng.on-bg .kick{color:${t.accent}}
 
+  /* 水墨中国风：标题换成已加载的 Long Cang 手写体（跟 Noto Serif SC 正文配对，参考
+     笔记本/水墨类模板的字体搭配惯例），远山剪影贴底部、朱红印章贴右下角。
+     标题字号用手写体时视觉重量比无衬线体轻，字号故意比默认再放大一点点补回气势。 */
+  .ink h1,.ink h2{font-family:"Long Cang","Noto Serif SC","Microsoft YaHei",sans-serif;font-weight:400}
+  .s-cover.ink h1{font-size:64px}
+  .ink .sub,.ink .intro,.ink .ct,.ink .rt{font-family:"Noto Serif SC","Microsoft YaHei",sans-serif}
+  .s-cover.ink{background:${t.paper}}
+  .s-cover.ink .kick{color:${t.primary}}
+  .s-cover.ink .tick{background:${t.primary}}
+  .inkmt{position:absolute;left:0;right:0;bottom:0;z-index:0;pointer-events:none;line-height:0}
+  .inkmt svg{width:100%;height:auto;display:block}
+  .inkmt.s{opacity:.8}
+  .inkmt.c{bottom:0;opacity:.7}
+  /* 印章放右上角，不放右下——山影贴底部，两个都放右下会叠在一起，细描边的印章
+     压在实心山影上基本看不清（真实截图验证时发现的，不是纸上谈兵想到的） */
+  .inkseal{position:absolute;right:56px;top:52px;z-index:1;opacity:.92}
+  .s-sec.ink .rule{background:${t.accent};opacity:.4}
+
   /* 图文分栏内容页 */
   .imgrow{flex:1;display:flex;gap:54px;margin-top:24px;margin-bottom:12px;align-items:stretch}
   .imgrow.rev{flex-direction:row-reverse}
@@ -1469,7 +1488,7 @@ function css(t: DeckTheme): string {
   .closing h1{font-size:58px;font-weight:800;color:${t.primary}}
   .closing .tick{width:96px;height:6px;background:${t.accent}}
   .closing .sub{font-size:17px;color:#8a8a8a;line-height:1.5}
-  .closing.dangzheng{background:${t.paper}}
+  .closing.dangzheng,.closing.ink{background:${t.paper}}
 
   /* ══ 几何风（style:geo）——白底 + 同心圆弧/圆点圈/环形进度 ══ */
   .geo-d{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden}
@@ -1762,6 +1781,31 @@ const heroImg = (url?: string) => (url ? `<img class="hero" src="${esc(url)}" cr
 const isGeo = (o: DeckOutline) => o.theme.style === 'geo'
 const isLiti = (o: DeckOutline) => o.theme.style === 'liti'
 const isDangzheng = (o: DeckOutline) => o.theme.style === 'dangzheng'
+const isInk = (o: DeckOutline) => o.theme.style === 'ink'
+
+/** 水墨山水剪影——三层远近山影叠加（远山淡、近山浓），固定构图不做参数化变体，
+ * 跟 arcCluster/rayBurst 这些 geo 母题一样是手绘一份、全篇复用，不是每页都要不一样。
+ * viewBox 800x260 的横幅比例，方便贴在封面/章节页底部当"远景"用。 */
+function inkMountains(colorFar: string, colorMid: string, colorNear: string, w = 800, h?: number): string {
+  // h 不传就按原比例（封面/章节大幅横幅用）；内容页页脚要传一个小很多的 h 把峰"压扁"，
+  // 不然按原比例（近峰高达 260 高度里的 190）在内容页会顶穿卡片行——preserveAspectRatio="none"
+  // 让 viewBox 内容跟着 w/h 拉伸变形，压扁高度只会让山形变矮变缓，不会露白或被裁切
+  const hh = h ?? Math.round((w / 800) * 260)
+  return `<svg viewBox="0 0 800 260" width="${w}" height="${hh}" preserveAspectRatio="none">
+    <path d="M0,180 C100,140 180,162 260,150 C340,138 420,108 520,128 C620,148 700,118 800,138 L800,260 L0,260 Z" fill="${colorFar}"/>
+    <path d="M0,215 C80,175 160,195 220,155 C280,115 340,155 400,122 C460,90 540,140 620,112 C680,92 740,132 800,104 L800,260 L0,260 Z" fill="${colorMid}"/>
+    <path d="M280,260 L280,175 C310,150 330,158 352,120 C370,90 388,104 410,72 C426,50 444,66 462,92 C480,118 500,104 524,140 C544,168 566,150 588,182 L588,260 Z" fill="${colorNear}"/>
+  </svg>`
+}
+
+/** 朱红印章——纯装饰的抽象方章造型（不带任何文字/图案，避免被误认成具体机构公章），
+ * 边框故意留一点"崩边"缺口模拟手工钤印的不规整质感。 */
+function sealStamp(color: string, size = 92): string {
+  return `<svg viewBox="0 0 100 100" width="${size}" height="${size}">
+    <rect x="8" y="8" width="84" height="84" rx="6" fill="none" stroke="${color}" stroke-width="6"/>
+    <rect x="26" y="26" width="48" height="48" rx="3" fill="none" stroke="${color}" stroke-width="3.5"/>
+  </svg>`
+}
 
 /** 五角星 SVG（党政红金母题）——只是个通用几何符号，不是任何机构徽标，
  * 纯装饰用途（角标/分隔符），不代表任何具体组织。外圈 5 个尖角 + 内圈 5 个凹点，
@@ -1899,14 +1943,17 @@ function cover(o: DeckOutline): string {
   const pic = !b && o.coverImage
   const li = isLiti(o)
   const dz = isDangzheng(o)
-  const cls = (b ? 's-cover on-bg' : pic ? 's-cover has-pic' : 's-cover') + (li ? ' liti' : dz ? ' dangzheng' : '')
+  const ink = isInk(o)
+  const cls = (b ? 's-cover on-bg' : pic ? 's-cover has-pic' : 's-cover') + (li ? ' liti' : dz ? ' dangzheng' : ink ? ' ink' : '')
   const deco =
     !b && !pic
       ? li
         ? `<div class="li1"></div><div class="li2"></div>`
         : dz
           ? `<div class="dzglow"></div><div class="dzs1">${starBadge(o.theme.accent, 200, 0.1)}</div><div class="dzs2">${starBadge(o.theme.accent, 90, 0.16)}</div>`
-          : `<div class="cn3"></div><div class="cn1"></div><div class="cn2"></div><div class="br1"></div><div class="br2"></div>`
+          : ink
+            ? `<div class="inkmt">${inkMountains(`${o.theme.accent}22`, `${o.theme.primary}3d`, `${o.theme.primaryDk}66`, 1280)}</div><div class="inkseal">${sealStamp(o.theme.accent, 90)}</div>`
+            : `<div class="cn3"></div><div class="cn1"></div><div class="cn2"></div><div class="br1"></div><div class="br2"></div>`
       : ''
   // 党政红金：不管有没有 AI 背景图，标题区都加一排小金星替代普通色块短线——
   // 这是"党政"这个视觉体系最容易辨识的符号，纯色块换成红金配色反而认不出来是这个体系。
@@ -1944,7 +1991,7 @@ function toc(o: DeckOutline): string {
         `<div class="it"><span class="tocic">${icon(pickIcon(s.heading, i), 22)}</span><span class="no">${pad2(i + 1)}</span><span class="h">${esc(s.heading)}</span></div>`,
     )
     .join('')
-  const skin = isGeo(o) ? ' geo' : isLiti(o) ? ' liti' : isDangzheng(o) ? ' dangzheng' : ''
+  const skin = isGeo(o) ? ' geo' : isLiti(o) ? ' liti' : isDangzheng(o) ? ' dangzheng' : isInk(o) ? ' ink' : ''
   return `<div class="slide s-toc${skin}">${cbg(o)}<div class="z">
     <h2>目录</h2><div class="en">CONTENTS</div><div class="tick"></div>
     <div class="grid ${two ? 'two' : ''}">${li}</div></div></div>`
@@ -1954,10 +2001,12 @@ function section(s: DeckSection, idx: number, total: number, o: DeckOutline): st
   if (isGeo(o)) return gSection(s, idx, total, o)
   const withBg = !!o.bg?.section
   const dz = isDangzheng(o)
-  return `<div class="slide s-sec${dz ? ' dangzheng' : ''}">${bgImg(o.bg?.section)}
+  const ink = isInk(o)
+  return `<div class="slide s-sec${dz ? ' dangzheng' : ink ? ' ink' : ''}">${bgImg(o.bg?.section)}
     ${withBg ? '<div class="scrim"></div><div class="sbar"></div>' : '<div class="blk"></div><div class="sbar"></div>'}
     <div class="big">${pad2(idx)}</div>
     ${heroImg(o.heroImage)}
+    ${ink && !withBg ? `<div class="inkmt s">${inkMountains(`${o.theme.accent}22`, `${o.theme.primary}30`, `${o.theme.primaryDk}55`, 760)}</div>` : ''}
     <div class="box">
       ${dz ? `<div class="dzstars">${starBadge(o.theme.accent, 14)}${starBadge(o.theme.accent, 14)}${starBadge(o.theme.accent, 14)}</div>` : ''}
       <div class="part">PART ${pad2(idx)}</div>
@@ -1988,6 +2037,8 @@ const cbg = (o: DeckOutline) => {
   if (isGeo(o)) return geoDeco(o.theme, _geoIdx, o.style_hint?.motif || '')
   // 微立体：科技角标（虚线+短横）跟"柔光浮雕"的克制质感冲突，换成一对柔光圆角块，不叠加 techMark
   if (isLiti(o)) return `<div class="lbg"><div class="lb1"></div><div class="lb2"></div></div>`
+  // 水墨中国风：科技角标的虚线短横是"科技"母题，跟水墨山水完全不搭，换成页脚一条淡淡远山剪影
+  if (isInk(o)) return `<div class="inkmt c">${inkMountains(`${o.theme.accent}18`, `${o.theme.primary}28`, `${o.theme.primaryDk}40`, 1280, 70)}</div>`
   return (
     (o.bg?.content
       ? `${bgImg(o.bg.content)}<div class="cwash"></div>`
@@ -1996,7 +2047,7 @@ const cbg = (o: DeckOutline) => {
 }
 const bodySlide = (o: DeckOutline, inner: string) => {
   const dz = isGeo(o) && o.style_hint?.density === 'packed' ? ' d-packed' : isGeo(o) && o.style_hint?.density === 'airy' ? ' d-airy' : ''
-  const skin = isGeo(o) ? ' geo' : isLiti(o) ? ' liti' : ''
+  const skin = isGeo(o) ? ' geo' : isLiti(o) ? ' liti' : isInk(o) ? ' ink' : ''
   const html = `<div class="slide body${skin}${dz}">${cbg(o)}<div class="z">${inner}</div></div>`
   if (isGeo(o)) _geoIdx++
   return html
@@ -2286,14 +2337,17 @@ function swot(sl: DeckSlideIn, en: string, o: DeckOutline): string {
 
 function closing(o: DeckOutline): string {
   const dz = isDangzheng(o)
+  const ink = isInk(o)
   const deco = isGeo(o)
     ? `<div class="ga" style="position:absolute;right:-160px;bottom:-180px">${arcCluster(o.theme, 520)}</div>`
     : dz && !o.bg?.content
       ? `<div class="dzs2" style="right:-40px;bottom:-40px">${starBadge(o.theme.accent, 260, 0.14)}</div>`
-      : o.bg?.content
-        ? ''
-        : '<div class="cn s"></div><div class="cn"></div><div class="cn b"></div>'
-  return `<div class="slide closing${dz ? ' dangzheng' : ''}">${isGeo(o) ? '' : bgImg(o.bg?.content)}${deco}
+      : ink && !o.bg?.content
+        ? `<div class="inkmt">${inkMountains(`${o.theme.accent}22`, `${o.theme.primary}30`, `${o.theme.primaryDk}50`, 1280)}</div><div class="inkseal">${sealStamp(o.theme.accent, 80)}</div>`
+        : o.bg?.content
+          ? ''
+          : '<div class="cn s"></div><div class="cn"></div><div class="cn b"></div>'
+  return `<div class="slide closing${dz ? ' dangzheng' : ink ? ' ink' : ''}">${isGeo(o) ? '' : bgImg(o.bg?.content)}${deco}
     <div class="inner">
       ${dz ? `<div class="dzstars" style="justify-content:center">${starBadge(o.theme.accent, 16)}${starBadge(o.theme.accent, 16)}${starBadge(o.theme.accent, 16)}</div>` : ''}
       <div class="ty">THANK YOU</div><h1>感谢观看</h1><div class="tick"></div>

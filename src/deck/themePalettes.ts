@@ -15,6 +15,9 @@ export const THEME_FALLBACK_PALETTES: Record<string, string[]> = {
   /** 党政红金：跟 'red' 的区别不是颜色（两个都是红金），是 templates.ts 里专属的
    * 金色五角星+金线装饰——paper 用暖米色而不是冷灰，配合星纹更像官方文件质感 */
   dangzheng: ['#9c1d22', '#c9a227', '#5c0e12', '#faf4e8', '#2b1f1a'],
+  /** 水墨中国风：primary=淡墨青蓝，accent=朱红印泥色，paper=米黄宣纸，标题走 Long Cang
+   * 手写体（项目已通过 jsdelivr 加载，见 index.html） */
+  ink: ['#3d5a6c', '#a8342c', '#22333f', '#f3ead8', '#241f1a'],
 }
 /** 主题 key → DeckTheme.style 的映射：命中的 key 会走各自专属的背景/卡片/封面装饰
  * （不用 AI 整页大图），没命中的一律是 'plain'（AI 图或代码淡纹通用底）。
@@ -25,6 +28,7 @@ export const STYLE_BY_THEME_KEY: Record<string, string> = {
   geoblue: 'geo',
   liti: 'liti',
   dangzheng: 'dangzheng',
+  ink: 'ink',
 }
 /** @deprecated 只保留给还没来得及切换到 STYLE_BY_THEME_KEY 的旧引用用，新代码别用这个 */
 export const GEO_THEME_KEYS = new Set(['geoblue'])

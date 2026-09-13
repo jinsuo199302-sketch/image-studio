@@ -55,6 +55,7 @@ const THEMES = [
   { key: 'techblue', label: '科技蓝' },
   { key: 'geoblue', label: '几何蓝' },
   { key: 'liti', label: '极简微立体' },
+  { key: 'ink', label: '水墨中国风' },
   { key: 'purple', label: '典雅紫' },
   { key: 'slate', label: '沉稳蓝灰' },
   { key: 'teal', label: '青碧' },
