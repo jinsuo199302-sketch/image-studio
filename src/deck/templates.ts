@@ -128,6 +128,28 @@ function quarter(t: DeckTheme, size = 300): string {
     <path d="M ${s} ${s * 0.42} A ${s * 0.58} ${s * 0.58} 0 0 1 ${s * 0.42} ${s}" fill="none" stroke="${t.accent}" stroke-width="7" stroke-linecap="round"/>
   </svg>`
 }
+/** 交替半圆色块：3~4 个半圆横向排开，奇偶交替朝向（拱起朝上/拱起朝下），标题贴在
+ * 拱起那一侧、正文贴在平边那一侧，形成波浪起伏的观感——跟 quarter（扇形）/donut（圆环）
+ * 完全不是一回事，那两个都是单个完整圆形装饰，这个是多个半圆错落排列的独立版式。
+ * bullet 复用 splitTitleBody 那套"冒号前当标题"的解析（跟 pinwheel 一致）。 */
+function halfMoonAlt(t: DeckTheme, items: string[]): string {
+  const rows = items.slice(0, 4).map(splitTitleBody)
+  const cols = rows
+    .map((r, i) => {
+      const up = i % 2 === 0
+      const col = i % 2 ? t.accent : t.primary
+      const titleEl = `<div class="hmtitle">${esc(r.title)}</div>`
+      return `<div class="hmcol">
+        ${up ? titleEl : ''}
+        <div class="hmshape ${up ? 'up' : 'down'}" style="background:${col}"></div>
+        ${!up ? titleEl : ''}
+        <div class="hmbody">${esc(r.body)}</div>
+      </div>`
+    })
+    .join('')
+  return `<div class="halfmoon">${cols}</div>`
+}
+
 /** V 形箭头条（流程） */
 function chevronStrip(items: string[], t: DeckTheme): string {
   const n = items.length
@@ -353,6 +375,28 @@ function arrowRing(t: DeckTheme, center: string, items: string[]): string {
   }
   return `<div class="aring"><svg viewBox="0 0 ${VB} ${VB}">${arcs}</svg><div class="arc-c">${esc(center)}</div>${nodes}</div>`
 }
+
+/** 大箭头+环绕编号方框：中间一条整体向上的大箭头（象征"提升/推进"），两侧各排 1~2 个
+ * 编号方框——常见于"改进举措/工作计划"类模板，箭头纯 CSS 三角形+矩形拼出来
+ * （见样式表 .afarrow），不需要额外的 SVG，图标位置固定不受 items 数量影响。 */
+function arrowFlank(items: string[]): string {
+  const rows = items.slice(0, 4)
+  const left = rows.filter((_, i) => i % 2 === 0)
+  const right = rows.filter((_, i) => i % 2 === 1)
+  const col = (list: string[], startAt: number) =>
+    list
+      .map(
+        (b, i) =>
+          `<div class="afbox"><div class="afno">${pad2(startAt + i * 2)}</div><div class="aftx">${esc(b)}</div></div>`,
+      )
+      .join('')
+  return `<div class="arrowflank">
+    <div class="afcol">${col(left, 1)}</div>
+    <div class="afarrow"><div class="afhead"></div><div class="afshaft"></div></div>
+    <div class="afcol">${col(right, 2)}</div>
+  </div>`
+}
+
 /** 占比象形图：两段百分比 + 小人图标条（参考模板 #4） */
 function pictoSplit(t: DeckTheme, rows: { label: string; value: number }[]): string {
   const total = rows.reduce((s, r) => s + (Number(r.value) || 0), 0) || 1
@@ -687,6 +731,73 @@ function hexChain(t: DeckTheme, items: string[]): string {
     <path d="${linePath}" fill="none" stroke="${t.ink}30" stroke-width="3" stroke-dasharray="3 9" stroke-linecap="round"/>
   </svg>${dots}</div>`
 }
+
+/** 圆形珠链连接：跟 hexChain 是完全不同的视觉家族，不是"换个形状"——hexChain 是
+ * 锯齿上下+六边形图标+细虚线；这个是同一水平线上圆形图标相邻相切、标题在圆上/下方
+ * 交替（参考模板里"一串圆点首尾相连"这种常见构图，之前完全没有对应组件）。 */
+function circleChain(t: DeckTheme, items: string[]): string {
+  const rows = items.slice(0, 6)
+  const n = rows.length
+  const W = 1000
+  const H = 300
+  const midY = H / 2
+  const padX = 110
+  const xAt = (i: number) => (n <= 1 ? W / 2 : padX + ((W - 2 * padX) * i) / (n - 1))
+  const nodes = rows.map((b, i) => ({ x: xAt(i), y: midY, b }))
+  const x0 = nodes[0]?.x ?? 0
+  const x1 = nodes[n - 1]?.x ?? W
+  const dots = nodes
+    .map((p, i) => {
+      const above = i % 2 === 0
+      return `<div class="ccn" style="left:${((p.x / W) * 100).toFixed(2)}%;top:${((p.y / H) * 100).toFixed(2)}%">
+        ${above ? `<div class="cctt above">${esc(short(p.b, 16))}</div>` : ''}
+        <div class="cch" style="background:${i % 2 ? t.accent : t.primary}">${icon(pickIcon(p.b, i), 30)}</div>
+        ${!above ? `<div class="cctt below">${esc(short(p.b, 16))}</div>` : ''}
+      </div>`
+    })
+    .join('')
+  return `<div class="ccchain"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    <line x1="${x0}" y1="${midY}" x2="${x1}" y2="${midY}" stroke="${t.ink}22" stroke-width="3" stroke-dasharray="2 8"/>
+  </svg>${dots}</div>`
+}
+
+/** 蛇形连接时间线：节点上下交替（跟 hexChain 一样用锯齿排布），但连接线换成粗渐变
+ * 曲线（三次贝塞尔平滑过渡，不是折线），图标换成简单数字圆——视觉上是"一条色带蜿蜒
+ * 向前"的观感，比 hexChain 的细虚线锯齿更有流动感，两者是同一类需求（有先后顺序的
+ * 阶段流程）下的两种不同气质选择，不是重复组件。 */
+function serpentineChain(t: DeckTheme, items: string[]): string {
+  const rows = items.slice(0, 6)
+  const n = rows.length
+  const W = 1000
+  const H = 420
+  const padX = 90
+  const midY = H / 2
+  const amp = 110
+  const xAt = (i: number) => (n <= 1 ? W / 2 : padX + ((W - 2 * padX) * i) / (n - 1))
+  const nodes = rows.map((b, i) => ({ x: xAt(i), y: midY + (i % 2 === 0 ? -amp : amp), b }))
+  let path = nodes.length ? `M ${nodes[0].x.toFixed(1)} ${nodes[0].y.toFixed(1)}` : ''
+  for (let i = 1; i < nodes.length; i++) {
+    const p0 = nodes[i - 1]
+    const p1 = nodes[i]
+    const midX = (p0.x + p1.x) / 2
+    path += ` C ${midX.toFixed(1)} ${p0.y.toFixed(1)}, ${midX.toFixed(1)} ${p1.y.toFixed(1)}, ${p1.x.toFixed(1)} ${p1.y.toFixed(1)}`
+  }
+  const gid = 'sc' + Math.random().toString(36).slice(2, 8)
+  const dots = nodes
+    .map((p, i) => {
+      const above = i % 2 === 1
+      return `<div class="scn" style="left:${((p.x / W) * 100).toFixed(2)}%;top:${((p.y / H) * 100).toFixed(2)}%">
+        ${above ? `<div class="sctt above">${esc(short(p.b, 16))}</div>` : ''}
+        <div class="sch">${pad2(i + 1)}</div>
+        ${!above ? `<div class="sctt below">${esc(short(p.b, 16))}</div>` : ''}
+      </div>`
+    })
+    .join('')
+  return `<div class="serp"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    <defs><linearGradient id="${gid}" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="${t.primary}"/><stop offset="100%" stop-color="${t.accent}"/></linearGradient></defs>
+    <path d="${path}" fill="none" stroke="url(#${gid})" stroke-width="10" stroke-linecap="round"/>
+  </svg>${dots}</div>`
+}
 /** 环形风车图：4 片曲边扇叶绕中心排成风车状，中心留白一个小圆孔，每片一个序号；
  * 图形居中，四角摆标题+正文——经典"风车图"模板的构图（不追求文字精确对齐到每片扇叶
  * 的角度，那样反而在文字量不均时容易露怯）。 */
@@ -851,6 +962,9 @@ export interface DeckOutline {
   coverMeta?: string
   /** 参考图归类出来的排版倾向（只影响装饰母题轮换和疏密，版面尺寸位置仍全部本引擎算） */
   style_hint?: { density?: 'airy' | 'balanced' | 'packed' | string; motif?: string }
+  /** 封面/章节页反复使用的透明背景角标插画（前景贴图，跟 bg 那种整页背景是两回事），
+   * 全篇只有一张、所有用到的页面复用同一张，构成统一的视觉 IP；没有就不渲染这块 */
+  heroImage?: string
 }
 
 const esc = (s = '') =>
@@ -904,6 +1018,81 @@ const cardCols = (n: number) => CARD_COLS[n] || Math.min(3, Math.max(n, 1))
  * 这里手动把每组 3 个都搭配成"尖角/圆/独特轮廓"三选一，组内绝不放两个圆乎乎的形状。 */
 const ICON_SHAPES = ['sq', 'hx', 'rd', 'gr', 'di', 'rc', 'sh', 'bl', '']
 const iconShape = (i: number) => ICON_SHAPES[i % ICON_SHAPES.length]
+
+/** 卡片/清单"文字框"本身的轮廓造型——参数化生成，不是手写几个固定预设。
+ * 之前只有图标徽标会换形状，装文字的大色块box永远是同一个圆角矩形，视觉冲击力最大的
+ * 那块面积反而最单调（大面积色块 > 描边 > 小图标，优先级排序见设计判断经验）；后来手写了
+ * 8 种固定造型，但"手写"意味着规模上不去——每加一种都要人工核对安全性。
+ *
+ * 这里改成公式化生成：四个角各自独立选 4 档斜切深度（0/浅/中/深，4^4=256 种角组合）
+ * ×切角风格（直角斜切 / 阶梯凹口，2 种）×整体强度微调（2 种）≈ 1000+ 种；
+ * 四角都不切时额外走"顶边整体斜切"分支（旗帜感，2 个方向×3 档深度）或纯圆角分支
+ * （5 档圆角×是否拱形不对称，共 10 种）。所有深度都是同一个安全上限（严格小于
+ * 卡片 24~26px / 清单 15~18px 的内边距）按比例换算出来的，规模再大也不会破坏安全性——
+ * 这跟之前手写 8 种"每种都要单独验证"是本质区别：公式本身保证了安全性，不需要
+ * 逐个人工核对，才有可能真正堆到成百上千种而不是靠堆人力。
+ * 四角都不切+不斜边时用纯 border-radius，其余一律纯 clip-path polygon——两者不在
+ * 同一个形状里混用，避免"圆角+多边形"拼接的复杂度和潜在渲染风险。 */
+function cornerPts(
+  corner: 'TL' | 'TR' | 'BR' | 'BL',
+  depth: number,
+  notch: boolean,
+): string[] {
+  const d = Math.round(depth)
+  const R = (px: number) => (px <= 0 ? '100%' : `calc(100% - ${px}px)`)
+  if (d <= 0) {
+    return corner === 'TL' ? ['0 0'] : corner === 'TR' ? ['100% 0'] : corner === 'BR' ? ['100% 100%'] : ['0 100%']
+  }
+  if (corner === 'TL') return notch ? [`0 ${d}px`, `${d}px ${d}px`, `${d}px 0`] : [`0 ${d}px`, `${d}px 0`]
+  if (corner === 'TR') return notch ? [`${R(d)} 0`, `${R(d)} ${d}px`, `100% ${d}px`] : [`${R(d)} 0`, `100% ${d}px`]
+  if (corner === 'BR')
+    return notch ? [`100% ${R(d)}`, `${R(d)} ${R(d)}`, `${R(d)} 100%`] : [`100% ${R(d)}`, `${R(d)} 100%`]
+  return notch ? [`${d}px 100%`, `${d}px ${R(d)}`, `0 ${R(d)}`] : [`${d}px 100%`, `0 ${R(d)}`]
+}
+
+/** seed 是全局递增的页序号（跟 _cardBoxIdx/_listBoxIdx 一样，同一页内所有卡片/清单行
+ * 统一用一次算出来的同一个造型，不同卡片各挑各的会显得杂乱不成套）。
+ * maxDepth 由调用方按卡片(20px)/清单(11px)传两档不同的安全上限。 */
+function parametricBoxStyle(seed: number, maxDepth: number): string {
+  const s = seed >>> 0
+  const TIERS = [0, 0.35, 0.65, 1]
+  const tTL = TIERS[s % 4]
+  const tTR = TIERS[(s >> 2) % 4]
+  const tBR = TIERS[(s >> 4) % 4]
+  const tBL = TIERS[(s >> 6) % 4]
+  const notch = ((s >> 8) & 1) === 1
+  const intensity = ((s >> 9) & 1) === 1 ? 1.15 : 0.85
+  const skewMode = tTL === 0 && tTR === 0 ? (s >> 10) % 3 : 0 // 只有顶角本来就没单独切角时才轮空出来给顶边斜切
+
+  const dTL = tTL * maxDepth * intensity
+  const dTR = tTR * maxDepth * intensity
+  const dBR = tBR * maxDepth * intensity
+  const dBL = tBL * maxDepth * intensity
+  const allFlat = dTL === 0 && dTR === 0 && dBR === 0 && dBL === 0 && skewMode === 0
+
+  if (allFlat) {
+    const RADIUS_TIERS = [0.5, 0.8, 1.1, 1.4, 1.7]
+    const r = RADIUS_TIERS[(s >> 12) % RADIUS_TIERS.length] * maxDepth
+    const archy = ((s >> 15) & 1) === 1
+    const radius = archy ? `${Math.round(r * 1.4)}px ${Math.round(r * 1.4)}px ${Math.round(r * 0.4)}px ${Math.round(r * 0.4)}px` : `${Math.round(r)}px`
+    return `border-radius:${radius}`
+  }
+
+  let ptsTL: string[]
+  let ptsTR: string[]
+  if (skewMode === 1) {
+    ptsTL = [`0 ${Math.round(maxDepth * intensity)}px`]
+    ptsTR = ['100% 0']
+  } else if (skewMode === 2) {
+    ptsTL = ['0 0']
+    ptsTR = [`100% ${Math.round(maxDepth * intensity)}px`]
+  } else {
+    ptsTL = cornerPts('TL', dTL, notch)
+    ptsTR = cornerPts('TR', dTR, notch)
+  }
+  const pts = [...ptsTL, ...ptsTR, ...cornerPts('BR', dBR, notch), ...cornerPts('BL', dBL, notch)]
+  return `border-radius:0;clip-path:polygon(${pts.join(',')})`
+}
 
 /** 极坐标转百分比坐标（圆心 50%,50%），拼 clip-path polygon 用。 */
 function polarPct(r: number, deg: number): string {
@@ -982,6 +1171,10 @@ function css(t: DeckTheme): string {
   /* 封面带用户照片：右 46% 放图，左侧留白放标题 */
   .s-cover.has-pic .cpic{position:absolute;right:0;top:0;width:46%;height:100%;object-fit:cover;z-index:1}
   .s-cover.has-pic .cn1,.s-cover.has-pic .cn2,.s-cover.has-pic .cn3,.s-cover.has-pic .ring{display:none}
+  /* 角标插画——透明底前景贴图，跟整页背景/写实主图是两回事，摆在 cn1/cn2 色块下方的空白区，
+     不跟左侧文字面板、也不跟已有装饰重叠 */
+  .hero{position:absolute;object-fit:contain;pointer-events:none;z-index:2}
+  .s-cover .hero{right:70px;bottom:36px;width:260px;height:260px}
 
   /* 图文分栏内容页 */
   .imgrow{flex:1;display:flex;gap:54px;margin-top:24px;margin-bottom:12px;align-items:stretch}
@@ -1019,6 +1212,7 @@ function css(t: DeckTheme): string {
   .s-sec h2{font-size:48px;font-weight:800;margin:14px 0 22px;line-height:1.22}
   .s-sec .rule{width:520px;height:1px;background:rgba(255,255,255,.22)}
   .s-sec .en{margin-top:18px;color:rgba(255,255,255,.4);letter-spacing:2px;font-size:12px;font-weight:700}
+  .s-sec .hero{right:56px;bottom:44px;width:230px;height:230px;z-index:2}
 
   /* 内容页骨架。.body 是加在 .slide 上的修饰类（同一个元素），只管内边距和弹性布局，
      绝对不要设 height / position —— .slide 已经是显式 720px；早先写过 height:100%，
@@ -1083,11 +1277,19 @@ function css(t: DeckTheme): string {
   .card .ic.bl,.row .ic.bl{border-radius:0;clip-path:polygon(97.8% 84.5%,88.1% 94.5%,72.7% 99.6%,54.3% 100.0%,35.3% 95.9%,18.3% 87.7%,5.9% 75.4%,0.0% 59.8%,0.2% 42.7%,5.5% 26.0%,14.9% 11.9%,27.5% 2.6%,42.1% 0.0%,57.7% 5.5%,72.9% 17.6%,86.0% 33.9%,95.6% 52.1%,100.0% 69.7%)}
   .card .num{font-size:12px;letter-spacing:2px;font-weight:800;color:${t.accent}}
   .card .ct{font-size:18px;line-height:1.6;text-align:left;align-self:stretch;color:${t.ink}}
+  /* 文字框轮廓改参数化生成，直接算成 inline style 贴在每个 .card/.row 上（见 parametricBoxStyle），
+     不再是这里的固定 .shp-* 类选择器——规模从几种手写预设变成上千种组合，不需要每种都在这里
+     单独写一行 CSS 规则。 */
 
   /* 清单（4~5 条） */
   .list{flex:1;margin-top:30px;display:flex;flex-direction:column;justify-content:center;gap:6px}
   .row{display:flex;align-items:center;gap:20px;padding:15px 18px;border-bottom:1px solid #ebedf1;border-radius:10px}
   .row:last-child{border-bottom:0}
+  /* 造型同样改成 inline style 贴在每个 .row 上（见 parametricBoxStyle，maxDepth=11px，
+     小于 15~18px 的行内边距）；inline style 优先级天然高于下面 .geo .list .row 那条
+     border-radius:0 12px 12px 0 的规则，geo 清单行套上参数化造型后会整条统一处理四角，
+     不再强制保留"左直角+右圆角"——纯白底 .row 平时看不出切角，偶数行有浅底色/geo 主题
+     有底色时才会露出来，这是预期效果 */
   .row:nth-child(even){background:${tintToWhite(t.primary, 0.95)}}
   .row .ic{width:44px;height:44px;flex:none;border-radius:8px;background:${t.primary}0f;color:${t.primary};display:flex;align-items:center;justify-content:center}
   .row:nth-child(3n+2) .ic{background:${t.accent}12;color:${t.accent}}
@@ -1308,11 +1510,13 @@ function css(t: DeckTheme): string {
   .g-cover .ga{position:absolute;right:-160px;top:-180px}
   .g-cover .gwedge{position:absolute;right:0;bottom:0;width:44%;height:78%;background:${t.primary};clip-path:polygon(28% 0,100% 0,100% 100%,0 100%)}
   .g-cover .gwedge2{position:absolute;right:0;bottom:0;width:44%;height:78%;background:${t.accent};clip-path:polygon(40% 0,52% 0,24% 100%,12% 100%);opacity:.9}
+  .g-cover .hero{right:50px;bottom:56px;width:240px;height:240px;z-index:2}
   .g-cover .panel{position:absolute;left:110px;top:196px;width:640px;z-index:2}
 
   .g-sec{background:${t.primaryDk};color:#fff}
   .g-sec .ga{position:absolute;right:-120px;top:50%;transform:translateY(-50%);opacity:.5}
   .g-sec .gbig{position:absolute;left:96px;top:150px;font-size:300px;font-weight:800;line-height:.8;color:rgba(255,255,255,.09);font-family:"Arial Black","Arial",sans-serif;z-index:1}
+  .g-sec .hero{right:60px;bottom:50px;width:220px;height:220px;z-index:2}
   .g-sec .box{position:absolute;left:120px;top:280px;width:640px;z-index:2}
   .g-sec .part{font-size:15px;letter-spacing:6px;color:${t.accent};font-weight:800}
   .g-sec h2{font-size:46px;font-weight:800;margin:14px 0 20px;line-height:1.2}
@@ -1325,6 +1529,52 @@ function css(t: DeckTheme): string {
   .rings .rw .rc{position:relative;display:flex}
   .rings .rw .rv{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:800;color:${t.primary};font-family:"Arial","Microsoft YaHei",sans-serif}
   .rings .rw .rl{margin-top:18px;font-size:16px;font-weight:600;color:${t.ink};max-width:220px;line-height:1.45}
+
+  /* 圆形珠链连接（circle_chain）——跟 hxchain 同一套定位思路，形状/连接线不同 */
+  .ccchain{flex:1;position:relative;align-self:stretch;width:100%;margin-top:30px}
+  .ccchain svg{position:absolute;inset:0;width:100%;height:100%}
+  .ccchain .ccn{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;width:180px}
+  .ccchain .cch{width:96px;height:96px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 0 0 6px #fff}
+  .ccchain .cctt{font-size:16px;font-weight:700;color:${t.ink};text-align:center;line-height:1.4}
+  .ccchain .cctt.above{margin-bottom:14px}
+  .ccchain .cctt.below{margin-top:14px}
+
+  /* 蛇形连接时间线（serpentine）——数字圆+粗渐变曲线 */
+  .serp{flex:1;position:relative;align-self:stretch;width:100%;margin-top:16px}
+  .serp svg{position:absolute;inset:0;width:100%;height:100%}
+  .serp .scn{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;width:170px}
+  .serp .sch{width:56px;height:56px;flex:none;border-radius:50%;background:${t.primaryDk};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;font-family:"Arial","Microsoft YaHei",sans-serif;box-shadow:0 0 0 6px #fff}
+  .serp .sctt{font-size:15px;font-weight:700;color:${t.ink};text-align:center;line-height:1.4}
+  .serp .sctt.above{margin-bottom:12px}
+  .serp .sctt.below{margin-top:12px}
+
+  /* 交替半圆色块（half_moon） */
+  .halfmoon{flex:1;display:flex;align-items:center;justify-content:space-evenly;margin-top:20px;gap:24px}
+  .halfmoon .hmcol{display:flex;flex-direction:column;align-items:center;text-align:center;max-width:220px}
+  .halfmoon .hmshape{width:150px;height:75px}
+  .halfmoon .hmshape.up{border-radius:150px 150px 0 0;margin-bottom:16px}
+  .halfmoon .hmshape.down{border-radius:0 0 150px 150px;margin-top:16px}
+  .halfmoon .hmtitle{font-size:18px;font-weight:800;color:${t.ink}}
+  .halfmoon .hmbody{margin-top:14px;font-size:14px;color:${t.ink}cc;line-height:1.6}
+
+  /* 大箭头+环绕编号方框（arrow_flank） */
+  .arrowflank{flex:1;display:flex;align-items:center;justify-content:center;gap:40px;margin-top:20px}
+  .arrowflank .afcol{display:flex;flex-direction:column;gap:26px}
+  .arrowflank .afbox{width:280px;padding:16px 20px;border-radius:10px;border:1px solid #e4e7ec;background:#fff;box-shadow:0 2px 10px rgba(20,30,60,.06)}
+  .arrowflank .afno{font-size:12px;font-weight:800;letter-spacing:2px;color:${t.accent}}
+  .arrowflank .aftx{margin-top:6px;font-size:15px;color:${t.ink};line-height:1.5}
+  .arrowflank .afarrow{flex:none;display:flex;flex-direction:column;align-items:center;width:70px}
+  .arrowflank .afhead{width:0;height:0;border-left:35px solid transparent;border-right:35px solid transparent;border-bottom:46px solid ${t.primary}}
+  .arrowflank .afshaft{width:34px;height:170px;background:${t.primary}}
+
+  /* 环形数据+挂牌（ring_tag） */
+  .ringtag{flex:1;display:flex;align-items:center;justify-content:space-evenly;margin-top:10px;gap:20px}
+  .ringtag .rtcol{display:flex;flex-direction:column;align-items:center}
+  .ringtag .rtcol.raised{margin-top:-30px}
+  .ringtag .rtring{position:relative;display:flex}
+  .ringtag .rtv{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:800;color:${t.primary};font-family:"Arial","Microsoft YaHei",sans-serif}
+  .ringtag .rttag{margin-top:-18px;min-width:150px;padding:20px 18px 14px;border-radius:12px;text-align:center;box-shadow:0 8px 20px rgba(20,30,60,.14);z-index:1}
+  .ringtag .rtlabel{font-size:16px;font-weight:700;color:#fff}
 
   /* geo 风：白底 + 实心导航块卡片（参考模板那种），撑满整页高度 + 大号数字水印 */
   .body.geo,.s-toc.geo{background:#fff}
@@ -1445,6 +1695,8 @@ function css(t: DeckTheme): string {
 }
 
 const bgImg = (url?: string) => (url ? `<img class="bg" src="${esc(url)}" crossorigin="anonymous">` : '')
+/** 封面/章节页角标插画——前景贴图（透明底），跟 bgImg 那种铺满整页的背景图不是一回事 */
+const heroImg = (url?: string) => (url ? `<img class="hero" src="${esc(url)}" crossorigin="anonymous">` : '')
 
 const isGeo = (o: DeckOutline) => o.theme.style === 'geo'
 /** geo 风内容页装饰：左侧色条 + 左下圆点圈 + 每页轮换的大几何元素。
@@ -1480,6 +1732,13 @@ let _geoIdx = 0
  * 用它当起始偏移，不然每页卡片都从第 0 张卡开始数，9 种形状里后面几种（齿轮/盾牌/blob）
  * 因为单页最多 6 张卡（i 只到 5）永远轮不到，整个deck 看下去还是一样的前 6 种在重复。 */
 let _cardsIdx = 0
+/** 文字框轮廓（parametricBoxStyle 的 seed）分开给 cards/list 各自一个计数器，不共用
+ * _cardsIdx——共用的话两个版式在同一个递增序列里永远各占固定的奇偶下标，参数化公式里
+ * 对 seed 取位判断的那几个维度（比如"顶角有没有单独切角"）会被这种奇偶锁定筛掉一半
+ * 可能性，等于白白损失一半组合。分开算才能让 cards 页/list 页各自独立、连续地把
+ * seed 空间走一遍，两边都能看到公式能生成的全部花样。 */
+let _cardBoxIdx = 0
+let _listBoxIdx = 0
 
 /* ── 页型 ─────────────────────────────────────────────── */
 function gCover(o: DeckOutline): string {
@@ -1497,6 +1756,7 @@ function gCover(o: DeckOutline): string {
     <div class="ga">${arcCluster(t, 520)}</div>
     <div class="gwedge"></div><div class="gwedge2"></div>
     <div class="side"></div>
+    ${heroImg(o.heroImage)}
     <div class="panel">
       <div class="kbar"></div>
       <div class="kick">KEYNOTE PRESENTATION</div>
@@ -1512,6 +1772,7 @@ function gSection(s: DeckSection, idx: number, total: number, o: DeckOutline): s
   return `<div class="slide s-sec g-sec">
     <div class="ga">${arcCluster(t, 460)}</div>
     <div class="gbig">${pad2(idx)}</div>
+    ${heroImg(o.heroImage)}
     <div class="box">
       <div class="part">PART ${pad2(idx)} · ${pad2(idx)} / ${pad2(total)}</div>
       <h2>${esc(s.heading)}</h2>
@@ -1531,6 +1792,28 @@ function ringStats(sl: DeckSlideIn, en: string, o: DeckOutline): string {
     })
     .join('')}</div>`
   return bodySlide(o, `${head(sl, en, o)}${body}`)
+}
+
+/** 环形数据+挂牌：跟 ringStats（环形一排、下面直接跟一行文字）不是一回事——这个每个环下面
+ * 挂一张独立的色块"标签牌"（进 clip-path 造一个顶部有缺口的牌子造型，视觉上像挂在环下面），
+ * 常见于强调"关键指标"的模板，3 项时中间一项故意放大突出（参考模板里这种"三项数据中间
+ * 最重要"的构图很常见）。 */
+function ringTagLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
+  const t = o.theme
+  const rows = (sl.data?.items || []).filter((r) => r.label).slice(0, 3)
+  const n = rows.length
+  const cols = rows
+    .map((r, i) => {
+      const num = Math.abs(parseFloat(String(r.value).replace(/[^0-9.\-]/g, '')) || 0)
+      const raised = n === 3 && i === 1
+      const col = i % 2 ? t.accent : t.primary
+      return `<div class="rtcol${raised ? ' raised' : ''}">
+        <div class="rtring">${progRing(t, num, raised ? 168 : 140)}<div class="rtv">${esc(String(r.value))}</div></div>
+        <div class="rttag" style="background:${col}"><div class="rtlabel">${esc(r.label)}</div></div>
+      </div>`
+    })
+    .join('')
+  return bodySlide(o, `${head(sl, en, o)}<div class="ringtag">${cols}</div>`)
 }
 
 function cover(o: DeckOutline): string {
@@ -1553,6 +1836,7 @@ function cover(o: DeckOutline): string {
     : ''
   return `<div class="slide ${cls}">${bgImg(b)}${deco}${b ? '<div class="scrim"></div>' : ''}<div class="side"></div>
     ${pic ? `<img class="cpic" src="${esc(o.coverImage!)}" crossorigin="anonymous">` : ''}
+    ${heroImg(o.heroImage)}
     <div class="panel">
       <div class="kbar"></div>
       <div class="kick">KEYNOTE PRESENTATION</div>
@@ -1583,6 +1867,7 @@ function section(s: DeckSection, idx: number, total: number, o: DeckOutline): st
   return `<div class="slide s-sec">${bgImg(o.bg?.section)}
     ${withBg ? '<div class="scrim"></div><div class="sbar"></div>' : '<div class="blk"></div><div class="sbar"></div>'}
     <div class="big">${pad2(idx)}</div>
+    ${heroImg(o.heroImage)}
     <div class="box">
       <div class="part">PART ${pad2(idx)}</div>
       <div class="pnx">${pad2(idx)} / ${pad2(total)}</div>
@@ -1710,10 +1995,11 @@ function content(sl: DeckSlideIn, en: string, o: DeckOutline, imgFlip = false, l
     const ctFs = fitBodyFont(cards, ctBase, 14)
     const ctLh = ctFs < ctBase ? 1.45 : 1.6
     const shapeOffset = _cardsIdx++ * 3 // 每张卡片页错开 3 个身位，几页看下来 9 种形状都露得到脸
+    const boxStyle = parametricBoxStyle(_cardBoxIdx++, 20) // 20px < 24~26px 卡片内边距，留够安全区
     body = `<div class="cards" style="grid-template-columns:repeat(${cols},1fr)">${cards
       .map(
         (b, i) =>
-          `<div class="card"><div class="hd"><div class="ic ${iconShape(shapeOffset + i)}">${ic(b, i, geo ? 22 : 20)}</div><div class="num">POINT ${pad2(
+          `<div class="card" style="${boxStyle}"><div class="hd"><div class="ic ${iconShape(shapeOffset + i)}">${ic(b, i, geo ? 22 : 20)}</div><div class="num">POINT ${pad2(
             i + 1,
           )}</div></div><div class="ct" style="font-size:${ctFs}px;line-height:${ctLh}">${para(b)}</div>${geo ? `<div class="bn">${pad2(i + 1)}</div>` : ''}</div>`,
       )
@@ -1721,10 +2007,11 @@ function content(sl: DeckSlideIn, en: string, o: DeckOutline, imgFlip = false, l
   } else {
     const rtFs = fitBodyFont(items, 18, 15)
     const listShapeOffset = _cardsIdx++ * 3
+    const listBoxStyle = parametricBoxStyle(_listBoxIdx++, 11) // 11px < 15~18px 清单行内边距
     body = `<div class="list">${items
       .map(
         (b, i) =>
-          `<div class="row"><div class="ic ${iconShape(listShapeOffset + i)}">${ic(b, i, 22)}</div><span class="n">${pad2(i + 1)}</span><div class="rt" style="font-size:${rtFs}px">${esc(b)}</div></div>`,
+          `<div class="row" style="${listBoxStyle}"><div class="ic ${iconShape(listShapeOffset + i)}">${ic(b, i, 22)}</div><span class="n">${pad2(i + 1)}</span><div class="rt" style="font-size:${rtFs}px">${esc(b)}</div></div>`,
       )
       .join('')}</div>`
   }
@@ -1932,6 +2219,11 @@ const CONTENT_LAYOUTS = new Set([
   'mountain',
   'hex_chain',
   'pinwheel',
+  'circle_chain',
+  'serpentine',
+  'half_moon',
+  'arrow_flank',
+  'ring_tag',
 ])
 
 function spokeLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
@@ -1982,6 +2274,26 @@ function pinwheelLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
   return bodySlide(o, `${head(sl, en, o)}${pinwheel(o.theme, items)}`)
 }
 
+function circleChainLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
+  const items = (sl.bullets || []).map((s) => s.trim()).filter(Boolean).slice(0, 6)
+  return bodySlide(o, `${head(sl, en, o)}${circleChain(o.theme, items)}`)
+}
+
+function serpentineLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
+  const items = (sl.bullets || []).map((s) => s.trim()).filter(Boolean).slice(0, 6)
+  return bodySlide(o, `${head(sl, en, o)}${serpentineChain(o.theme, items)}`)
+}
+
+function halfMoonLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
+  const items = (sl.bullets || []).map((s) => s.trim()).filter(Boolean).slice(0, 4)
+  return bodySlide(o, `${head(sl, en, o)}${halfMoonAlt(o.theme, items)}`)
+}
+
+function arrowFlankLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
+  const items = (sl.bullets || []).map((s) => s.trim()).filter(Boolean).slice(0, 4)
+  return bodySlide(o, `${head(sl, en, o)}${arrowFlank(items)}`)
+}
+
 /** 照片墙：2~3 张照片套几何图框 + 每张一句说明 */
 function galleryLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
   const pics = (sl.images || []).filter(Boolean).slice(0, 3)
@@ -2010,7 +2322,7 @@ export function resolveLayout(sl: DeckSlideIn): string {
   if (lay in need && (sl[need[lay]] == null || typeof sl[need[lay]] !== 'object')) lay = ''
   if (
     (lay === 'bar' || lay === 'stats' || lay === 'rings' || lay === 'line' ||
-      lay === 'radar' || lay === 'waterfall' || lay === 'gauge' || lay === 'mountain') &&
+      lay === 'radar' || lay === 'waterfall' || lay === 'gauge' || lay === 'mountain' || lay === 'ring_tag') &&
     !sl.data?.items?.length
   )
     lay = ''
@@ -2021,12 +2333,18 @@ export function resolveLayout(sl: DeckSlideIn): string {
   const NODE_LABEL_MAX = 20
   const tooLongForNode = (bullets?: string[]) => (bullets || []).some((b) => b && b.trim().length > NODE_LABEL_MAX)
   if (
-    (lay === 'spoke' || lay === 'hive' || lay === 'cycle' || lay === 'bulb' || lay === 'hex_chain') &&
+    (lay === 'spoke' || lay === 'hive' || lay === 'cycle' || lay === 'bulb' || lay === 'hex_chain' ||
+      lay === 'circle_chain' || lay === 'serpentine') &&
     ((sl.bullets || []).filter((b) => b && b.trim()).length < 3 || tooLongForNode(sl.bullets))
   )
     lay = ''
-  // 风车图正文不截断（走 splitTitleBody + para 正常换行），只要求条数够
-  if (lay === 'pinwheel' && (sl.bullets || []).filter((b) => b && b.trim()).length < 3) lay = ''
+  // 风车图/半月形正文不截断（走 splitTitleBody + 正常换行），只要求条数够
+  if (
+    (lay === 'pinwheel' || lay === 'half_moon') &&
+    (sl.bullets || []).filter((b) => b && b.trim()).length < 3
+  )
+    lay = ''
+  if (lay === 'arrow_flank' && (sl.bullets || []).filter((b) => b && b.trim()).length < 2) lay = ''
   if (
     lay === 'tree' &&
     ((sl.bullets || []).filter((b) => b && b.trim()).length < 2 || tooLongForNode(sl.bullets))
@@ -2063,6 +2381,8 @@ export function composeDeck(o: DeckOutline): { styleTag: string; slides: string[
   const t = o.theme
   _geoIdx = 0
   _cardsIdx = 0
+  _cardBoxIdx = 0
+  _listBoxIdx = 0
   const slides: string[] = [cover(o)]
   if (o.sections.length) slides.push(toc(o))
   let imgFlip = false
@@ -2087,6 +2407,11 @@ export function composeDeck(o: DeckOutline): { styleTag: string; slides: string[
       else if (lay === 'bulb') slides.push(bulbLayout(sl, en, o))
       else if (lay === 'hex_chain') slides.push(hexChainLayout(sl, en, o))
       else if (lay === 'pinwheel') slides.push(pinwheelLayout(sl, en, o))
+      else if (lay === 'circle_chain') slides.push(circleChainLayout(sl, en, o))
+      else if (lay === 'serpentine') slides.push(serpentineLayout(sl, en, o))
+      else if (lay === 'half_moon') slides.push(halfMoonLayout(sl, en, o))
+      else if (lay === 'arrow_flank') slides.push(arrowFlankLayout(sl, en, o))
+      else if (lay === 'ring_tag') slides.push(ringTagLayout(sl, en, o))
       else if (lay === 'table') slides.push(tableLayout(sl, en, o))
       else if (
         lay === 'bar' || lay === 'stats' || lay === 'line' ||
