@@ -6,6 +6,7 @@ import { composeDeck, type DeckOutline, type DeckTheme } from '../../deck/templa
 import { slidesToPptx, waitImages, type VideoAttachment } from '../../deck/toPptx'
 import { saveFile } from '../../utils/saveFile'
 import { reviewDeckSlides, type DeckOutlineRaw, type DeckReviewResult } from '../../services/designApi'
+import { THEME_FALLBACK_PALETTES, GEO_THEME_KEYS } from '../../deck/themePalettes'
 
 const props = defineProps<{
   outline: DeckOutlineRaw
@@ -13,25 +14,12 @@ const props = defineProps<{
   bg?: { cover?: string; content?: string; section?: string } | null
 }>()
 
-const FALLBACK: Record<string, string[]> = {
-  red: ['#b01f24', '#d99b2b', '#8c1519', '#f6f3ee', '#2b2b2b'],
-  blue: ['#1f5fa8', '#e0a52b', '#123c6b', '#f5f7fa', '#2b2b2b'],
-  green: ['#2f7d55', '#e0a52b', '#1f5c3d', '#f4f7f5', '#2b2b2b'],
-  purple: ['#6b4ea8', '#e0a52b', '#463079', '#f6f4fa', '#2b2b2b'],
-  slate: ['#37506b', '#c98a3c', '#243447', '#f4f6f8', '#2b2b2b'],
-  teal: ['#1f7a72', '#e0a52b', '#134b46', '#f2f7f6', '#2b2b2b'],
-  techblue: ['#1a3f7a', '#2f7de0', '#0d2951', '#f3f6fb', '#232a33'],
-  geoblue: ['#12579e', '#3aa0e0', '#0c3b6b', '#f4f8fc', '#233240'],
-}
-/** 纯几何图形装饰风的主题 key */
-const GEO_KEYS = new Set(['geoblue'])
-
 const theme = computed<DeckTheme>(() => {
-  const geo = GEO_KEYS.has(props.themeKey)
+  const geo = GEO_THEME_KEYS.has(props.themeKey)
   const p =
     props.outline.palette && props.outline.palette.length >= 5
       ? props.outline.palette
-      : FALLBACK[props.themeKey] || FALLBACK.red
+      : THEME_FALLBACK_PALETTES[props.themeKey] || THEME_FALLBACK_PALETTES.red
   return {
     primary: p[0],
     accent: p[1],

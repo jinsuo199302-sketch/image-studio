@@ -214,6 +214,8 @@ export async function slidesToPptx(
     // 3. 位图背景 + 真实文本框 + 原生表格 + 视频挂件
     const slide = pptx.addSlide()
     slide.addImage({ data: bgData, x: 0, y: 0, w: SLIDE_W, h: SLIDE_H })
+    const notes = el.getAttribute('data-notes')
+    if (notes) slide.addNotes(notes)
     for (const p of texts) addTextBox(slide, p)
     for (const t of tables) {
       slide.addTable(t.rows, {

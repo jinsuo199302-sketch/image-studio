@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { UploadFilled, Close, ArrowUp, ArrowDown } from '@element-plus/icons-vue'
 import { textToPptx, imagesToPptx } from '../../../../services/pdfApi'
@@ -22,6 +22,8 @@ import { saveFile } from '../../../../utils/saveFile'
 import { useAuthStore } from '../../../../stores/auth'
 import SlidePreview from '../../SlidePreview.vue'
 import DeckHtmlPreview from '../../DeckHtmlPreview.vue'
+import { composeDeck } from '../../../../deck/templates'
+import { THEME_FALLBACK_PALETTES, GEO_THEME_KEYS } from '../../../../deck/themePalettes'
 
 type Mode = 'ai' | 'text' | 'image' | 'convert'
 const mode = ref<Mode>('ai')
@@ -55,6 +57,38 @@ const THEMES = [
   { key: 'slate', label: '沉稳蓝灰' },
   { key: 'teal', label: '青碧' },
 ]
+// "先看图再选"而不是"先读文字标签再脑补"——每个主题现场渲染一张真实封面缩略图，
+// 不是随手画几个色块示意；'auto' 没有固定色板，用一套代表性蓝色只是给个大致质感参考，
+// 真实生成时 AI 会自己配色，跟这张预览图不会完全一样。
+const THEME_PREVIEWS = computed(() =>
+  THEMES.map((th) => {
+    const p = THEME_FALLBACK_PALETTES[th.key] || THEME_FALLBACK_PALETTES.blue
+    const geo = GEO_THEME_KEYS.has(th.key)
+    const d = composeDeck({
+      title: '示例标题文案',
+      subtitle: '一句副标题占位文字',
+      theme: { primary: p[0], accent: p[1], primaryDk: p[2], paper: p[3], ink: p[4], style: geo ? 'geo' : 'plain' },
+      sections: [],
+    })
+    return { ...th, html: d.styleTag + d.slides[0] }
+  }),
+)
+// composeDeck 每个主题输出的 <style> 都用同一套不带命名空间的类名（.s-cover/.cn1 这些），
+// 9 张预览要是直接拼进同一个页面（哪怕分开塞进 9 个 v-html），这些 <style> 标签全部会落进
+// 同一份文档的全局样式表——同名选择器打架，最后渲染出来的颜色只会是"最后一个主题"那一份，
+// 9 张卡片看起来一模一样，"看图选主题"就名存实亡了。用 Shadow DOM 给每张卡片单独隔一个
+// 样式作用域，同名类名互不干扰，这个坑是真实渲染测试时肉眼发现的，不是纸上谈兵想到的。
+const previewHosts = ref<(HTMLElement | null)[]>([])
+function mountPreviews() {
+  THEME_PREVIEWS.value.forEach((th, i) => {
+    const el = previewHosts.value[i]
+    if (!el) return
+    const root = el.shadowRoot || el.attachShadow({ mode: 'open' })
+    root.innerHTML = th.html
+  })
+}
+onMounted(mountPreviews)
+watch(THEME_PREVIEWS, () => nextTick(mountPreviews))
 const aiSource = ref<'topic' | 'material' | 'courseware'>('topic')
 
 // ── 教学课件（第一步：通用教学流程，复用现有引擎，不做卡通视觉/精确数学图形）──
@@ -612,16 +646,27 @@ async function runConvert() {
           </div>
         </div>
         <div>
-          <p class="mb-1 text-xs text-gray-500">配色主题</p>
-          <div class="grid grid-cols-4 gap-1.5">
+          <p class="mb-1 text-xs text-gray-500">配色主题（点缩略图直接看效果，不用靠猜）</p>
+          <div class="flex flex-wrap gap-1.5">
             <button
-              v-for="th in THEMES"
+              v-for="(th, previewIdx) in THEME_PREVIEWS"
               :key="th.key"
-              class="rounded-md border px-1.5 py-1 text-[11px] transition"
-              :class="theme === th.key ? 'border-violet-500 bg-violet-50 text-violet-600' : 'border-gray-200 text-gray-500'"
+              class="w-[104px] overflow-hidden rounded-md border text-left transition"
+              :class="theme === th.key ? 'border-violet-500 ring-1 ring-violet-500' : 'border-gray-200'"
               @click="theme = th.key"
             >
-              {{ th.label }}
+              <div class="pointer-events-none overflow-hidden" style="width:104px;height:58.5px">
+                <div
+                  :ref="(el) => { previewHosts[previewIdx] = el as HTMLElement | null }"
+                  style="width:1280px;height:720px;transform:scale(0.08125);transform-origin:top left"
+                />
+              </div>
+              <div
+                class="truncate px-1.5 py-1 text-[11px]"
+                :class="theme === th.key ? 'bg-violet-50 text-violet-600' : 'text-gray-500'"
+              >
+                {{ th.label }}
+              </div>
             </button>
           </div>
           <input ref="refInput" type="file" accept="image/*" class="hidden" @change="pickRef" />

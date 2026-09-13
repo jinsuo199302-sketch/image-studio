@@ -357,6 +357,8 @@ export interface DeckOutlineRaw {
       en?: string
       intro?: string
       bullets?: string[]
+      /** 演讲备注，不在画面上渲染，只挂进导出 PPTX 的"备注"栏 */
+      speaker_notes?: string
       data?: {
         kind: 'bar' | 'stat' | 'ring' | 'line' | 'radar' | 'waterfall' | 'gauge'
         items: { label: string; value: string | number }[]

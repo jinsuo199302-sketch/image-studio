@@ -919,6 +919,8 @@ export interface DeckSlideIn {
   en?: string
   intro?: string
   bullets?: string[]
+  /** 演讲备注——不在画面上渲染，只挂进导出 PPTX 的"备注"栏供演讲者视图使用 */
+  speaker_notes?: string
   data?: {
     kind: 'bar' | 'stat' | 'ring' | 'line' | 'radar' | 'waterfall' | 'gauge' | 'mountain'
     items: { label: string; value: string | number }[]
@@ -1906,6 +1908,18 @@ const bodySlide = (o: DeckOutline, inner: string) => {
   return html
 }
 
+/** 给一页幻灯片的最外层 div 挂上 data-notes 属性——演讲备注不在画面上可见渲染，
+ * 只是挂在 DOM 上，导出 PPTX 时 toPptx.ts 读出来塞进 PowerPoint 原生的"备注"栏
+ * （演讲者视图能看到，观众投影看不到）。用字符串替换而不是给每个版式函数加参数，
+ * 是因为 bodySlide 的调用点有 25+ 处，统一在 composeDeck 分发出口处理一次，
+ * 比每个版式函数都改签名省事得多——所有内容页开头都是 `<div class="slide`
+ * 这个固定写法，替换第一次出现的位置就够了。 */
+function withNotes(html: string, notes?: string): string {
+  const n = (notes || '').trim()
+  if (!n) return html
+  return html.replace('<div class="slide', `<div data-notes="${esc(n)}" class="slide`)
+}
+
 const STEP_RE = /流程|步骤|阶段|环节|顺序|先后|第一步|首先/
 
 function content(sl: DeckSlideIn, en: string, o: DeckOutline, imgFlip = false, layout = ''): string {
@@ -2394,37 +2408,39 @@ export function composeDeck(o: DeckOutline): { styleTag: string; slides: string[
       if (o.bg || sl.bg) o.bg = { ...(o.bg || {}), content: sl.bg || sharedContentBg }
       const en = EN[si % EN.length]
       const lay = resolveLayout(sl)
-      if (lay === 'swot') slides.push(swot(sl, en, o))
-      else if (lay === 'matrix') slides.push(matrix(sl, en, o))
-      else if (lay === 'compare') slides.push(compare(sl, en, o))
-      else if (lay === 'rings') slides.push(ringStats(sl, en, o))
-      else if (lay === 'spoke') slides.push(spokeLayout(sl, en, o))
-      else if (lay === 'hive') slides.push(hiveLayout(sl, en, o))
-      else if (lay === 'cycle') slides.push(cycleLayout(sl, en, o))
-      else if (lay === 'gallery') slides.push(galleryLayout(sl, en, o))
-      else if (lay === 'tree') slides.push(treeLayout(sl, en, o))
-      else if (lay === 'diamond') slides.push(diamondLayout(sl, en, o))
-      else if (lay === 'bulb') slides.push(bulbLayout(sl, en, o))
-      else if (lay === 'hex_chain') slides.push(hexChainLayout(sl, en, o))
-      else if (lay === 'pinwheel') slides.push(pinwheelLayout(sl, en, o))
-      else if (lay === 'circle_chain') slides.push(circleChainLayout(sl, en, o))
-      else if (lay === 'serpentine') slides.push(serpentineLayout(sl, en, o))
-      else if (lay === 'half_moon') slides.push(halfMoonLayout(sl, en, o))
-      else if (lay === 'arrow_flank') slides.push(arrowFlankLayout(sl, en, o))
-      else if (lay === 'ring_tag') slides.push(ringTagLayout(sl, en, o))
-      else if (lay === 'table') slides.push(tableLayout(sl, en, o))
+      let html: string
+      if (lay === 'swot') html = swot(sl, en, o)
+      else if (lay === 'matrix') html = matrix(sl, en, o)
+      else if (lay === 'compare') html = compare(sl, en, o)
+      else if (lay === 'rings') html = ringStats(sl, en, o)
+      else if (lay === 'spoke') html = spokeLayout(sl, en, o)
+      else if (lay === 'hive') html = hiveLayout(sl, en, o)
+      else if (lay === 'cycle') html = cycleLayout(sl, en, o)
+      else if (lay === 'gallery') html = galleryLayout(sl, en, o)
+      else if (lay === 'tree') html = treeLayout(sl, en, o)
+      else if (lay === 'diamond') html = diamondLayout(sl, en, o)
+      else if (lay === 'bulb') html = bulbLayout(sl, en, o)
+      else if (lay === 'hex_chain') html = hexChainLayout(sl, en, o)
+      else if (lay === 'pinwheel') html = pinwheelLayout(sl, en, o)
+      else if (lay === 'circle_chain') html = circleChainLayout(sl, en, o)
+      else if (lay === 'serpentine') html = serpentineLayout(sl, en, o)
+      else if (lay === 'half_moon') html = halfMoonLayout(sl, en, o)
+      else if (lay === 'arrow_flank') html = arrowFlankLayout(sl, en, o)
+      else if (lay === 'ring_tag') html = ringTagLayout(sl, en, o)
+      else if (lay === 'table') html = tableLayout(sl, en, o)
       else if (
         lay === 'bar' || lay === 'stats' || lay === 'line' ||
         lay === 'radar' || lay === 'waterfall' || lay === 'gauge' || lay === 'mountain'
       )
-        slides.push(chart(sl, t, en, o))
-      else if (lay === 'big_number') slides.push(bigNumber(sl, en, o))
+        html = chart(sl, t, en, o)
+      else if (lay === 'big_number') html = bigNumber(sl, en, o)
       else if (lay === 'image_text') {
-        slides.push(content(sl, en, o, imgFlip))
+        html = content(sl, en, o, imgFlip)
         imgFlip = !imgFlip
       } else {
-        slides.push(content(sl, en, o, false, lay))
+        html = content(sl, en, o, false, lay)
       }
+      slides.push(withNotes(html, sl.speaker_notes))
     })
   })
   slides.push(closing(o))
