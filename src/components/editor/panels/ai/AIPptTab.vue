@@ -226,6 +226,9 @@ async function genDeck() {
       photos = await uploadDeckPhotos(deckPhotos.value.map((p) => p.file))
     }
     const refPal = refStyle.value?.palette ?? []
+    // 参考图里原样抠出来的通用符号角标（换个话题也不违和的那种），有就直接复用这张真实元素，
+    // 不再现生成一张 AI 重新演绎的角标插画
+    const refHero = refStyle.value?.elements?.[0]?.url ?? ''
     // 课件模式没有单独的行业预设，直接固定用"教育培训"那套（清新绿+书本/灯泡剪影），
     // 用户选了别的配色主题（theme.value）时以用户选的为准，这里只提供版式/氛围倾向
     const industryPreset = useCourseware
@@ -272,6 +275,7 @@ async function genDeck() {
           refPal,
           refHints,
           effBgDetail,
+          refHero,
         )
       : await generateDeck(
           effTopic,
@@ -283,6 +287,7 @@ async function genDeck() {
           refPal,
           refHints,
           effBgDetail,
+          refHero,
         )
     await preloadSlideImages(r.slides as unknown as SlideData[])
     deck.value = r

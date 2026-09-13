@@ -103,7 +103,7 @@ function extractTables(root: HTMLElement): ExtractedTable[] {
 }
 
 /** 等这张幻灯片里的图片都加载完，否则 snapdom 可能拍到空白 */
-async function waitImages(el: HTMLElement): Promise<void> {
+export async function waitImages(el: HTMLElement): Promise<void> {
   const imgs = Array.from(el.querySelectorAll('img'))
   await Promise.all(
     imgs.map(

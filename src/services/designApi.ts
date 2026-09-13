@@ -345,6 +345,8 @@ export interface DeckOutlineRaw {
   cover_image?: string
   cover_features?: { value: string; label: string; en?: string }[]
   cover_meta?: string
+  /** 封面/章节页反复使用的透明背景角标插画，全篇同一张 */
+  hero_image?: string
   style_hint?: { density?: string; motif?: string }
   sections: {
     heading: string
@@ -415,6 +417,9 @@ export interface DeckRefStyle {
   layouts?: string[]
   density?: string
   motif?: string
+  /** 从参考图里原样抠出来的"通用符号"类小图标（打钩/箭头/齿轮这类换个话题也不违和的），
+   * 跟上面几个字段不一样——这几个是真从原图像素抠出来的，不是抽象风格提示 */
+  elements?: { url: string; label: string }[]
 }
 export interface DeckRefHints {
   layouts?: string[]
@@ -462,6 +467,7 @@ export async function generateDeck(
   palette: string[] = [],
   refHints: DeckRefHints = {},
   bgDetail: DeckBgDetail = 'shared',
+  refHero = '',
 ): Promise<DeckResult> {
   const r = await authPostJson<DeckResult & { jobId?: string }>(
     '/design/deck',
@@ -471,6 +477,7 @@ export async function generateDeck(
       ref_density: refHints.density ?? '',
       ref_motif: refHints.motif ?? '',
       bg_detail: bgDetail,
+      ref_hero: refHero,
     },
     'PPT 生成失败',
   )
@@ -491,6 +498,7 @@ export async function generateDeckFromMaterial(
   palette: string[] = [],
   refHints: DeckRefHints = {},
   bgDetail: DeckBgDetail = 'shared',
+  refHero = '',
 ): Promise<DeckResult> {
   const form = new FormData()
   if (input.file) form.append('file', input.file, input.file.name || 'material')
@@ -500,6 +508,7 @@ export async function generateDeckFromMaterial(
   form.append('extra', extra)
   form.append('ai_bg', String(aiBg))
   form.append('bg_detail', bgDetail)
+  if (refHero) form.append('ref_hero', refHero)
   if (photos.length) form.append('photos_json', JSON.stringify(photos))
   if (palette.length === 5) form.append('palette_json', JSON.stringify(palette))
   if (refHints.layouts?.length || refHints.density || refHints.motif) {
@@ -512,6 +521,31 @@ export async function generateDeckFromMaterial(
 /** 已生成的幻灯片数据 → 下载 PPTX（不重新扣次数） */
 export async function deckToPptx(slides: DeckSlide[], theme: string, title: string): Promise<Blob> {
   return authPostJsonBlob('/design/deck/pptx', { slides, theme, title }, 'PPTX 导出失败')
+}
+
+export interface DeckReviewSlideIn {
+  index: number
+  title?: string
+  layout?: string
+  bullets?: string[]
+  image: string
+}
+export interface DeckReviewResult {
+  index: number
+  verdict: 'pass' | 'issue'
+  issues?: string[]
+  fixed_bullets?: string[] | null
+  fixed_layout?: string | null
+}
+/** AI 自动视觉复核：把渲染好的每页截图（含真实文字）连同当前文案传回去，
+ * 视觉模型逐页挑排版缺陷，能靠精简文案解决的直接给出改写后的 bullets。不计费。 */
+export async function reviewDeckSlides(slides: DeckReviewSlideIn[]): Promise<DeckReviewResult[]> {
+  const r = await authPostJson<{ results: DeckReviewResult[] }>(
+    '/design/deck/review',
+    { slides },
+    '视觉复核失败',
+  )
+  return r.results || []
 }
 
 /**
