@@ -34,6 +34,7 @@ from app.schemas import (
     ContentResearchRequest,
     DeckPptxRequest,
     DeckRequest,
+    DeckReviewRequest,
     DesignElementRequest,
     DesignGenerateRequest,
     DesignLayoutRequest,
@@ -859,6 +860,8 @@ async def design_lineart(
 _DECK_JSON_SPEC = (
     "只返回一个严格的 JSON 对象，不要 markdown 代码块、不要多余说明，形如：\n"
     '{"title":"演示标题","subtitle":"一句副标题",'
+    '"audience_goal":"一句话想清楚这三件事再动笔写下面的内容：这份 PPT 给谁看（受众）、'
+    '看完之后必须理解什么、你希望观众看完做出什么判断或行动。想清楚再写，不要写成放之四海皆准的空话",'
     '"palette":["#主色","#强调色","#主色深","#背景浅色","#正文深灰"],'
     '"mood":"用一句话描述整体视觉基调，例：庄重大气的党政红金风、简洁现代的科技蓝",'
     '"cover_image_prompt":"给封面配一张 16:9 专业 PPT 封面设计图的提示词",'
@@ -867,6 +870,7 @@ _DECK_JSON_SPEC = (
     '"cover_features":[{"value":"4K","label":"超清影像","en":"4K Ultra HD"}],'
     '"cover_meta":"资料原文里如果有汇报人/汇报单位/日期这类署名信息，原样抄一句放这里（如“汇报人：李荣｜日期：2026年6月”）；没有就填空字符串，不要编造",'
     '"photo_prompts":["一张跟主题强相关的写实照片的英文提示词","另一张…"],'
+    '"hero_prompt":"给封面/章节页角标插画的英文提示词，找不到合适象征物就填空字符串",'
     '"sections":[{"heading":"章节标题","en":"章节英文短标题(全大写,2~4词)",'
     '"slides":[{"layout":"版式类型","title":"小标题","en":"英文短标题(全大写,1~3词)","intro":"1~2句导语,可空","bullets":["要点一","要点二"],"image":0}]}]}\n'
     "\n【关键】每个 slide 必须先判断内容最适合哪种版式,填 layout 字段(只做这道选择题,不要输出坐标/字号)。"
@@ -903,16 +907,29 @@ _DECK_JSON_SPEC = (
     "每条建议写成「短语：说明」结构——冒号前 2~10 字会自动当标题、冒号后当正文；没有冒号就整句当正文，正文能正常换行、可以写一两句话)\n"
     '- "mountain"：3~5 个百分比类指标对比,想要比 bar/stats 更有设计感的山丘曲线视觉。'
     '填 data:{"kind":"mountain","items":[{"label":"标签","value":85}]}(跟 bar 一样是纯数字展示,标签本身要短,不要放长句)\n'
+    '- "circle_chain"：3~6 个有先后顺序的阶段,想要"一串圆形图标首尾相连"的连接视觉(区别于 hex_chain 的六边形锯齿)。'
+    "填 bullets(3~6 条,每条 4~12 字的短语,标签贴在固定圆形图标上,字多会被裁掉)\n"
+    '- "serpentine"：3~6 个有先后顺序的阶段,想要"一条粗色带蜿蜒向前串起编号圆点"的流动视觉(比 hex_chain/circle_chain 更有动感)。'
+    "填 bullets(3~6 条,每条 4~12 字的短语,同样是节点类,标签会被裁掉别塞长句)\n"
+    '- "half_moon"：正好 3~4 个并列的维度/要点,想要"半圆色块交替起伏"的波浪视觉。填 bullets(3~4 条,'
+    "建议写成「短语：说明」结构——冒号前 2~10 字当标题、冒号后当正文,正文能正常换行；没有冒号就整句当正文)\n"
+    '- "arrow_flank"：2~4 个并列的改进举措/工作计划类要点,想要"中间一条向上大箭头、两侧环绕编号方框"的视觉,强调"提升/推进"的主题。'
+    "填 bullets(2~4 条,每条一句话,方框内文字区域较宽松,可以正常换行)\n"
+    '- "ring_tag"：2~3 个关键百分比指标,想要"环形数据图下面挂一张标签牌"的视觉(区别于 rings 的纯环形一排)。'
+    '填 data:{"kind":"ring","items":[{"label":"标签","value":75}]}(value 是 0~100 的数,2~3 项,3 项时中间一项会自动放大突出)\n'
     "cover / section_divider / closing 由系统自动排,不用你选。\n"
     "分布要求:同一份大纲里 layout 至少出现 4 种以上,不要每页都是 cards;"
-    "compare/matrix/swot/big_number/spoke/hive/cycle/tree/diamond/bulb/line/table/radar/waterfall/gauge/hex_chain/pinwheel/mountain 各最多 1~2 页,只在真契合时用；"
+    "compare/matrix/swot/big_number/spoke/hive/cycle/tree/diamond/bulb/line/table/radar/waterfall/gauge/hex_chain/pinwheel/mountain/circle_chain/serpentine/half_moon/arrow_flank/ring_tag 各最多 1~2 页,只在真契合时用；"
     "table/line/radar/waterfall/gauge/mountain 涉及具体数字/结构化对比,内容里有靠谱数据支撑才用,别为了凑版式种类编数字。\n"
-    "版式要跟文字量倒着推,不是先选版式再硬塞文字进去:节点类版式(spoke/hive/tree/diamond/bulb/hex_chain)的标签贴在固定大小的图形节点上,"
+    "版式要跟文字量倒着推,不是先选版式再硬塞文字进去:节点类版式(spoke/hive/tree/diamond/bulb/hex_chain/circle_chain/serpentine)的标签贴在固定大小的图形节点上,"
     "只能放几个字到十几个字的短语,一旦塞进整句话要么被截断丢字、要么系统直接把这页退回 list/cards 重排——内容本来就是完整长句就别选这些;"
     "cards/list 每条要点有独立的文字区域,能装完整句子甚至一小段话,内容多、句子长就应该选它们；"
-    "pinwheel 的正文区域能正常换行,可以写中等长度的句子,但拆出来的标题部分(冒号前)也必须是短语,不能整句都堆在冒号前；"
-    "table/line/radar/waterfall/gauge/mountain/bar/stats 是数字型版式,标签也要短,别为了信息量塞长句进 label。"
+    "pinwheel/half_moon 的正文区域能正常换行,可以写中等长度的句子,但拆出来的标题部分(冒号前)也必须是短语,不能整句都堆在冒号前；"
+    "table/line/radar/waterfall/gauge/mountain/bar/stats/ring_tag 是数字型版式,标签也要短,别为了信息量塞长句进 label。"
     "先数清楚这一页内容有几句话、每句大概多长,再倒推该用哪个版式,而不是拍脑袋选完版式再削字数凑进去。\n"
+    "audience_goal 想清楚以后，下面每一页的 bullets/intro 都要按这个目的取舍角度和语气——"
+    "同样是「季度总结」，讲给老板听要不要批预算、和讲给新员工听帮助上手，内容该完全不同；"
+    "不要写成不管什么受众都通用的正确废话。\n"
     "palette 必须是 5 个协调的十六进制色，符合主题气质、对比度足够（正文色要能在背景浅色上看清）；"
     "en 字段是给版式当装饰小字用的英文，要贴切、地道。\n"
     "cover_image_prompt：描述一张能直接当商业 PPT 封面的完整设计图。参考市面成品模板的做法——"
@@ -936,7 +953,12 @@ _DECK_JSON_SPEC = (
     "配图分配：在 2~4 个内容契合的普通 slide（有 bullets 的）上加 \"image\": 照片编号（0 起的整数，对应 photo_prompts 里第几条）。"
     "可以另外挑 1 个 slide 把 layout 设成 \"gallery\" 并加 \"images\": [编号,编号,编号]（正好 3 张，bullets 写这 3 张的短说明）；"
     "也可以挑 1 个 slide 把 layout 设成 \"hive\" 并加 \"images\": [编号,...]（3~6 张，bullets 写每张一句说明），做成蜂窝嵌照片。"
-    "一张照片最多用一次；图表页 / 对比页 / SWOT / matrix / big_number 不放图；不契合宁可不放。"
+    "一张照片最多用一次；图表页 / 对比页 / SWOT / matrix / big_number 不放图；不契合宁可不放。\n"
+    "hero_prompt：给一张可以在封面/章节页反复使用的透明背景主视觉插画配一句英文提示词——"
+    "这跟 cover_image_prompt（整页背景场景图）完全不同，是**前景贴图**，只画一个跟主题强相关的"
+    "单一物件/象征符号（不是场景、不是人物动作），扁平现代插画或简洁图标风格，配色呼应 mood，"
+    "四周干净、没有背景、没有文字、没有边框、没有投影，适合裁切成透明背景反复贴在角落。"
+    "主题实在找不到合适的象征物（比如很抽象的理论汇报）就给空字符串 \"\"。"
 )
 
 
@@ -1159,9 +1181,58 @@ async def _gen_deck_spot_photos(prompts: list[str], db: Session, user_id: str) -
     return out
 
 
+_DECK_HERO_GUARD = (
+    " Flat modern vector illustration or minimalist icon-style graphic, single clear subject fully "
+    "isolated on a plain transparent background, no scene, no ground, no shadow, no text, no watermark, "
+    "no border, no frame, no other objects. "
+    "Output must be a real PNG file with a genuine alpha transparency channel around the subject — "
+    "do not draw a gray-and-white checkerboard pattern to represent transparency, that checkerboard "
+    "grid is a design-tool convention, not something to render as actual pixels; the area outside the "
+    "subject must be truly transparent (alpha = 0), not a picture of transparency."
+)
+
+
+async def _gen_deck_hero(outline: dict) -> bytes | None:
+    """生成一张可以在封面/章节页反复使用的透明背景主视觉插画（角标贴图）。
+    跟 cover_image_prompt/photo_prompts 都不是一回事——那两个要么是整页背景场景图，
+    要么是写实照片；这张是单一物件的扁平插画，全篇只生成一张、所有用到的页面复用同一张，
+    保证同一份 PPT 里角标是同一个"视觉 IP"，不是每页都单独生成换一张图。
+    生成失败（或大纲没给 hero_prompt）就返回 None，前端会自动不渲染这块，不影响其它内容。
+
+    实测踩过的坑：负责生图的 gemini-3.1-flash-image 让它画"透明背景"经常不老实——直接把
+    设计软件里表示透明度的灰白棋盘格网当成真实像素画出来（还整个退化成 JPEG，根本没有 alpha
+    通道），两次分别加强提示词都没用，是模型行为问题不是提示词问题。不再赌它这次听话，
+    统一过一遍本地 rembg 抠图子进程强制换真透明底——跟"AI 抠图"功能复用同一条流水线
+    （bg_removal_worker.py 的 isnet-general-use 模型），这个模型是真的按前景/背景分割，
+    不管背景是棋盘格、纯色还是别的什么脏东西都能正确处理，比在生图阶段死磕提示词可靠得多。"""
+    prompt = (outline.get("hero_prompt") or "").strip()
+    if not prompt:
+        return None
+    try:
+        raw = await _gemini_image(prompt + _DECK_HERO_GUARD, attempts=2, timeout=120)
+    except Exception:
+        return None
+    from app.worker_cmd import worker_argv
+
+    try:
+        async with _HEAVY_MODEL_SEM:
+            proc = await asyncio.to_thread(
+                subprocess.run,
+                worker_argv("bg_removal", "soft"),
+                input=raw,
+                capture_output=True,
+                timeout=240,
+            )
+        if proc.returncode == 0 and proc.stdout:
+            return proc.stdout
+    except Exception:
+        pass
+    return raw  # 抠图失败也别把整张图丢了，退回原图（可能带棋盘格瑕疵）好过完全没有
+
+
 async def _run_deck_job(
     job_id, user_id, ticket, topic, n, theme, extra, ai_bg, material="", photos=None, palette=None,
-    ref_layouts=None, ref_density="", ref_motif="", bg_detail="shared",
+    ref_layouts=None, ref_density="", ref_motif="", bg_detail="shared", ref_hero="",
 ):
     from app.database import SessionLocal
 
@@ -1187,6 +1258,17 @@ async def _run_deck_job(
             if prompts:
                 photos = await _gen_deck_spot_photos(prompts, db, user_id)
         outline = _attach_deck_photos(outline, photos)
+        # 角标插画：跟 geo/非 geo 无关，两条路径都能用（是前景贴图，不是背景），
+        # 全篇只生成这一张，封面/章节页复用同一张，构成统一的视觉 IP。
+        # ref_hero 有值说明用户上传参考图时，我们已经从原图里原样抠出了一个通用符号元素——
+        # 用户既然选了这张真实存在的图，就不要再现生成一张 AI 重新演绎的取代它。
+        if ref_hero:
+            outline["hero_image"] = ref_hero
+        elif ai_bg:
+            hero_raw = await _gen_deck_hero(outline)
+            if hero_raw:
+                hero_asset = _persist_asset_bytes(db, user_id, "deck-hero", hero_raw)
+                outline["hero_image"] = f"/api/ai/generated/{hero_asset.file_name}"
         bg = None
         if ai_bg and not is_geo:
             detail = bg_detail if bg_detail in ("section", "slide") else "shared"
@@ -1253,6 +1335,8 @@ async def design_deck(
         payload.ref_layouts, payload.ref_density, payload.ref_motif
     )
     bg_detail = payload.bg_detail if payload.bg_detail in ("section", "slide") else "shared"
+    # 只认我们自己生成资产的路径格式，不接受任意外部 URL（前端顶多传参考图分析返回的那个 url）
+    ref_hero = payload.ref_hero.strip() if re.match(r"^/api/ai/generated/[\w.-]+$", payload.ref_hero.strip()) else ""
 
     # 一律走异步 job：大纲(+可选生图)可能要 1~3 分钟（按页配图能到 10 分钟+），同步返回会被 nginx 网关超时掐断
     job_id = uuid.uuid4().hex
@@ -1261,16 +1345,82 @@ async def design_deck(
     asyncio.create_task(
         _run_deck_job(
             job_id, user.id, ticket, topic, n, payload.theme, extra, ai_bg, "", photos, ref_pal,
-            ref_layouts, ref_density, ref_motif, bg_detail,
+            ref_layouts, ref_density, ref_motif, bg_detail, ref_hero,
         )
     )
     return {"jobId": job_id}
+
+
+_DECK_REVIEW_PROMPT = (
+    "你是一位资深 PPT 视觉设计审阅员。下面会给你若干页幻灯片的截图（每张截图前配一段文字，"
+    "说明这一页现在用的版式和文案要点），请只挑真实存在的视觉缺陷，不要吹毛求疵。常见问题类型：\n"
+    "1. 文字溢出/被截断/顶出卡片或容器之外；\n"
+    "2. 内容拥挤（文字或图形元素相互重叠、紧贴边缘、看不清）或严重失衡（大片空白、内容缩在一小撮）；\n"
+    "3. 图片主体被裁切到看不出内容，或图片明显拉伸变形；\n"
+    "4. 数字/图表跟旁边文字明显对不上；\n"
+    "5. 同一页内颜色/图标看起来杂乱冲突。\n"
+    "每页给一个判定，只返回 JSON 数组，不要 markdown 代码块、不要多余说明，形如：\n"
+    '[{"index":0,"verdict":"pass"},'
+    '{"index":1,"verdict":"issue","issues":["第二条要点在卡片里被压得只剩一行,看不全"],'
+    '"fixed_bullets":["精简改写后的要点一","要点二","要点三"],"fixed_layout":null}]\n'
+    "只有确实是「内容太多/太长导致溢出或拥挤」这类能靠精简文案解决的问题，才填 fixed_bullets——"
+    "在保留原意、不编造事实的前提下改写得更短更精炼，条数可以比原来少但不能加没有的内容；"
+    "如果是版式选错了（比如把整句话硬塞进只能放短语的节点图形导致挤爆），改填 fixed_layout，"
+    "从这些里选：cards、list、timeline、quote、big_number、stats、bar、line、table、compare、matrix、"
+    "swot、image_text、rings、spoke、hive、cycle、gallery、tree、diamond、bulb；"
+    "两种问题都不是就把 fixed_bullets 和 fixed_layout 都填 null，只在 issues 里描述问题。"
+    "没有真实问题的页面直接判 pass，不要为了显得认真而挑不存在的毛病。"
+)
+
+
+@router.post("/design/deck/review")
+async def design_deck_review(
+    payload: DeckReviewRequest,
+    user: models.User = Depends(auth.get_current_user),
+):
+    """AI 生成 PPT 的自动视觉复核：前端把每页渲染好的真实截图（含文字，不是导出用那张隐藏
+    文字的位图）传回来，视觉模型逐页检查排版缺陷。属于同一次生成流程里的质量兜底，不单独计费。
+    能靠精简文案解决的问题直接给出修改后的 bullets，前端据此重新渲染再确认一轮，
+    构成一个「渲染→复核→按建议改→再渲染」的闭环，而不是生成完就当交付完了。"""
+    _require_openlux()
+    slides = payload.slides[:24]  # 单次复核页数上限，防止一次传爆 payload
+    if not slides:
+        return {"results": []}
+    content: list[dict] = [{"type": "text", "text": _DECK_REVIEW_PROMPT}]
+    for s in slides:
+        img = s.image if s.image.startswith("data:") else f"data:image/jpeg;base64,{s.image}"
+        desc = f"[第{s.index + 1}页] 版式={s.layout or '未知'} 现有要点：{json.dumps(s.bullets[:8], ensure_ascii=False)}"
+        content.append({"type": "text", "text": desc})
+        content.append({"type": "image_url", "image_url": {"url": img}})
+    res = await _post_openlux(
+        f"{OPENLUX_BASE_URL}/chat/completions",
+        timeout=90,
+        headers={"Authorization": f"Bearer {OPENLUX_API_KEY}"},
+        json={"model": "gemini-3-flash-preview", "messages": [{"role": "user", "content": content}]},
+    )
+    if res.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"视觉复核失败：{res.status_code} {res.text[:200]}")
+    raw = res.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+    m = re.search(r"\[[\s\S]*\]", raw)
+    try:
+        results = json.loads(m.group(0) if m else raw)
+        assert isinstance(results, list)
+    except Exception:
+        raise HTTPException(status_code=502, detail="视觉复核结果解析失败，请重试")
+    # 实测过：模型不会老老实实把 prompt 里给的页码原样回填，经常自己从 0 重新编号——
+    # 不能信它返回的 index，按提交顺序位置强制纠正回真实 index，数量对不上时只能将就用模型自己给的。
+    if len(results) == len(slides):
+        for r, s in zip(results, slides):
+            if isinstance(r, dict):
+                r["index"] = s.index
+    return {"results": results}
 
 
 _ALLOWED_REF_LAYOUTS = {
     "cards", "list", "timeline", "spoke", "hive", "cycle",
     "matrix", "swot", "gallery", "stats", "bar", "big_number", "quote",
     "tree", "diamond", "bulb", "line", "table", "radar", "waterfall", "gauge",
+    "circle_chain", "serpentine", "half_moon", "arrow_flank", "ring_tag",
 }
 
 
@@ -1460,7 +1610,11 @@ async def design_deck_photos(
 _DECK_REF_PROMPT = """你在分析一张 PPT 模板/参考图，目的是把它归到我们系统已有的几个通用类别里，用来配置我们自己的模板生成器。我们只学"用了哪几类通用图解、整体多密、主色调"这种最上层的信息，绝不复刻参考图的任何一页版面、坐标、形状或元素数量——那些全部由我们自己的排版引擎独立决定。
 
 只返回一个 JSON 对象，不要多余说明：
-{"style":"geo 或 photo 或 plain","palette":["#主色","#强调色","#主色深","#背景浅色","#正文深灰"],"mood":"一句话气质描述","layouts":["从下面固定列表里挑 3~6 个"],"density":"airy 或 balanced 或 packed","motif":"hexagon 或 circle 或 arrow 或 wedge 或 line 或 mixed"}
+{"style":"geo 或 photo 或 plain","palette":["#主色","#强调色","#主色深","#背景浅色","#正文深灰"],"mood":"一句话气质描述","layouts":["从下面固定列表里挑 3~6 个"],"density":"airy 或 balanced 或 packed","motif":"hexagon 或 circle 或 arrow 或 wedge 或 line 或 mixed","generic_elements":[{"box":[x,y,w,h],"label":"一句话说明这是什么"}]}
+
+generic_elements 是一个例外，允许"原样抠出复用"（其它字段一律只学风格，不碰原图像素）：只挑图里那种**任何模板都会用、换个项目也不违和的通用符号**——打钩/叉/箭头/加减号/齿轮/放大镜/普通几何图标这类，
+不是"这个模板专属的设计"。判断标准：如果这个图形出现在完全不相关的另一个话题的 PPT 里也不显得奇怪，才算通用；反过来，任何带有角色/吉祥物、精心绘制的插画场景、独特造型的装饰图案、看得出是专门为这份模板画的图形，一律不放进 generic_elements（哪怕看起来很简单）。没有找到符合条件的就给空数组，不要为了凑数硬选。
+box 是 [左上角x, 左上角y, 宽, 高]，四个数字都是相对整张图的百分比（0~100，不是像素）。最多给 4 个。
 
 style：
 - "geo"：白底 / 浅底，靠色块、圆弧、环形图、线条等几何图形做装饰
@@ -1475,7 +1629,8 @@ layouts：这套模板"经常出现"的通用图解类型，只能从这个固�
 density：整份看下来页面平均有多满——airy 留白多 / balanced 适中 / packed 信息量大铺得满。
 motif：占主导的装饰形状家族——hexagon 六边形 / circle 圆与圆环 / arrow 箭头 / wedge 斜切色块 / line 细线 / mixed 混合。
 
-严禁：描述任何可读文字、精确坐标、精确外形、元素数量、某一页的具体布局。layouts 只是勾选通用类别，不是描述参考图。"""
+严禁：描述任何可读文字、精确坐标、精确外形、元素数量、某一页的具体布局。layouts 只是勾选通用类别，不是描述参考图。
+generic_elements 之外的所有字段都不允许提取原图像素或具体图形，这条例外只留给上面说的"换个话题也不违和"的通用符号。"""
 
 
 @router.post("/design/deck/reference")
@@ -1497,6 +1652,57 @@ async def design_deck_reference(
     _prune_handout_jobs()
     asyncio.create_task(_run_deck_ref_job(job_id, user.id, raw, ct))
     return {"jobId": job_id}
+
+
+async def _extract_ref_elements(img_bytes: bytes, elements: list, db: Session, user_id: str) -> list[dict]:
+    """把 generic_elements 标出来的通用图标区域从参考图里原样裁下来 + 过一遍 rembg 抠图
+    （复用角标插画那条子进程流水线，见 _gen_deck_hero），落盘成透明底小图返回 [{url,label}]。
+    这是 _DECK_REF_PROMPT 里唯一允许碰原图像素的例外分支——风格/配色/版式那几个字段
+    依然只是抽象提示，不受这里影响。box 异常/太大/太小的条目直接跳过，单张失败不影响其它张。"""
+    out: list[dict] = []
+    try:
+        im = PILImage.open(io.BytesIO(img_bytes)).convert("RGB")
+    except Exception:
+        return out
+    W, H = im.size
+    from app.worker_cmd import worker_argv
+
+    for it in elements[:4]:
+        if not isinstance(it, dict):
+            continue
+        box = it.get("box")
+        label = str(it.get("label") or "").strip()[:30]
+        if not (isinstance(box, list) and len(box) == 4):
+            continue
+        try:
+            x, y, w, h = (float(v) for v in box)
+        except Exception:
+            continue
+        if w <= 0 or h <= 0 or w > 60 or h > 60:  # 明显太大就不是"小图标"，八成是模型框错了整块区域
+            continue
+        x0 = max(0, round(x / 100 * W))
+        y0 = max(0, round(y / 100 * H))
+        x1 = min(W, round((x + w) / 100 * W))
+        y1 = min(H, round((y + h) / 100 * H))
+        if x1 - x0 < 16 or y1 - y0 < 16:  # 裁出来还没 16px 见方，多半是噪声框，没必要处理
+            continue
+        buf = io.BytesIO()
+        im.crop((x0, y0, x1, y1)).save(buf, "PNG")
+        try:
+            async with _HEAVY_MODEL_SEM:
+                proc = await asyncio.to_thread(
+                    subprocess.run,
+                    worker_argv("bg_removal", "soft"),
+                    input=buf.getvalue(),
+                    capture_output=True,
+                    timeout=240,
+                )
+            if proc.returncode == 0 and proc.stdout:
+                asset = _persist_asset_bytes(db, user_id, "deck-ref-element", proc.stdout)
+                out.append({"url": f"/api/ai/generated/{asset.file_name}", "label": label})
+        except Exception:
+            continue
+    return out
 
 
 async def _run_deck_ref_job(job_id, user_id, raw: bytes, ct: str):
@@ -1542,6 +1748,18 @@ async def _run_deck_ref_job(job_id, user_id, raw: bytes, ct: str):
         density = density if density in ("airy", "balanced", "packed") else "balanced"
         motif = str(d.get("motif") or "").strip().lower()
         motif = motif if motif in ("hexagon", "circle", "arrow", "wedge", "line", "mixed") else "mixed"
+
+        elements: list[dict] = []
+        raw_elements = d.get("generic_elements")
+        if isinstance(raw_elements, list) and raw_elements:
+            from app.database import SessionLocal
+
+            edb = SessionLocal()
+            try:
+                elements = await _extract_ref_elements(data, raw_elements, edb, user_id)
+            finally:
+                edb.close()
+
         _HANDOUT_JOBS[job_id] = {
             "status": "done",
             "user_id": user_id,
@@ -1553,6 +1771,7 @@ async def _run_deck_ref_job(job_id, user_id, raw: bytes, ct: str):
                 "layouts": layouts,
                 "density": density,
                 "motif": motif,
+                "elements": elements,
             },
         }
     except HTTPException as e:
@@ -1573,6 +1792,7 @@ async def design_deck_material(
     palette_json: str = Form(""),
     ref_hints_json: str = Form(""),
     bg_detail: str = Form("shared"),
+    ref_hero: str = Form(""),
     user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -1629,6 +1849,7 @@ async def design_deck_material(
     n = min(6, max(2, sections))
     ai_bg2 = bool(ai_bg)  # 几何风时 = AI 按主题配图；非几何风 = AI 整页底图
     bg_detail2 = bg_detail if bg_detail in ("section", "slide") else "shared"
+    ref_hero2 = ref_hero.strip() if re.match(r"^/api/ai/generated/[\w.-]+$", ref_hero.strip()) else ""
     ticket = billing.consume(db, user, "AIPPT")
 
     job_id = uuid.uuid4().hex
@@ -1637,7 +1858,7 @@ async def design_deck_material(
     asyncio.create_task(
         _run_deck_job(
             job_id, user.id, ticket, "", n, theme, extra.strip()[:300], ai_bg2, material, photos, ref_pal,
-            ref_layouts, ref_density, ref_motif, bg_detail2,
+            ref_layouts, ref_density, ref_motif, bg_detail2, ref_hero2,
         )
     )
     return {"jobId": job_id}

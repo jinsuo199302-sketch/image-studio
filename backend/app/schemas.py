@@ -172,6 +172,9 @@ class DeckRequest(BaseModel):
     ref_motif: str = ""
     # 非几何风 ai_bg 的正文底图详细度：shared=全篇复用一张(默认) / section=每章节一张 / slide=每页一张
     bg_detail: str = "shared"
+    # 参考图里原样抠出来的通用符号角标（/design/deck/reference 返回的 elements[0].url），
+    # 有就直接当封面/章节页角标复用，不再现生成一张新的（用户明确想要那张原图元素）
+    ref_hero: str = ""
 
 
 class DeckPptxRequest(BaseModel):
@@ -179,6 +182,20 @@ class DeckPptxRequest(BaseModel):
     slides: list[dict]
     theme: str = "red"
     title: str = "演示文稿"
+
+
+class DeckReviewSlideIn(BaseModel):
+    """AI 自动视觉复核：前端把每页渲染好的截图（含真实文字，不是导出用那张隐藏文字的背景图）
+    连同当前文案传回来，视觉模型逐页挑真实存在的排版缺陷。"""
+    index: int
+    title: str = ""
+    layout: str = ""
+    bullets: list[str] = []
+    image: str  # data URL 或纯 base64，不带 data: 前缀时按 image/jpeg 处理
+
+
+class DeckReviewRequest(BaseModel):
+    slides: list[DeckReviewSlideIn]
 
 
 class DesignElementRequest(BaseModel):
