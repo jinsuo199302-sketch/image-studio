@@ -32,8 +32,9 @@ export interface DeckTheme {
   paper: string
   ink: string
   /** 'geo' = 纯几何图形装饰风（白底 + 同心圆弧/圆点圈/环形进度，不用 AI 大图）
-   * 'liti' = 极简微立体（近乎无色相，柔光内凹外凸投影模拟折纸/浮雕质感，不用 AI 大图） */
-  style?: 'plain' | 'geo' | 'liti'
+   * 'liti' = 极简微立体（近乎无色相，柔光内凹外凸投影模拟折纸/浮雕质感，不用 AI 大图）
+   * 'dangzheng' = 党政红金（金色五角星+金线装饰，复用 AI 背景图管线，跟 plain 一样能配实景照片） */
+  style?: 'plain' | 'geo' | 'liti' | 'dangzheng'
 }
 
 /* ── 几何装饰 SVG（geo 风格用，全篇复用同一套母题）────────────── */
@@ -1179,6 +1180,29 @@ function css(t: DeckTheme): string {
   .hero{position:absolute;object-fit:contain;pointer-events:none;z-index:2}
   .s-cover .hero{right:70px;bottom:36px;width:260px;height:260px}
 
+  /* 党政红金：金色五角星（通用几何符号，不代表任何机构）替代普通短线/色块，
+     配色本身已经是红金（见 themePalettes.ts 的 dangzheng 配色），这里只负责
+     "党政"这个体系最容易辨识的符号——星+金线，光换红色不够，红色系其它主题
+     （比如现有的 red key）看起来还是普通商务风，加不上这两个符号就没有识别度。 */
+  .dzstars{display:flex;gap:10px;margin-bottom:18px}
+  .dzstars svg{filter:drop-shadow(0 1px 1px rgba(0,0,0,.18))}
+  .dangzheng .tick{background:none;border-top:3px solid ${t.accent};border-bottom:1px solid ${t.accent};height:8px}
+  .s-sec.dangzheng .rule{background:${t.accent};opacity:.5}
+  .s-sec.dangzheng .dzstars{margin-bottom:14px}
+  /* 无 AI 背景图时的红金渐变兜底底 + 两颗大号极淡金星当角落纹理，不用实色块 */
+  .s-cover.dangzheng{background:linear-gradient(135deg,${t.primaryDk} 0%,${t.primary} 62%,${t.primaryDk} 100%)}
+  .s-cover.dangzheng .dzglow{position:absolute;right:-120px;top:-160px;width:640px;height:640px;border-radius:50%;
+    background:radial-gradient(circle,${t.accent}26 0%,transparent 68%);z-index:0}
+  .s-cover.dangzheng .dzs1{position:absolute;right:-30px;top:-30px;z-index:0}
+  .s-cover.dangzheng .dzs2{position:absolute;right:220px;bottom:60px;z-index:0}
+  .s-cover.dangzheng h1,.s-cover.dangzheng .sub{color:#fff}
+  .s-cover.dangzheng .kick{color:${t.accent}}
+  .s-cover.dangzheng .meta{color:rgba(255,255,255,.6)}
+  /* 有 AI 背景图时：kicker/星星换成金色，压title的蒙层改暖红调而不是默认冷藏青蓝，
+     不然红金主题配一层偏蓝黑蒙层会显得脏 */
+  .s-cover.dangzheng.on-bg .scrim{background:linear-gradient(90deg,rgba(40,10,14,.86) 46%,rgba(40,10,14,0))}
+  .s-cover.dangzheng.on-bg .kick{color:${t.accent}}
+
   /* 图文分栏内容页 */
   .imgrow{flex:1;display:flex;gap:54px;margin-top:24px;margin-bottom:12px;align-items:stretch}
   .imgrow.rev{flex-direction:row-reverse}
@@ -1445,6 +1469,7 @@ function css(t: DeckTheme): string {
   .closing h1{font-size:58px;font-weight:800;color:${t.primary}}
   .closing .tick{width:96px;height:6px;background:${t.accent}}
   .closing .sub{font-size:17px;color:#8a8a8a;line-height:1.5}
+  .closing.dangzheng{background:${t.paper}}
 
   /* ══ 几何风（style:geo）——白底 + 同心圆弧/圆点圈/环形进度 ══ */
   .geo-d{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden}
@@ -1736,6 +1761,21 @@ const heroImg = (url?: string) => (url ? `<img class="hero" src="${esc(url)}" cr
 
 const isGeo = (o: DeckOutline) => o.theme.style === 'geo'
 const isLiti = (o: DeckOutline) => o.theme.style === 'liti'
+const isDangzheng = (o: DeckOutline) => o.theme.style === 'dangzheng'
+
+/** 五角星 SVG（党政红金母题）——只是个通用几何符号，不是任何机构徽标，
+ * 纯装饰用途（角标/分隔符），不代表任何具体组织。外圈 5 个尖角 + 内圈 5 个凹点，
+ * 交替连接才是"星形"，只连外圈 5 点画出来的是五边形，不是星。 */
+function starBadge(color: string, size = 28, opacity = 1): string {
+  const pts: string[] = []
+  for (let i = 0; i < 5; i++) {
+    const aOut = (-90 + i * 72) * (Math.PI / 180)
+    const aIn = (-90 + i * 72 + 36) * (Math.PI / 180)
+    pts.push(`${(50 + 48 * Math.cos(aOut)).toFixed(1)},${(50 + 48 * Math.sin(aOut)).toFixed(1)}`)
+    pts.push(`${(50 + 19 * Math.cos(aIn)).toFixed(1)},${(50 + 19 * Math.sin(aIn)).toFixed(1)}`)
+  }
+  return `<svg viewBox="0 0 100 100" width="${size}" height="${size}" style="opacity:${opacity};display:block"><polygon points="${pts.join(' ')}" fill="${color}"/></svg>`
+}
 /** geo 风内容页装饰：左侧色条 + 左下圆点圈 + 每页轮换的大几何元素。
  * motif（参考图归类出来的主装饰形状）只改"轮换池的排序偏好"，具体尺寸/位置全在下面写死。*/
 function geoDeco(t: DeckTheme, v = 0, motifKey = ''): string {
@@ -1858,13 +1898,21 @@ function cover(o: DeckOutline): string {
   const b = o.bg?.cover
   const pic = !b && o.coverImage
   const li = isLiti(o)
-  const cls = (b ? 's-cover on-bg' : pic ? 's-cover has-pic' : 's-cover') + (li ? ' liti' : '')
+  const dz = isDangzheng(o)
+  const cls = (b ? 's-cover on-bg' : pic ? 's-cover has-pic' : 's-cover') + (li ? ' liti' : dz ? ' dangzheng' : '')
   const deco =
     !b && !pic
       ? li
         ? `<div class="li1"></div><div class="li2"></div>`
-        : `<div class="cn3"></div><div class="cn1"></div><div class="cn2"></div><div class="br1"></div><div class="br2"></div>`
+        : dz
+          ? `<div class="dzglow"></div><div class="dzs1">${starBadge(o.theme.accent, 200, 0.1)}</div><div class="dzs2">${starBadge(o.theme.accent, 90, 0.16)}</div>`
+          : `<div class="cn3"></div><div class="cn1"></div><div class="cn2"></div><div class="br1"></div><div class="br2"></div>`
       : ''
+  // 党政红金：不管有没有 AI 背景图，标题区都加一排小金星替代普通色块短线——
+  // 这是"党政"这个视觉体系最容易辨识的符号，纯色块换成红金配色反而认不出来是这个体系。
+  const kickerDeco = dz
+    ? `<div class="dzstars">${starBadge(o.theme.accent, 15)}${starBadge(o.theme.accent, 15)}${starBadge(o.theme.accent, 15)}</div>`
+    : `<div class="kbar"></div>`
   const feats = (o.coverFeatures || []).filter((f) => f && f.value).slice(0, 4)
   const featStrip = feats.length
     ? `<div class="feats">${feats
@@ -1878,7 +1926,7 @@ function cover(o: DeckOutline): string {
     ${pic ? `<img class="cpic" src="${esc(o.coverImage!)}" crossorigin="anonymous">` : ''}
     ${heroImg(o.heroImage)}
     <div class="panel">
-      <div class="kbar"></div>
+      ${kickerDeco}
       <div class="kick">KEYNOTE PRESENTATION</div>
       <h1>${esc(o.title)}</h1><div class="tick"></div>
       ${o.subtitle ? `<div class="sub">${esc(o.subtitle)}</div>` : ''}
@@ -1896,7 +1944,8 @@ function toc(o: DeckOutline): string {
         `<div class="it"><span class="tocic">${icon(pickIcon(s.heading, i), 22)}</span><span class="no">${pad2(i + 1)}</span><span class="h">${esc(s.heading)}</span></div>`,
     )
     .join('')
-  return `<div class="slide s-toc${isGeo(o) ? ' geo' : isLiti(o) ? ' liti' : ''}">${cbg(o)}<div class="z">
+  const skin = isGeo(o) ? ' geo' : isLiti(o) ? ' liti' : isDangzheng(o) ? ' dangzheng' : ''
+  return `<div class="slide s-toc${skin}">${cbg(o)}<div class="z">
     <h2>目录</h2><div class="en">CONTENTS</div><div class="tick"></div>
     <div class="grid ${two ? 'two' : ''}">${li}</div></div></div>`
 }
@@ -1904,11 +1953,13 @@ function toc(o: DeckOutline): string {
 function section(s: DeckSection, idx: number, total: number, o: DeckOutline): string {
   if (isGeo(o)) return gSection(s, idx, total, o)
   const withBg = !!o.bg?.section
-  return `<div class="slide s-sec">${bgImg(o.bg?.section)}
+  const dz = isDangzheng(o)
+  return `<div class="slide s-sec${dz ? ' dangzheng' : ''}">${bgImg(o.bg?.section)}
     ${withBg ? '<div class="scrim"></div><div class="sbar"></div>' : '<div class="blk"></div><div class="sbar"></div>'}
     <div class="big">${pad2(idx)}</div>
     ${heroImg(o.heroImage)}
     <div class="box">
+      ${dz ? `<div class="dzstars">${starBadge(o.theme.accent, 14)}${starBadge(o.theme.accent, 14)}${starBadge(o.theme.accent, 14)}</div>` : ''}
       <div class="part">PART ${pad2(idx)}</div>
       <div class="pnx">${pad2(idx)} / ${pad2(total)}</div>
       <h2>${esc(s.heading)}</h2>
@@ -2234,13 +2285,17 @@ function swot(sl: DeckSlideIn, en: string, o: DeckOutline): string {
 }
 
 function closing(o: DeckOutline): string {
+  const dz = isDangzheng(o)
   const deco = isGeo(o)
     ? `<div class="ga" style="position:absolute;right:-160px;bottom:-180px">${arcCluster(o.theme, 520)}</div>`
-    : o.bg?.content
-      ? ''
-      : '<div class="cn s"></div><div class="cn"></div><div class="cn b"></div>'
-  return `<div class="slide closing">${isGeo(o) ? '' : bgImg(o.bg?.content)}${deco}
+    : dz && !o.bg?.content
+      ? `<div class="dzs2" style="right:-40px;bottom:-40px">${starBadge(o.theme.accent, 260, 0.14)}</div>`
+      : o.bg?.content
+        ? ''
+        : '<div class="cn s"></div><div class="cn"></div><div class="cn b"></div>'
+  return `<div class="slide closing${dz ? ' dangzheng' : ''}">${isGeo(o) ? '' : bgImg(o.bg?.content)}${deco}
     <div class="inner">
+      ${dz ? `<div class="dzstars" style="justify-content:center">${starBadge(o.theme.accent, 16)}${starBadge(o.theme.accent, 16)}${starBadge(o.theme.accent, 16)}</div>` : ''}
       <div class="ty">THANK YOU</div><h1>感谢观看</h1><div class="tick"></div>
       <div class="sub">${esc(o.title)}</div>
     </div></div>`

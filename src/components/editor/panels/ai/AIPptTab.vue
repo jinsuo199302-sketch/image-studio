@@ -48,7 +48,8 @@ async function run(fn: () => Promise<Blob>, name: string) {
 // ── AI 生成 ──────────────────────────────────────────────
 const THEMES = [
   { key: 'auto', label: 'AI 智能配色' },
-  { key: 'red', label: '党政红金' },
+  { key: 'dangzheng', label: '党政红金' },
+  { key: 'red', label: '中国红' },
   { key: 'blue', label: '商务蓝' },
   { key: 'green', label: '清新绿' },
   { key: 'techblue', label: '科技蓝' },
