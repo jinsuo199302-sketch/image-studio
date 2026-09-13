@@ -10,6 +10,17 @@ export const THEME_FALLBACK_PALETTES: Record<string, string[]> = {
   teal: ['#1f7a72', '#e0a52b', '#134b46', '#f2f7f6', '#2b2b2b'],
   techblue: ['#1a3f7a', '#2f7de0', '#0d2951', '#f3f6fb', '#232a33'],
   geoblue: ['#12579e', '#3aa0e0', '#0c3b6b', '#f4f8fc', '#233240'],
+  /** 极简微立体：近乎无色相，全靠柔光内凹外凸投影撑明暗层次，primary/accent 只做小面积点缀 */
+  liti: ['#5b6b7a', '#8a94a3', '#333a45', '#f4f5f7', '#2b2f36'],
 }
-/** 纯几何图形装饰风的主题 key（geoDeco 那套白底几何色块，不用 AI 大图） */
+/** 主题 key → DeckTheme.style 的映射：命中的 key 会走各自专属的背景/卡片/封面装饰
+ * （不用 AI 整页大图），没命中的一律是 'plain'（AI 图或代码淡纹通用底）。
+ * key 和 style 值不一定同名（比如 'geoblue' 这个 key 对应的 style 是 'geo'，历史命名
+ * 遗留），所以用映射表而不是简单判断"在不在某个集合里就用 key 本身当 style"。
+ * 以后再加党政红金/水墨中国风时，这张表和 DeckTheme.style 的联合类型一起加一行。 */
+export const STYLE_BY_THEME_KEY: Record<string, string> = {
+  geoblue: 'geo',
+  liti: 'liti',
+}
+/** @deprecated 只保留给还没来得及切换到 STYLE_BY_THEME_KEY 的旧引用用，新代码别用这个 */
 export const GEO_THEME_KEYS = new Set(['geoblue'])

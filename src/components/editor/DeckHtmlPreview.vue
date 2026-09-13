@@ -6,7 +6,7 @@ import { composeDeck, type DeckOutline, type DeckTheme } from '../../deck/templa
 import { slidesToPptx, waitImages, type VideoAttachment } from '../../deck/toPptx'
 import { saveFile } from '../../utils/saveFile'
 import { reviewDeckSlides, type DeckOutlineRaw, type DeckReviewResult } from '../../services/designApi'
-import { THEME_FALLBACK_PALETTES, GEO_THEME_KEYS } from '../../deck/themePalettes'
+import { THEME_FALLBACK_PALETTES, STYLE_BY_THEME_KEY } from '../../deck/themePalettes'
 
 const props = defineProps<{
   outline: DeckOutlineRaw
@@ -15,7 +15,6 @@ const props = defineProps<{
 }>()
 
 const theme = computed<DeckTheme>(() => {
-  const geo = GEO_THEME_KEYS.has(props.themeKey)
   const p =
     props.outline.palette && props.outline.palette.length >= 5
       ? props.outline.palette
@@ -26,7 +25,7 @@ const theme = computed<DeckTheme>(() => {
     primaryDk: p[2],
     paper: p[3],
     ink: p[4],
-    style: geo ? 'geo' : 'plain',
+    style: (STYLE_BY_THEME_KEY[props.themeKey] as DeckTheme['style']) || 'plain',
   }
 })
 

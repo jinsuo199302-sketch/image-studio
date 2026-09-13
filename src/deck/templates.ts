@@ -31,8 +31,9 @@ export interface DeckTheme {
   primaryDk: string
   paper: string
   ink: string
-  /** 'geo' = 纯几何图形装饰风（白底 + 同心圆弧/圆点圈/环形进度，不用 AI 大图） */
-  style?: 'plain' | 'geo'
+  /** 'geo' = 纯几何图形装饰风（白底 + 同心圆弧/圆点圈/环形进度，不用 AI 大图）
+   * 'liti' = 极简微立体（近乎无色相，柔光内凹外凸投影模拟折纸/浮雕质感，不用 AI 大图） */
+  style?: 'plain' | 'geo' | 'liti'
 }
 
 /* ── 几何装饰 SVG（geo 风格用，全篇复用同一套母题）────────────── */
@@ -1593,6 +1594,39 @@ function css(t: DeckTheme): string {
   .geo .cards .card .num{color:${t.accent};font-size:11px}
   .geo .cards .card .ct{color:rgba(255,255,255,.94);font-size:16px}
   .geo .cards .card .bn{position:absolute;right:16px;bottom:-24px;font-size:118px;line-height:1;font-weight:800;color:rgba(255,255,255,.10);font-family:"Arial","Microsoft YaHei",sans-serif}
+
+  /* 极简微立体：不用色块/彩色描边区分卡片，靠"柔光内凹外凸"投影模拟折纸/浮雕的明暗层次，
+     配色本身已经去饱和（见 themePalettes.ts 的 liti 配色），这里只负责投影质感，
+     不重复上色——跟 geo 卡片"整块实心底色"是完全相反的思路：geo 靠色块撑视觉重量，
+     liti 靠光影撑，两者不能共用同一套卡片规则。
+     卡片/清单行的外轮廓来自参数化造型（parametricBoxStyle 的 inline clip-path，见调用处），
+     跟 geo 卡片不同，这里外层阴影必须用 filter:drop-shadow 而不是 box-shadow——
+     box-shadow 只认 border-radius，clip-path 切出来的斜切/阶梯凹口边缘会把 box-shadow
+     直接截断成方形硬边，露出违和的直角阴影；drop-shadow 是在 clip-path 裁剪之后
+     按元素真实轮廓（含斜切角）计算阴影，形状再怎么变阴影都贴合，这也让"浮雕"效果
+     多一层意外收获：不同卡片阴影轮廓跟随各自的切角形状，比统一方阴影更像真实纸片。 */
+  .liti .card{border:0;border-radius:20px;background:${t.paper};
+    filter:drop-shadow(8px 8px 14px rgba(0,0,0,.10)) drop-shadow(-6px -6px 12px rgba(255,255,255,.85))}
+  .liti .card:nth-child(even){background:${t.paper}}
+  .liti .card .ic{background:${t.paper};color:${t.primary};
+    box-shadow:inset 3px 3px 6px rgba(0,0,0,.08),inset -3px -3px 6px rgba(255,255,255,.75)}
+  .liti .row{border-radius:14px;border-bottom:0;background:${t.paper};margin-bottom:10px;
+    filter:drop-shadow(5px 5px 9px rgba(0,0,0,.09)) drop-shadow(-4px -4px 8px rgba(255,255,255,.8))}
+  .liti .row:nth-child(even){background:${t.paper}}
+  .liti .row .ic{background:${t.paper};color:${t.primary};
+    box-shadow:inset 2px 2px 5px rgba(0,0,0,.08),inset -2px -2px 5px rgba(255,255,255,.75)}
+  .liti .row:nth-child(3n+2) .ic{background:${t.paper};color:${t.primary}}
+  /* 封面：柔光圆盘替代实色角块——大圆盘外凸、小圆盘内嵌，同一个"折纸"语言 */
+  .s-cover.liti .li1{position:absolute;right:-130px;top:-130px;width:420px;height:420px;border-radius:50%;
+    background:${t.paper};box-shadow:22px 22px 44px rgba(0,0,0,.07),-16px -16px 36px rgba(255,255,255,.9);z-index:0}
+  .s-cover.liti .li2{position:absolute;right:130px;top:96px;width:150px;height:150px;border-radius:50%;
+    background:${t.paper};box-shadow:inset 8px 8px 16px rgba(0,0,0,.08),inset -8px -8px 16px rgba(255,255,255,.85);z-index:1}
+  /* 内容页角落同一套柔光圆盘，尺寸更收敛，不抢正文视觉重量 */
+  .lbg{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+  .lbg .lb1{position:absolute;right:-90px;top:-90px;width:240px;height:240px;border-radius:50%;
+    background:${t.paper};box-shadow:14px 14px 30px rgba(0,0,0,.06),-12px -12px 26px rgba(255,255,255,.85)}
+  .lbg .lb2{position:absolute;left:54px;bottom:48px;width:64px;height:64px;border-radius:50%;
+    background:${t.paper};box-shadow:inset 5px 5px 10px rgba(0,0,0,.08),inset -5px -5px 10px rgba(255,255,255,.8)}
   /* geo 风指标页：环形饼图 */
   .donuts{flex:1;display:flex;align-items:center;justify-content:space-evenly;margin-top:16px;gap:20px}
   .donuts .dn{position:relative;display:flex;flex-direction:column;align-items:center;text-align:center}
@@ -1701,6 +1735,7 @@ const bgImg = (url?: string) => (url ? `<img class="bg" src="${esc(url)}" crosso
 const heroImg = (url?: string) => (url ? `<img class="hero" src="${esc(url)}" crossorigin="anonymous">` : '')
 
 const isGeo = (o: DeckOutline) => o.theme.style === 'geo'
+const isLiti = (o: DeckOutline) => o.theme.style === 'liti'
 /** geo 风内容页装饰：左侧色条 + 左下圆点圈 + 每页轮换的大几何元素。
  * motif（参考图归类出来的主装饰形状）只改"轮换池的排序偏好"，具体尺寸/位置全在下面写死。*/
 function geoDeco(t: DeckTheme, v = 0, motifKey = ''): string {
@@ -1822,10 +1857,13 @@ function cover(o: DeckOutline): string {
   if (isGeo(o)) return gCover(o)
   const b = o.bg?.cover
   const pic = !b && o.coverImage
-  const cls = b ? 's-cover on-bg' : pic ? 's-cover has-pic' : 's-cover'
+  const li = isLiti(o)
+  const cls = (b ? 's-cover on-bg' : pic ? 's-cover has-pic' : 's-cover') + (li ? ' liti' : '')
   const deco =
     !b && !pic
-      ? `<div class="cn3"></div><div class="cn1"></div><div class="cn2"></div><div class="br1"></div><div class="br2"></div>`
+      ? li
+        ? `<div class="li1"></div><div class="li2"></div>`
+        : `<div class="cn3"></div><div class="cn1"></div><div class="cn2"></div><div class="br1"></div><div class="br2"></div>`
       : ''
   const feats = (o.coverFeatures || []).filter((f) => f && f.value).slice(0, 4)
   const featStrip = feats.length
@@ -1858,7 +1896,7 @@ function toc(o: DeckOutline): string {
         `<div class="it"><span class="tocic">${icon(pickIcon(s.heading, i), 22)}</span><span class="no">${pad2(i + 1)}</span><span class="h">${esc(s.heading)}</span></div>`,
     )
     .join('')
-  return `<div class="slide s-toc${isGeo(o) ? ' geo' : ''}">${cbg(o)}<div class="z">
+  return `<div class="slide s-toc${isGeo(o) ? ' geo' : isLiti(o) ? ' liti' : ''}">${cbg(o)}<div class="z">
     <h2>目录</h2><div class="en">CONTENTS</div><div class="tick"></div>
     <div class="grid ${two ? 'two' : ''}">${li}</div></div></div>`
 }
@@ -1895,15 +1933,20 @@ function head(sl: DeckSlideIn, en: string, o?: DeckOutline): string {
 const techMark = '<div class="ctech"><i class="t1"></i><i class="t2"></i><i class="dot"></i><i class="b1"></i><i class="b2"></i></div>'
 
 /** 内容页底：geo 风用几何装饰；否则有 AI 底图就铺图+渐变白蒙层，没有就代码淡纹+科技角标 */
-const cbg = (o: DeckOutline) =>
-  isGeo(o)
-    ? geoDeco(o.theme, _geoIdx, o.style_hint?.motif || '')
-    : (o.bg?.content
-        ? `${bgImg(o.bg.content)}<div class="cwash"></div>`
-        : `<div class="cbg"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i></div>`) + techMark
+const cbg = (o: DeckOutline) => {
+  if (isGeo(o)) return geoDeco(o.theme, _geoIdx, o.style_hint?.motif || '')
+  // 微立体：科技角标（虚线+短横）跟"柔光浮雕"的克制质感冲突，换成一对柔光圆角块，不叠加 techMark
+  if (isLiti(o)) return `<div class="lbg"><div class="lb1"></div><div class="lb2"></div></div>`
+  return (
+    (o.bg?.content
+      ? `${bgImg(o.bg.content)}<div class="cwash"></div>`
+      : `<div class="cbg"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i></div>`) + techMark
+  )
+}
 const bodySlide = (o: DeckOutline, inner: string) => {
   const dz = isGeo(o) && o.style_hint?.density === 'packed' ? ' d-packed' : isGeo(o) && o.style_hint?.density === 'airy' ? ' d-airy' : ''
-  const html = `<div class="slide body${isGeo(o) ? ' geo' : ''}${dz}">${cbg(o)}<div class="z">${inner}</div></div>`
+  const skin = isGeo(o) ? ' geo' : isLiti(o) ? ' liti' : ''
+  const html = `<div class="slide body${skin}${dz}">${cbg(o)}<div class="z">${inner}</div></div>`
   if (isGeo(o)) _geoIdx++
   return html
 }

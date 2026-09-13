@@ -113,11 +113,14 @@ _FALLBACK = {
     "teal":   ["#1f7a72", "#e0a52b", "#134b46", "#f2f7f6", "#2b2b2b"],
     "techblue": ["#1a3f7a", "#2f7de0", "#0d2951", "#f3f6fb", "#232a33"],
     "geoblue":  ["#12579e", "#3aa0e0", "#0c3b6b", "#f4f8fc", "#233240"],
+    "liti":     ["#5b6b7a", "#8a94a3", "#333a45", "#f4f5f7", "#2b2f36"],
     "dark":   ["#e8b04b", "#3f7cc4", "#c8963a", "#1c2230", "#f2f2f2"],
 }
 
-# 纯几何图形装饰风（白底 + 代码画的同心圆弧/环形进度，不用 AI 大图）
-GEO_THEMES = {"geoblue"}
+# 代码装饰风主题（不生成 AI 整页背景图，走 templates.ts 里各自专属的代码/SVG 装饰）——
+# geoblue = 纯几何色块，liti = 极简微立体柔光浮雕。以后加党政红金/水墨中国风时，
+# 只有党政红金复用 AI 背景图管线（跟 plain 一样），不进这个集合。
+GEO_THEMES = {"geoblue", "liti"}
 
 
 def apply_theme_palette(outline: dict, theme_key: str, override: list | None = None) -> dict:

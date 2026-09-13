@@ -22,8 +22,8 @@ import { saveFile } from '../../../../utils/saveFile'
 import { useAuthStore } from '../../../../stores/auth'
 import SlidePreview from '../../SlidePreview.vue'
 import DeckHtmlPreview from '../../DeckHtmlPreview.vue'
-import { composeDeck } from '../../../../deck/templates'
-import { THEME_FALLBACK_PALETTES, GEO_THEME_KEYS } from '../../../../deck/themePalettes'
+import { composeDeck, type DeckTheme } from '../../../../deck/templates'
+import { THEME_FALLBACK_PALETTES, STYLE_BY_THEME_KEY } from '../../../../deck/themePalettes'
 
 type Mode = 'ai' | 'text' | 'image' | 'convert'
 const mode = ref<Mode>('ai')
@@ -53,6 +53,7 @@ const THEMES = [
   { key: 'green', label: '清新绿' },
   { key: 'techblue', label: '科技蓝' },
   { key: 'geoblue', label: '几何蓝' },
+  { key: 'liti', label: '极简微立体' },
   { key: 'purple', label: '典雅紫' },
   { key: 'slate', label: '沉稳蓝灰' },
   { key: 'teal', label: '青碧' },
@@ -63,11 +64,11 @@ const THEMES = [
 const THEME_PREVIEWS = computed(() =>
   THEMES.map((th) => {
     const p = THEME_FALLBACK_PALETTES[th.key] || THEME_FALLBACK_PALETTES.blue
-    const geo = GEO_THEME_KEYS.has(th.key)
+    const style = (STYLE_BY_THEME_KEY[th.key] as DeckTheme['style']) || 'plain'
     const d = composeDeck({
       title: '示例标题文案',
       subtitle: '一句副标题占位文字',
-      theme: { primary: p[0], accent: p[1], primaryDk: p[2], paper: p[3], ink: p[4], style: geo ? 'geo' : 'plain' },
+      theme: { primary: p[0], accent: p[1], primaryDk: p[2], paper: p[3], ink: p[4], style },
       sections: [],
     })
     return { ...th, html: d.styleTag + d.slides[0] }
