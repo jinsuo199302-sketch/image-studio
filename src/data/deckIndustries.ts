@@ -70,7 +70,7 @@ export const DECK_INDUSTRIES: DeckIndustryPreset[] = [
     layouts: ['bar', 'line', 'waterfall', 'gauge', 'table', 'stats'],
     density: 'packed',
     motif: 'line',
-    hint: '金融财务行业：配色稳重（深蓝/藏青为主，金色点缀），氛围图可含增长曲线、天平、金融图标等元素剪影，' +
+    hint: '金融财务行业：配色稳重（深蓝/藏青为主，金色点缀），氛围图可含K线图、金库/保险箱、货币符号、天平等元素剪影，' +
       '数据类图表页占比可以高一些，体现严谨专业。',
   },
   {
@@ -100,7 +100,7 @@ export const DECK_INDUSTRIES: DeckIndustryPreset[] = [
     layouts: ['gallery', 'stats', 'matrix', 'table', 'compare'],
     density: 'balanced',
     motif: 'line',
-    hint: '地产/工程行业：氛围图可含城市天际线、建筑轮廓、施工线条等元素剪影，配色沉稳（深灰蓝为主）。',
+    hint: '地产/工程行业：氛围图可含城市天际线、建筑轮廓、户型平面图、脚手架/施工线条等元素剪影，配色沉稳（深灰蓝为主）。',
   },
   {
     key: 'legal',
@@ -109,7 +109,7 @@ export const DECK_INDUSTRIES: DeckIndustryPreset[] = [
     layouts: ['compare', 'matrix', 'table', 'list', 'timeline'],
     density: 'balanced',
     motif: 'line',
-    hint: '法律合规行业：配色沉稳保守（深蓝/香槟金），氛围图可含天平、法槌、文书等元素剪影，版式严谨、少装饰花活。',
+    hint: '法律合规行业：配色沉稳保守（深蓝/香槟金），氛围图可含天平、法槌、文书/合同签字、印章等元素剪影，版式严谨、少装饰花活。',
   },
   {
     key: 'hr',
@@ -118,7 +118,7 @@ export const DECK_INDUSTRIES: DeckIndustryPreset[] = [
     layouts: ['spoke', 'matrix', 'cards', 'stats', 'compare'],
     density: 'balanced',
     motif: 'circle',
-    hint: '人力资源/组织管理行业：配色活力专业（紫蓝为主），氛围图可含人像剪影、团队协作等元素，' +
+    hint: '人力资源/组织管理行业：配色活力专业（紫蓝为主），氛围图可含握手、团队讨论、招聘面试、颁奖/证书等元素剪影，' +
       '组织架构/岗位对比类内容优先用矩阵或对照版式。',
   },
   {
@@ -128,7 +128,7 @@ export const DECK_INDUSTRIES: DeckIndustryPreset[] = [
     layouts: ['gallery', 'big_number', 'bar', 'cards', 'stats'],
     density: 'packed',
     motif: 'wedge',
-    hint: '零售电商行业：配色鲜活有活力（暖橙红为主），氛围图可含购物袋、促销标签、商品陈列等元素剪影，节奏明快。',
+    hint: '零售电商行业：配色鲜活有活力（暖橙红为主），氛围图可含购物袋、促销价签、商品陈列、收银台/店铺门头等元素剪影，节奏明快。',
   },
   {
     key: 'lifestyle',
@@ -137,7 +137,8 @@ export const DECK_INDUSTRIES: DeckIndustryPreset[] = [
     layouts: ['timeline', 'gallery', 'cards', 'list'],
     density: 'airy',
     motif: 'circle',
-    hint: '文旅/生活方式行业：配色清新自然（绿蓝为主），氛围图可含风景轮廓、路线、生活场景等元素剪影，留白充足、氛围感强。',
+    hint: '文旅/生活方式行业：配色清新自然（绿蓝为主），氛围图可含山川湖泊剪影、旅行箱/地图路线、酒店民宿建筑、门票/打卡地标等元素剪影，' +
+      '留白充足、氛围感强。',
   },
   {
     key: 'agriculture',
