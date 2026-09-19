@@ -138,6 +138,16 @@ export const DECK_INDUSTRIES: DeckIndustryPreset[] = [
     motif: 'circle',
     hint: '文旅/生活方式行业：配色清新自然（绿蓝为主），氛围图可含风景轮廓、路线、生活场景等元素剪影，留白充足、氛围感强。',
   },
+  {
+    key: 'agriculture',
+    label: '农业农村',
+    theme: 'green',
+    layouts: ['stats', 'bar', 'timeline', 'table', 'gallery', 'cards'],
+    density: 'balanced',
+    motif: 'line',
+    hint: '农业/农村行业：配色自然清新（绿色为主，辅以土黄、麦穗金点缀），氛围图可含麦田、稻田垄沟、果园、灌溉水渠、拖拉机耕作等元素剪影，' +
+      '体现丰收与田园气息，避免出现现代化都市高楼等违和场景；产量/种植面积/收成对比这类数据优先用图表或表格版式。',
+  },
 ]
 
 export function findDeckIndustry(key: string): DeckIndustryPreset | undefined {
