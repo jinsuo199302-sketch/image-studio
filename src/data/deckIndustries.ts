@@ -89,8 +89,9 @@ export const DECK_INDUSTRIES: DeckIndustryPreset[] = [
     layouts: ['timeline', 'matrix', 'big_number', 'quote', 'cards'],
     density: 'packed',
     motif: 'wedge',
-    hint: '政务/党建汇报风格：红金庄重基调，版式严谨规整，不用俏皮/创意类装饰，突出权威感。' +
-      '注意：不出现国徽/党徽/警徽等国家标志图形。',
+    hint: '政务/党建汇报风格：红金庄重基调，版式严谨规整，不用俏皮/创意类装饰，突出权威感，' +
+      '氛围图可含主席台、礼堂、文件档案、通用五角星、素色旗帜等元素剪影，体现庄重严肃的会议/组织氛围。' +
+      '注意：不出现国徽/党徽/警徽等国家标志图形，星形/旗帜只能是通用几何装饰，不能画成任何具体机构的旗徽样式。',
   },
   {
     key: 'realestate',
