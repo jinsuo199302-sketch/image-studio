@@ -49,12 +49,12 @@ async def bocha_search(query: str, count: int = SEARCH_RESULT_COUNT) -> list[dic
         )
     if res.status_code >= 400:
         raise RuntimeError(f"博查搜索请求失败：{res.status_code} {res.text[:300]}")
-    data = res.json()
-    values = ((data.get("webPages") or {}).get("value")) or []
-    if not values:
-        # 临时诊断：如果解析出来是空的，把原始响应体抛出来，先确认是真的没搜到，
-        # 还是我们对博查返回结构的假设跟实际不符（当时查的文档明确说是"部分示例"）。
-        raise RuntimeError(f"博查搜索返回空结果，原始响应：{json.dumps(data, ensure_ascii=False)[:800]}")
+    body = res.json()
+    # 真实响应是 {code, log_id, msg, data:{webPages:{value:[...]}}}——webPages 包在 data 这层
+    # 里面，不是顶层字段。之前这里直接读顶层 webPages，永远读到 None，导致每次搜索都被误判成
+    # "搜索返回空结果"（真实测试用 BOCHA_API_KEY 实际调用后才揪出这个解析路径错了，之前的
+    # "临时诊断"分支一直没人跟进过，现在确认过真实响应结构，直接修对，不用再抛诊断异常）。
+    values = (((body.get("data") or {}).get("webPages") or {}).get("value")) or []
     return [
         {
             "name": v.get("name", ""),
@@ -145,7 +145,18 @@ async def call_extraction_model(topic: str, sources: list[dict]) -> list[dict]:
 
 
 async def research_topic(topic: str) -> dict:
-    """整条链路的编排入口：搜索 -> 抓原文 -> 提炼 -> 校验 -> 返回结构化结果。"""
+    """整条链路的编排入口：搜索 -> 抓原文 -> 提炼 -> 校验 -> 返回结构化结果。
+
+    真实用教辅类查询测试时发现的问题：排名靠前的结果大量是文档预览站（淘豆网/豆丁网这类，
+    真实网页正文是导航栏+付费墙提示，教案内容本身根本不在页面 HTML 里，多半是要收费下载
+    才能看到）和视频页（内容在视频里不在文字里）——只用 fetch_page_text() 抓到的真实正文
+    去校验时，能通过校验的知识点全是"这份教案存在"级别的空壳事实，不是真正有用的知识点。
+    但博查搜索接口自己返回的 snippet/summary 摘要字段里往往藏着真正有用的内容（大概率是
+    博查自己的爬虫/文档解析能看到我们简单 httpx+BeautifulSoup 抓不到的内容，比如从付费文档
+    里提取出的摘要）。所以这里把 snippet 并进每个来源的校验文本——这是一个刻意的可信链条
+    妥协：从"只信真实抓到的网页正文"放宽成"网页正文+博查自己生成的摘要都算数"，摘要本身是
+    第三方生成的文本，不是原始网页内容，可信度比不上真实抓取的原文，但真实测试下来这是让
+    这个功能从"技术上没瞎编但内容空洞没法用"变成"真的能捞到有用知识点"的必要妥协。"""
     _require_config()
 
     search_results = await bocha_search(topic)
@@ -154,9 +165,11 @@ async def research_topic(topic: str) -> dict:
 
     sources: list[dict] = []
     for r in search_results:
-        text = await fetch_page_text(r["url"])
-        if text:
-            sources.append({"url": r["url"], "siteName": r["siteName"], "text": text})
+        page_text = await fetch_page_text(r["url"])
+        snippet = (r.get("snippet") or "").strip()
+        combined = "\n\n".join(t for t in (page_text, snippet) if t)  # 真实正文在前、摘要补充在后
+        if combined:
+            sources.append({"url": r["url"], "siteName": r["siteName"], "text": combined})
 
     if not sources:
         return {

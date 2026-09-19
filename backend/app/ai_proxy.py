@@ -983,17 +983,35 @@ _DECK_PHOTO_RULE = (
 )
 
 
+def _format_research_claims(claims: list[dict]) -> str:
+    """把 content_research.research_topic() 校验通过的知识点格式化成 prompt 文本——
+    仿照 content_research.py 自己给提炼模型编号来源的写法（_build_extraction_prompt），
+    每条知识点带上来源方便大纲生成模型知道这是有出处的真实素材，不是它自己编的。"""
+    blocks = []
+    for i, c in enumerate(claims):
+        blocks.append(
+            f'[{i + 1}] 知识点：{c.get("claim", "")}\n'
+            f'来源：{c.get("site_name", "")}（{c.get("source_url", "")}）\n'
+            f'原文引用："{c.get("quote", "")}"'
+        )
+    return "\n\n".join(blocks)
+
+
 async def _gen_deck_outline(
     topic: str,
     sections: int,
     extra: str = "",
     material: str = "",
+    research_claims: str = "",
     photo_tags: list[str] | None = None,
     ref_layouts: list[str] | None = None,
     ref_density: str = "",
 ) -> dict:
-    """主题（或整份资料）→ PPT 大纲 JSON（含 title/subtitle/sections + palette + mood）。
+    """主题（或整份资料/联网核实过的知识点）→ PPT 大纲 JSON（含 title/subtitle/sections + palette + mood）。
     material 非空时走"重组资料"模式：标题/内容全部从资料提炼，不新增资料里没有的信息。
+    research_claims 非空时走"联网核实知识点"模式：内容必须基于这些已校验的事实素材组织语言，
+    不能编造素材之外的事实——跟 material 模式的"一字不能丢"是不同的纪律（material 是一篇连续
+    文档必须完整保留，research_claims 是若干条独立的已验证事实，可以自由组织语言但不能超纲）。
     photo_tags 非空时让模型给合适的 slide 标 "image":编号。
     ref_layouts / ref_density：参考图归类出来的通用版式偏好，只做倾向性引导，内容不契合就不用。"""
     extra_line = f"用户补充要求：{extra}。\n" if extra else ""
@@ -1027,6 +1045,23 @@ async def _gen_deck_outline(
             f"{extra_line}{ref_line}"
             f"{_DECK_JSON_SPEC}{photo_rule}\n"
             f"【资料原文】\n{material}"
+        )
+    elif research_claims:
+        prompt = (
+            f"你是资深 PPT 设计师。为主题「{topic}」写一份幻灯片大纲，并给出配套的视觉方案。\n"
+            "【硬性要求·只能用已核实的事实】下面【联网核实的知识点】是真实检索、抓取网页原文后"
+            "逐字校验过的可信素材，每条都标了来源和原文引用：\n"
+            "- 你写的内容必须基于这些素材组织语言，可以用自己的话解释、串联、扩写说明，"
+            "但不能编造这些素材之外的事实、数据、例题或结论——素材里没提到的细节宁可不写，"
+            "也不能凭自己的知识补充（哪怕你觉得那是对的）。\n"
+            "- 素材条数有限，不需要每条都用上，也不需要每页都对应一条素材——用它们支撑内容的"
+            "准确性，其余组织性的话（过渡句、总结句、结构安排）可以自由发挥。\n"
+            "- 如果素材内容单薄、撑不起用户要求的完整篇幅，按素材能支撑的量来写，不要为了凑够"
+            "页数/字数而编造素材里没有的具体事实。\n"
+            f"{extra_line}{ref_line}"
+            f"{_DECK_JSON_SPEC}{photo_rule}\n"
+            f"要求：sections 生成 {sections} 个；title/heading 精炼。\n"
+            f"【联网核实的知识点】\n{research_claims}"
         )
     else:
         prompt = (
@@ -1296,7 +1331,7 @@ async def _gen_deck_hero(outline: dict) -> bytes | None:
 
 async def _run_deck_job(
     job_id, user_id, ticket, topic, n, theme, extra, ai_bg, material="", photos=None, palette=None,
-    ref_layouts=None, ref_density="", ref_motif="", bg_detail="shared", ref_hero="",
+    ref_layouts=None, ref_density="", ref_motif="", bg_detail="shared", ref_hero="", research_claims="",
 ):
     from app.database import SessionLocal
 
@@ -1307,7 +1342,7 @@ async def _run_deck_job(
         if user is None:
             raise RuntimeError("用户不存在")
         outline = await _gen_deck_outline(
-            topic, n, extra, material, [p["tag"] for p in photos] if photos else None,
+            topic, n, extra, material, research_claims, [p["tag"] for p in photos] if photos else None,
             ref_layouts=ref_layouts, ref_density=ref_density,
         )
         outline = deck_gen.normalize_outline_text(outline)
@@ -1371,6 +1406,42 @@ def _refund_safely(user_id, ticket):
         pass
     finally:
         d2.close()
+
+
+async def _run_deck_research_job(
+    job_id, user_id, ticket, query, n, theme, extra, ai_bg, photos=None, palette=None,
+    ref_layouts=None, ref_density="", ref_motif="", bg_detail="shared", ref_hero="",
+):
+    """联网搜索知识点这一步放进 job 里做（不是在路由里同步跑完再建 job）——research_topic()
+    本身就是 1 次搜索+最多 5 次抓取+1 次提炼模型调用串联，加起来可能到 1 分钟量级，跟大纲生成
+    同一个"不能同步等、会被 nginx 网关超时"的道理，必须先返回 jobId 再在后台跑。
+    搜不到能核实的知识点（status!="ok" 或过滤后一条都不剩）直接判 job 失败并退款，不静默降级成
+    "让大模型自己编"——这是用户明确要的"严格模式"：校验不过的知识点不能用，不是弱提示。"""
+    try:
+        research = await content_research.research_topic(query)
+        verified = [c for c in research.get("results", []) if c.get("confidence") == "verified"]
+        if research.get("status") != "ok" or not verified:
+            _refund_safely(user_id, ticket)
+            _HANDOUT_JOBS[job_id] = {
+                "status": "error",
+                "detail": "联网没搜到能核实的知识点，建议换成「传资料」模式，自己上传课本/教案更可靠。",
+                "user_id": user_id,
+            }
+            return
+    except content_research.ResearchUnavailable as e:
+        _refund_safely(user_id, ticket)
+        _HANDOUT_JOBS[job_id] = {"status": "error", "detail": str(e), "user_id": user_id}
+        return
+    except Exception as e:  # noqa: BLE001
+        _refund_safely(user_id, ticket)
+        _HANDOUT_JOBS[job_id] = {"status": "error", "detail": f"联网搜索失败：{e}", "user_id": user_id}
+        return
+
+    claims_text = _format_research_claims(verified)
+    await _run_deck_job(
+        job_id, user_id, ticket, query, n, theme, extra, ai_bg, "", photos, palette,
+        ref_layouts, ref_density, ref_motif, bg_detail, ref_hero, research_claims=claims_text,
+    )
 
 
 @router.post("/design/deck")
@@ -1923,6 +1994,48 @@ async def design_deck_material(
         _run_deck_job(
             job_id, user.id, ticket, "", n, theme, extra.strip()[:300], ai_bg2, material, photos, ref_pal,
             ref_layouts, ref_density, ref_motif, bg_detail2, ref_hero2,
+        )
+    )
+    return {"jobId": job_id}
+
+
+@router.post("/design/deck/research")
+async def design_deck_research(
+    payload: DeckRequest,
+    user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """「联网查知识点生成 PPT」：payload.topic 当搜索查询词，真实联网搜索→抓取网页原文→AI提炼→
+    逐字校验，只用校验通过（confidence="verified"）的知识点喂给大纲生成，校验不过的知识点直接
+    不用——不是弱提示，是硬性过滤。跟 /design/deck 共用同一个 DeckRequest 请求体（topic 字段
+    在这里的含义是查询词，不是要直接展示的标题）。始终走异步 job（轮询 /design/handout/job/{id}），
+    联网搜索这一步本身可能就要 30~60s，必须放进 job 里跑，不能同步等完再建 job。计费「AIPPT」，
+    搜索这一步不单独扣费；搜不到能核实的知识点会自动退款并把 job 判成 error。"""
+    _require_openlux()
+    query = payload.topic.strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="请填写要搜索的课题")
+    extra = payload.extra.strip()[:300]
+    await _moderate_text(query + " " + extra)
+    n = min(6, max(2, payload.sections))
+    photos = _clean_deck_photos(payload.photos)
+    ref_pal = [c for c in (payload.palette or []) if re.match(r"^#[0-9a-fA-F]{6}$", str(c))][:5]
+    ref_pal = ref_pal if len(ref_pal) == 5 else None
+    ticket = billing.consume(db, user, "AIPPT")
+    ai_bg = bool(payload.ai_bg)
+    ref_layouts, ref_density, ref_motif = _clean_ref_hints(
+        payload.ref_layouts, payload.ref_density, payload.ref_motif
+    )
+    bg_detail = payload.bg_detail if payload.bg_detail in ("section", "slide") else "shared"
+    ref_hero = payload.ref_hero.strip() if re.match(r"^/api/ai/generated/[\w.-]+$", payload.ref_hero.strip()) else ""
+
+    job_id = uuid.uuid4().hex
+    _HANDOUT_JOBS[job_id] = {"status": "pending", "user_id": user.id}
+    _prune_handout_jobs()
+    asyncio.create_task(
+        _run_deck_research_job(
+            job_id, user.id, ticket, query, n, payload.theme, extra, ai_bg, photos, ref_pal,
+            ref_layouts, ref_density, ref_motif, bg_detail, ref_hero,
         )
     )
     return {"jobId": job_id}

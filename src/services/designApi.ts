@@ -487,6 +487,39 @@ export async function generateDeck(
 }
 
 /**
+ * 联网查知识点生成 PPT：query 当搜索查询词，后端真实联网搜索→抓取网页原文→AI提炼→逐字校验，
+ * 只用校验通过的知识点生成大纲——跟 /design/deck 共用同一套请求参数形状（topic 字段在这里
+ * 是查询词），始终异步（搜索本身可能要 30~60s，不能同步等）。搜不到能核实的知识点时，
+ * 轮询会拿到 status:'error'，pollDeckJob 会把 detail 文案原样抛出来给上层展示。
+ */
+export async function generateDeckFromResearch(
+  query: string,
+  sections: number,
+  theme: string,
+  extra = '',
+  aiBg = false,
+  photos: DeckPhoto[] = [],
+  palette: string[] = [],
+  refHints: DeckRefHints = {},
+  bgDetail: DeckBgDetail = 'shared',
+  refHero = '',
+): Promise<DeckResult> {
+  const { jobId } = await authPostJson<{ jobId: string }>(
+    '/design/deck/research',
+    {
+      topic: query, sections, theme, extra, ai_bg: aiBg, photos, palette,
+      ref_layouts: refHints.layouts ?? [],
+      ref_density: refHints.density ?? '',
+      ref_motif: refHints.motif ?? '',
+      bg_detail: bgDetail,
+      ref_hero: refHero,
+    },
+    'PPT 生成失败',
+  )
+  return pollDeckJob(jobId)
+}
+
+/**
  * 传资料生成 PPT：上传 Word/PDF/txt/图片，或直接粘贴长文本 → AI 重组成大纲 → 一套幻灯片。
  * 内容全部来自用户资料。始终异步。file 与 pastedText 二选一。
  */

@@ -6,6 +6,7 @@ import { textToPptx, imagesToPptx } from '../../../../services/pdfApi'
 import {
   generateDeck,
   generateDeckFromMaterial,
+  generateDeckFromResearch,
   uploadDeckPhotos,
   analyzeDeckReference,
   deckToPptx,
@@ -112,16 +113,23 @@ const cwSubject = ref('数学')
 const cwGrade = ref('三年级')
 const cwSemester = ref<'上册' | '下册'>('上册')
 const cwLesson = ref('')
-// 课件内容来源：填课题（AI 自己出内容）或传资料（老师已经整理好的图片/文字/文档，
-// AI 只重新组织结构、不能编内容）——跟顶层"填主题/传资料"是同一个思路，复用同一套
-// matFile/matText 状态和上传逻辑，不用再声明一套
-const cwSource = ref<'topic' | 'material'>('topic')
+// 课件内容来源：填课题（AI 自己出内容）/ 传资料（老师已经整理好的图片/文字/文档，AI 只
+// 重新组织结构、不能编内容）/ 联网查知识点（真实联网搜索+抓取网页原文+逐字校验，只用
+// 校验通过的知识点，见 CW_EXTRA_RESEARCH_NOTE）——跟顶层"填主题/传资料"是同一个思路，
+// 复用同一套 matFile/matText 状态和上传逻辑，不用再声明一套
+const cwSource = ref<'topic' | 'material' | 'search'>('topic')
 /** 资料模式下追加的一句提醒——防止 AI 把"按教学环节组织"理解成"可以为了凑环节编内容"，
  * 资料里没有的例题/练习题不能瞎编，只能整理老师已经给的内容。 */
 const CW_EXTRA_MATERIAL_NOTE =
   '这次是老师上传的现成资料（教案/讲义/图片扫描件等），把资料内容分配进上面这几个教学' +
   '环节时只做结构整理，不能编造资料里没有的例题、数据或练习题；资料本来没有的环节（比如' +
   '没给课堂练习题）可以由你酌情补充，但补充的内容要明显标注是补充、不是资料原文。'
+/** 联网搜索模式下追加的一句提醒——后端已经把知识点限定成"联网检索+逐字校验过的真实素材"，
+ * 这里再提醒一遍模型只能拿这些素材组织语言，跟资料模式"不能编内容"是同一条纪律，
+ * 只是素材来源从用户上传变成了联网核实。 */
+const CW_EXTRA_RESEARCH_NOTE =
+  '这次的知识点来自联网搜索、逐字校验过的真实资料（大纲生成 prompt 里会附上这些已核实的' +
+  '知识点素材），只能基于这些素材组织教学内容，不能编造素材之外的具体事实、例题或数据。'
 /** 固定的教学环节指导，塞进 extra 最前面（用户自己写的补充要求接在后面，不覆盖）。
  * v2（第一版实测反馈"知识点太少、孩子看不懂"之后重写）：光给环节顺序不够，AI 会把每个
  * 环节压成两三行干巴巴的结论——真实教辅课件的信息密度和讲解深度比企业汇报高得多，
@@ -256,6 +264,7 @@ async function genDeck() {
   // 课件模式下"传资料"跟顶层"传资料"是同一件事（老师上传的现成材料），走的是
   // generateDeckFromMaterial 那条链路；课件+填课题 / 顶层填主题 都走 generateDeck
   const useMaterial = aiSource.value === 'material' || (useCourseware && cwSource.value === 'material')
+  const useResearch = useCourseware && cwSource.value === 'search'
   if (useMaterial) {
     if (!matFile.value && matText.value.trim().length < 20) {
       ElMessage.warning('上传资料文件，或粘贴至少几句文字')
@@ -300,11 +309,12 @@ async function genDeck() {
         : {}
     // 课件模式：固定的教学环节要求放最前面（传资料时额外加一句"不能编内容"提醒），
     // 行业氛围提示+用户自己写的补充要求接在后面
-    const cwSourceNote = useMaterial ? CW_EXTRA_MATERIAL_NOTE : ''
+    const cwSourceNote = useMaterial ? CW_EXTRA_MATERIAL_NOTE : useResearch ? CW_EXTRA_RESEARCH_NOTE : ''
     // 课件+传资料时资料本身没有"课题"这个概念，把教材版本/学科/年级信息塞进 extra
-    // 当背景提示（不强制，帮 AI 判断难度和措辞），而不是拼进不存在的 topic 字段
+    // 当背景提示（不强制，帮 AI 判断难度和措辞），而不是拼进不存在的 topic 字段；
+    // 搜索模式跟填课题一样有 cwLesson，同样带上
     const cwContextNote = useCourseware
-      ? `资料背景：${cwEdition.value}${cwSubject.value}${cwGrade.value}${cwSemester.value}${cwSource.value === 'topic' ? `《${cwLesson.value.trim()}》` : ''}。`
+      ? `资料背景：${cwEdition.value}${cwSubject.value}${cwGrade.value}${cwSemester.value}${cwSource.value !== 'material' ? `《${cwLesson.value.trim()}》` : ''}。`
       : ''
     // 分数认识/分数加减法这类课题追加 fraction 版式提示——只在课件模式+数学+课题带"分数"
     // 字样时拼进去，不污染其它学科/其它数学课题的 prompt
@@ -338,18 +348,31 @@ async function genDeck() {
           effBgDetail,
           refHero,
         )
-      : await generateDeck(
-          effTopic,
-          effSections,
-          theme.value,
-          effExtra,
-          aiBg.value,
-          photos,
-          refPal,
-          refHints,
-          effBgDetail,
-          refHero,
-        )
+      : useResearch
+        ? await generateDeckFromResearch(
+            effTopic,
+            effSections,
+            theme.value,
+            effExtra,
+            aiBg.value,
+            photos,
+            refPal,
+            refHints,
+            effBgDetail,
+            refHero,
+          )
+        : await generateDeck(
+            effTopic,
+            effSections,
+            theme.value,
+            effExtra,
+            aiBg.value,
+            photos,
+            refPal,
+            refHints,
+            effBgDetail,
+            refHero,
+          )
     await preloadSlideImages(r.slides as unknown as SlideData[])
     deck.value = r
     await nextTick()
@@ -457,7 +480,9 @@ async function runConvert() {
                 : aiSource === 'courseware'
                   ? cwSource === 'material'
                     ? '传教案/图片/文档 → AI 按课堂教学环节重新整理，不编造资料没有的内容'
-                    : '填教材版本+课题 → AI 按课堂教学环节（导入/新课/例题/练习/小结/作业）排一套课件'
+                    : cwSource === 'search'
+                      ? '联网搜索课本知识点，逐字校验通过的才用 → 按课堂教学环节排一套课件（搜不到会明确告知，不会瞎编）'
+                      : '填教材版本+课题 → AI 按课堂教学环节（导入/新课/例题/练习/小结/作业）排一套课件'
                   : '填主题 → AI 排一套幻灯片，可下载 PPTX 在 PowerPoint 里改'
           "
           :type="authStore.isAuthenticated ? 'success' : 'info'"
@@ -524,17 +549,17 @@ async function runConvert() {
           </div>
           <div class="flex gap-1.5">
             <button
-              v-for="s in (['topic', 'material'] as const)"
+              v-for="s in (['topic', 'search', 'material'] as const)"
               :key="s"
               class="flex-1 rounded-md border px-2 py-1 text-[11px] transition"
               :class="cwSource === s ? 'border-violet-500 bg-violet-50 text-violet-600' : 'border-gray-200 text-gray-500'"
               @click="cwSource = s"
             >
-              {{ s === 'topic' ? '填课题' : '传资料（教案/图片/文档）' }}
+              {{ s === 'topic' ? '填课题' : s === 'search' ? '联网查知识点' : '传资料（教案/图片/文档）' }}
             </button>
           </div>
           <el-input
-            v-if="cwSource === 'topic'"
+            v-if="cwSource === 'topic' || cwSource === 'search'"
             v-model="cwLesson"
             size="small"
             placeholder="课题，例：分数的简单计算"
@@ -766,7 +791,7 @@ async function runConvert() {
             aiSource === 'topic'
               ? !topic.trim()
               : aiSource === 'courseware'
-                ? cwSource === 'topic'
+                ? cwSource === 'topic' || cwSource === 'search'
                   ? !cwLesson.trim()
                   : !matFile && matText.trim().length < 20
                 : !matFile && matText.trim().length < 20
@@ -783,7 +808,9 @@ async function runConvert() {
                     : 'AI 画背景 + 排版中…（约 2~4 分钟）'
                 : aiSource === 'material'
                   ? 'AI 提炼重组中…（约 1~3 分钟）'
-                  : 'AI 排版中…（约 20~40 秒）'
+                  : aiSource === 'courseware' && cwSource === 'search'
+                    ? 'AI 联网检索知识点 + 排版中…（约 2~4 分钟）'
+                    : 'AI 排版中…（约 20~40 秒）'
               : '生成 PPT'
           }}
         </el-button>
