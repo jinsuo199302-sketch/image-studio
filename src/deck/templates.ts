@@ -951,6 +951,8 @@ export type DeckLayout =
   | 'hex_chain'
   | 'pinwheel'
   | 'fraction'
+  | 'stroke_order'
+  | 'word_photos'
 export interface DeckSlideIn {
   /** LLM 判断的版式类型；缺失时按内容推断 */
   layout?: DeckLayout | string
@@ -980,8 +982,11 @@ export interface DeckSlideIn {
   icons?: string[]
   /** 真实照片 URL（用户上传 / AI 生成）——有则这一页排成「图文分栏」，几何风套图框 */
   image?: string
-  /** 一组照片 URL（正好 2~3 张）——gallery 版式：几何图框照片墙 */
+  /** 一组照片 URL（正好 2~3 张）——gallery 版式：几何图框照片墙；word_photos 版式复用同一字段但要 4~6 张 */
   images?: string[]
+  /** 汉字笔顺：后端按 hanzi_char（LLM 只需给一个字）真实抓取 hanzi-writer-data CDN 的笔画路径挂在这里，
+   * 前端只管照真实笔顺渲染，不用也不该自己猜笔画怎么画 */
+  hanzi?: { char: string; pinyin?: string; strokes: string[]; medians: number[][][] }
   /** 这一页专属的 AI 正文底图（按章节/按页独立配图模式）——非几何风优先用它，没有就退回 outline.bg.content 那张共用底图 */
   bg?: string
 }
@@ -1833,6 +1838,26 @@ function css(t: DeckTheme): string {
   .gallery .gcell .gph::after{content:"";position:absolute;left:0;bottom:0;width:52px;height:7px;background:${t.accent}}
   .gallery .gcell .gph img{width:100%;height:100%;object-fit:cover}
   .gallery .gcell .gcap{font-size:14.5px;font-weight:600;color:${t.ink};text-align:center;line-height:1.5;max-width:300px}
+  /* 密集词语配图：4~6 格 grid，短语叠在图片底部（白字+渐变暗角），不是图下方单独一行长说明 */
+  .wordphotos{flex:1;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(2,1fr);gap:20px;margin-top:14px}
+  .wordphotos .wpcell{position:relative;border-radius:10px;overflow:hidden}
+  .wordphotos .wpcell img{width:100%;height:100%;object-fit:cover;display:block}
+  .wordphotos .wpcap{position:absolute;left:0;right:0;bottom:0;padding:10px 14px 12px;
+    background:linear-gradient(0deg,rgba(0,0,0,.62),rgba(0,0,0,0));color:#fff;font-size:16px;font-weight:700;line-height:1.3}
+  /* 汉字笔顺：田字格 + 真实笔画路径叠编号圆点，右侧汉字/拼音/组词 */
+  .hanzi-wrap{flex:1;display:flex;align-items:center;justify-content:center;gap:60px;margin-top:10px}
+  .hanzi-chart{position:relative;width:420px;height:420px;flex:none}
+  .hzgrid,.hzstroke{position:absolute;inset:0}
+  .hzsvgwrap{position:relative;width:100%;height:100%}
+  .hzsvgwrap svg{position:absolute;inset:0;width:100%;height:100%}
+  .hznum{position:absolute;transform:translate(-50%,-50%);width:34px;height:34px;border-radius:50%;
+    color:#fff;font-size:16px;font-weight:800;display:flex;align-items:center;justify-content:center;
+    box-shadow:0 0 0 3px #fff;font-family:"Arial","Microsoft YaHei",sans-serif}
+  .hzlabel{display:flex;flex-direction:column;align-items:flex-start;gap:14px}
+  .hzchar{font-size:110px;font-weight:700;color:${t.primaryDk};line-height:1}
+  .hzpinyin{font-size:22px;color:${t.accent};font-weight:600;letter-spacing:1px}
+  .hzwords{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+  .hzword{font-size:17px;color:${t.ink};background:${t.primary}0f;border-radius:8px;padding:8px 16px}
   /* 蜂窝六边形群 */
   .hive{flex:1;position:relative;align-self:stretch;width:100%;margin-top:8px}
   .hive .hvc{position:absolute;transform:translate(-50%,-50%);width:158px;height:180px;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:14px;font-size:13px;font-weight:600;line-height:1.3}
@@ -2535,6 +2560,8 @@ const CONTENT_LAYOUTS = new Set([
   'arrow_flank',
   'ring_tag',
   'fraction',
+  'stroke_order',
+  'word_photos',
 ])
 
 function spokeLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
@@ -2643,6 +2670,78 @@ function galleryLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
   return bodySlide(o, `${head(sl, en, o)}<div class="gallery">${cells}</div>`)
 }
 
+/** 密集词语配图：4~6 张小图，每张叠一句短语说明（白字压图片底部，跟 gallery 那种"图下方单独一行
+ * 长说明"不是一回事）——语文识字课"云对雨、雪对风"这类逐词配图场景，gallery 的 2~3 张大图撑不下
+ * 这么多组配对，CSS 用 grid 不用 flex（gallery 那套 flex 无 wrap，塞 6 张会直接溢出画布）。 */
+function wordPhotosLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
+  const pics = (sl.images || []).filter(Boolean).slice(0, 6)
+  const caps = (sl.bullets || []).map((s) => s.trim()).filter(Boolean)
+  const cells = pics
+    .map(
+      (u, i) =>
+        `<div class="wpcell"><img src="${esc(u)}" crossorigin="anonymous">${
+          caps[i] ? `<div class="wpcap">${esc(caps[i])}</div>` : ''
+        }</div>`,
+    )
+    .join('')
+  return bodySlide(o, `${head(sl, en, o)}<div class="wordphotos">${cells}</div>`)
+}
+
+/** 田字格参考线——纯几何 SVG，固定构图，跟 starBadge/sealStamp 一样手写一份全篇复用 */
+function hanziGrid(color: string, size = 420): string {
+  const half = size / 2
+  return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">
+    <rect x="2" y="2" width="${size - 4}" height="${size - 4}" fill="none" stroke="${color}" stroke-width="3"/>
+    <line x1="${half}" y1="0" x2="${half}" y2="${size}" stroke="${color}" stroke-width="1.5" stroke-dasharray="6 6"/>
+    <line x1="0" y1="${half}" x2="${size}" y2="${half}" stroke="${color}" stroke-width="1.5" stroke-dasharray="6 6"/>
+  </svg>`
+}
+/** 汉字笔顺：把后端从 hanzi-writer-data 真实抓到的笔画路径按顺序画出来（真实字体笔顺数据，不是
+ * 代码猜的），每一笔起笔位置叠一个编号圆点标明顺序。makemeahanzi 原始数据的字符边界框固定是
+ * x:[0,1024] y:[-124,900]（字体惯例 Y 轴朝上，来自 hanzi-writer 自己 Positioner.ts 的真实换算
+ * 关系，不是猜的），贴到 SVG（viewBox 0 0 1024 1024、Y 轴朝下）要用 matrix(1,0,0,-1,0,900) 整体
+ * 翻转笔画路径。编号数字必须是 HTML div，不能塞进被翻转的 SVG <g> 里当 <text>——那样数字本身
+ * 也会跟着倒转/镜像，而且这个项目的规矩是文字一律走 HTML div（measureSlide 只认 HTML 文字节点，
+ * 导出 PPTX 才是可编辑文本框），只把纯几何路径放进翻转的 <g>，数字按翻转后的百分比坐标单独定位。 */
+function hanziStrokes(t: DeckTheme, strokes: string[], medians: number[][][], size = 420): string {
+  const box = 1024
+  const paths = strokes.map((d) => `<path d="${d}" fill="${t.primary}"/>`).join('')
+  const svg = `<svg viewBox="0 0 ${box} ${box}" width="${size}" height="${size}">
+    <g transform="matrix(1,0,0,-1,0,900)">${paths}</g>
+  </svg>`
+  const nums = medians
+    .map((m, i) => {
+      const [fx, fy] = m[0] || [0, 0]
+      const sx = ((fx / box) * 100).toFixed(2)
+      const sy = (((900 - fy) / box) * 100).toFixed(2)
+      return `<div class="hznum" style="left:${sx}%;top:${sy}%;background:${t.accent}">${i + 1}</div>`
+    })
+    .join('')
+  return `<div class="hzsvgwrap">${svg}${nums}</div>`
+}
+function hanziLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
+  const t = o.theme
+  const h = sl.hanzi!
+  const words = (sl.bullets || []).map((s) => s.trim()).filter(Boolean).slice(0, 3)
+  const wordsHtml = words.length
+    ? `<div class="hzwords">${words.map((w) => `<div class="hzword">${esc(w)}</div>`).join('')}</div>`
+    : ''
+  return bodySlide(
+    o,
+    `${head(sl, en, o)}<div class="hanzi-wrap">
+      <div class="hanzi-chart">
+        <div class="hzgrid">${hanziGrid(t.ink + '33')}</div>
+        <div class="hzstroke">${hanziStrokes(t, h.strokes, h.medians)}</div>
+      </div>
+      <div class="hzlabel">
+        <div class="hzchar">${esc(h.char)}</div>
+        ${h.pinyin ? `<div class="hzpinyin">${esc(h.pinyin)}</div>` : ''}
+        ${wordsHtml}
+      </div>
+    </div>`,
+  )
+}
+
 /** LLM 给的 layout 优先，缺失/对不上数据就按 payload 推断 */
 export function resolveLayout(sl: DeckSlideIn): string {
   let lay = String(sl.layout || '').trim().toLowerCase()
@@ -2695,8 +2794,16 @@ export function resolveLayout(sl: DeckSlideIn): string {
   )
     lay = ''
   if (lay === 'gallery' && (sl.images || []).filter(Boolean).length < 2) lay = ''
+  // word_photos 要 4~6 张短语配图（比 gallery 的 2~3 张密），少于 4 张退回 gallery 走推断
+  if (lay === 'word_photos' && (sl.images || []).filter(Boolean).length < 4) lay = ''
+  // stroke_order：后端已经真实抓过笔画路径才会有 sl.hanzi，抓取失败/没配字就没有这个字段，
+  // 直接退回 list/cards 让 LLM 写的组词/说明当普通内容展示，不留一个没有笔顺数据的空页面
+  if (lay === 'stroke_order' && !sl.hanzi?.strokes?.length) lay = ''
   if (CONTENT_LAYOUTS.has(lay)) return lay
-  if ((sl.images || []).filter(Boolean).length >= 2) return 'gallery'
+  if (sl.hanzi?.strokes?.length) return 'stroke_order'
+  const imgCount = (sl.images || []).filter(Boolean).length
+  if (imgCount >= 4) return 'word_photos'
+  if (imgCount >= 2) return 'gallery'
   if (sl.table?.columns?.length && sl.table?.rows?.length) return 'table'
   if (sl.data?.kind === 'ring' && sl.data.items?.length) return 'rings'
   if (sl.data?.kind === 'line' && sl.data.items?.length) return 'line'
@@ -2743,6 +2850,7 @@ export function composeDeck(o: DeckOutline): { styleTag: string; slides: string[
       else if (lay === 'hive') html = hiveLayout(sl, en, o)
       else if (lay === 'cycle') html = cycleLayout(sl, en, o)
       else if (lay === 'gallery') html = galleryLayout(sl, en, o)
+      else if (lay === 'word_photos') html = wordPhotosLayout(sl, en, o)
       else if (lay === 'tree') html = treeLayout(sl, en, o)
       else if (lay === 'diamond') html = diamondLayout(sl, en, o)
       else if (lay === 'bulb') html = bulbLayout(sl, en, o)
@@ -2754,6 +2862,7 @@ export function composeDeck(o: DeckOutline): { styleTag: string; slides: string[
       else if (lay === 'arrow_flank') html = arrowFlankLayout(sl, en, o)
       else if (lay === 'ring_tag') html = ringTagLayout(sl, en, o)
       else if (lay === 'fraction') html = fractionLayout(sl, en, o)
+      else if (lay === 'stroke_order') html = hanziLayout(sl, en, o)
       else if (lay === 'table') html = tableLayout(sl, en, o)
       else if (
         lay === 'bar' || lay === 'stats' || lay === 'line' ||

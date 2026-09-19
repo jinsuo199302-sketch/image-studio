@@ -176,6 +176,12 @@ const CARTOON_THEME_HINT =
 const CW_EXTRA_FRACTION_NOTE =
   '本课涉及分数认识/分数加减法这类需要精确图示的内容时，例题精讲和课堂练习优先用 fraction ' +
   '版式画精确的分数图（分数圆+分数竖式），不要只用文字描述分数关系。'
+/** 语文识字/写字类课题追加的一句提示——只在"课件模式+语文+课题带识字/写字/笔顺/生字字样"时
+ * 拼进 extra，同 fraction 那条一样不污染 CW_EXTRA_TEMPLATE 本身和其它语文课题的 prompt。 */
+const CW_EXTRA_STROKE_NOTE =
+  '本课涉及生字书写教学时，新课讲解或例题精讲环节针对1~2个本课重点生字使用 stroke_order ' +
+  '版式精确演示笔顺（系统会去真实笔顺数据库查这个字画出来），不要只用文字描述笔画顺序；' +
+  'hanzi_char 只能填最常见的简体字（查不到会自动跳过这一页）。'
 const topic = ref('')
 const sections = ref(4)
 const theme = ref('auto')
@@ -327,11 +333,17 @@ async function genDeck() {
     // 字样时拼进去，不污染其它学科/其它数学课题的 prompt
     const cwFractionNote =
       useCourseware && cwSubject.value === '数学' && /分数/.test(cwLesson.value) ? CW_EXTRA_FRACTION_NOTE : ''
+    // 识字/写字类课题追加 stroke_order 版式提示——只在课件模式+语文+课题带识字/写字/笔顺/
+    // 生字字样时拼进去，同 fraction 那条一样不污染其它学科/其它语文课题的 prompt
+    const cwStrokeNote =
+      useCourseware && cwSubject.value === '语文' && /识字|写字|笔顺|生字/.test(cwLesson.value)
+        ? CW_EXTRA_STROKE_NOTE
+        : ''
     // 选了"卡通课件"主题色块时追加视觉风格提示——theme 不会传进大纲生成 prompt，
     // 不主动拼这段的话 AI 写出的 cover_image_prompt 跟选别的颜色没区别
     const cartoonNote = theme.value === 'cartoon' ? CARTOON_THEME_HINT : ''
     const effExtra = useCourseware
-      ? [cwContextNote, CW_EXTRA_TEMPLATE, cwFractionNote, cwSourceNote, cartoonNote, extra.value.trim()]
+      ? [cwContextNote, CW_EXTRA_TEMPLATE, cwFractionNote, cwStrokeNote, cwSourceNote, cartoonNote, extra.value.trim()]
           .filter(Boolean)
           .join('；')
       : [industryPreset?.hint, cartoonNote, extra.value.trim()].filter(Boolean).join('；')

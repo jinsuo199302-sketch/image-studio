@@ -744,6 +744,20 @@ def _fraction_bullets(d: dict) -> list[str]:
     return bullets
 
 
+def _hanzi_bullets(sl: dict) -> list[str]:
+    """Python 备用路没有画笔顺路径的能力，把汉字/拼音/组词拼成文字行交给通用 _content() 兜底
+    渲染——HTML 路（templates.ts 的 hanziLayout）才是用真实笔顺数据精确画笔画的那条路。"""
+    h = sl.get("hanzi") or {}
+    char = str(h.get("char") or "").strip()
+    pinyin = str(h.get("pinyin") or "").strip()
+    bullets = [f"生字：{char}" + (f"（{pinyin}）" if pinyin else "")]
+    for w in sl.get("bullets") or []:
+        w = str(w).strip()
+        if w:
+            bullets.append(f"组词：{w}")
+    return bullets
+
+
 def build_deck(outline: dict, theme_key: str = "red", bg: dict | None = None) -> list[dict]:
     """bg = {"cover": url, "content": url, "section": url} 可选（AI 生成的整页背景）。"""
     t = _mk_theme(theme_key, outline.get("palette"))
@@ -786,6 +800,8 @@ def build_deck(outline: dict, theme_key: str = "red", bg: dict | None = None) ->
                 slides.append(_chart(t, i, ttl, en, k, d.get("items") or [], page, cbg))
             elif lay == "fraction" and d and d.get("items"):
                 slides.append(_content(t, i, ttl, en, (sl.get("intro") or "").strip(), _fraction_bullets(d), page, cbg, img, "list"))
+            elif lay == "stroke_order" and isinstance(sl.get("hanzi"), dict):
+                slides.append(_content(t, i, ttl, en, (sl.get("intro") or "").strip(), _hanzi_bullets(sl), page, cbg, img, "list"))
             elif lay == "big_number" and bn:
                 slides.append(_big_number(t, i, ttl, en, bn, page, cbg))
             elif lay == "table" and tbl and tbl.get("rows"):
@@ -817,6 +833,7 @@ _CONTENT_LAYOUTS = {
     "tree", "diamond", "bulb", "line", "table", "radar", "waterfall", "gauge",
     "mountain", "hex_chain", "pinwheel",
     "circle_chain", "serpentine", "half_moon", "arrow_flank", "ring_tag", "fraction",
+    "stroke_order", "word_photos",
 }
 
 
@@ -846,6 +863,12 @@ def resolve_layout(sl: dict) -> str:
         lay = ""
     if lay == "tree" and len([b for b in (sl.get("bullets") or []) if str(b).strip()]) < 2:
         lay = ""
+    if lay == "stroke_order" and not isinstance(sl.get("hanzi"), dict):
+        lay = ""
+    if lay == "word_photos" and not (
+        isinstance(sl.get("images"), list) and len([u for u in sl["images"] if isinstance(u, str)]) >= 4
+    ):
+        lay = ""
     if lay in _CONTENT_LAYOUTS:
         return lay
     if isinstance(sl.get("table"), dict) and sl["table"].get("rows"):
@@ -870,8 +893,14 @@ def resolve_layout(sl: dict) -> str:
     d = sl.get("data")
     if isinstance(d, dict) and d.get("items"):
         return "bar" if d.get("kind") == "bar" else "stats"
-    if isinstance(sl.get("images"), list) and len([u for u in sl["images"] if isinstance(u, str)]) >= 2:
-        return "gallery"
+    if isinstance(sl.get("hanzi"), dict):
+        return "stroke_order"
+    if isinstance(sl.get("images"), list):
+        n = len([u for u in sl["images"] if isinstance(u, str)])
+        if n >= 4:
+            return "word_photos"
+        if n >= 2:
+            return "gallery"
     if isinstance(sl.get("image"), str) and sl["image"]:
         return "image_text"
     bl = [b for b in (sl.get("bullets") or []) if str(b).strip()]

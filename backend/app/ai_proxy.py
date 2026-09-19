@@ -928,9 +928,14 @@ _DECK_JSON_SPEC = (
     "(所有 items 的 den 分母必须一致；op 是 \"+\" 或 \"-\"，只有并列对比展示、不涉及运算时不填 op；"
     "2~4 项；最后一项通常是运算结果，label 可以留空；数字必须和标题/上下文描述的场景吻合，不能瞎编；"
     "选了 fraction 但没填 data.items 这一页会直接失效，宁可不选这个版式也不能选了不填数据)\n"
+    '- "stroke_order"：识字/写字类语文内容需要精确演示某一个生字的笔顺笔画时用(不是泛泛讲汉字,'
+    "是这节课要教学生书写的具体某一个字)。填 hanzi_char:\"某一个字\"(必须是单个汉字,只填一个,"
+    "不能填词语；系统会去真实笔顺数据库查这个字，查不到这页会自动失效，所以只能填最常见的简体字，"
+    "生僻字/繁体字/多音字异体字别选)，可选 hanzi_pinyin:\"拼音\"，可选 bullets(1~3个组词短语，"
+    "如\"大山、上山\")。同一份大纲最多用 1~2 次，只在真是识字写字课题时用。\n"
     "cover / section_divider / closing 由系统自动排,不用你选。\n"
     "分布要求:同一份大纲里 layout 至少出现 4 种以上,不要每页都是 cards;"
-    "compare/matrix/swot/big_number/spoke/hive/cycle/tree/diamond/bulb/line/table/radar/waterfall/gauge/hex_chain/pinwheel/mountain/circle_chain/serpentine/half_moon/arrow_flank/ring_tag/fraction 各最多 1~2 页,只在真契合时用；"
+    "compare/matrix/swot/big_number/spoke/hive/cycle/tree/diamond/bulb/line/table/radar/waterfall/gauge/hex_chain/pinwheel/mountain/circle_chain/serpentine/half_moon/arrow_flank/ring_tag/fraction/stroke_order/word_photos 各最多 1~2 页,只在真契合时用；"
     "table/line/radar/waterfall/gauge/mountain 涉及具体数字/结构化对比,内容里有靠谱数据支撑才用,别为了凑版式种类编数字；"
     "fraction 只在内容真的是分数认识/分数计算这类数学题材时用,不要给非数学内容硬凑。\n"
     "版式要跟文字量倒着推,不是先选版式再硬塞文字进去:节点类版式(spoke/hive/tree/diamond/bulb/hex_chain/circle_chain/serpentine)的标签贴在固定大小的图形节点上,"
@@ -964,7 +969,11 @@ _DECK_JSON_SPEC = (
     "主题实在不适合配实拍照片（纯理论 / 纯数据）就给空数组 []。\n"
     "配图分配：在 2~4 个内容契合的普通 slide（有 bullets 的）上加 \"image\": 照片编号（0 起的整数，对应 photo_prompts 里第几条）。"
     "可以另外挑 1 个 slide 把 layout 设成 \"gallery\" 并加 \"images\": [编号,编号,编号]（正好 3 张，bullets 写这 3 张的短说明）；"
-    "也可以挑 1 个 slide 把 layout 设成 \"hive\" 并加 \"images\": [编号,...]（3~6 张，bullets 写每张一句说明），做成蜂窝嵌照片。"
+    "也可以挑 1 个 slide 把 layout 设成 \"hive\" 并加 \"images\": [编号,...]（3~6 张，bullets 写每张一句说明），做成蜂窝嵌照片；"
+    "内容是一组词语/短语逐个配图对应关系(比如语文识字课\"云对雨、雪对风\"这种逐词配图,不是几张主题相关的"
+    "装饰性照片)时,挑 1 个 slide 把 layout 设成 \"word_photos\" 并加 \"images\": [编号,...]（4~6张，"
+    "跟 bullets 按顺序一一对应，每条 bullets 是2~4字的短语不是长句），密集词语配图跟 gallery 的"
+    "\"3张大图配长说明\"是两种不同的呈现意图。"
     "一张照片最多用一次；图表页 / 对比页 / SWOT / matrix / big_number 不放图；不契合宁可不放。\n"
     "hero_prompt：给一张可以在封面/章节页反复使用的透明背景主视觉插画配一句英文提示词——"
     "这跟 cover_image_prompt（整页背景场景图）完全不同，是**前景贴图**，只画一个跟主题强相关的"
@@ -1385,6 +1394,7 @@ async def _run_deck_job(
                 fallback = await _gen_per_page_content_bg(outline, detail, db, user_id)
                 if fallback:
                     bg["content"] = fallback
+        await _attach_hanzi_strokes(outline)
         slides = deck_gen.build_deck(outline, theme, bg)
         _HANDOUT_JOBS[job_id] = {
             "status": "done",
@@ -1399,6 +1409,46 @@ async def _run_deck_job(
         _HANDOUT_JOBS[job_id] = {"status": "error", "detail": f"生成失败：{e}", "user_id": user_id}
     finally:
         db.close()
+
+
+async def _fetch_hanzi_strokes(char: str) -> dict | None:
+    """从 hanzi-writer-data（MIT 生态、Make Me a Hanzi 项目的真实笔顺数据，覆盖 9000+ 常用字，
+    jsdelivr 有 CDN）按字抓真实笔画路径，返回 {strokes:[svg路径,...], medians:[[[x,y],...],...]}
+    （严格按标准笔顺排列，真实测过"山"字确认是竖→横折→竖）。生僻字不在库里/网络失败都返回 None，
+    调用方要能容忍单字失败，不能让一个字抓不到拖垮整份大纲。"""
+    from urllib.parse import quote
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            res = await client.get(f"https://cdn.jsdelivr.net/npm/hanzi-writer-data@latest/{quote(char)}.json")
+        if res.status_code != 200:
+            return None
+        data = res.json()
+        if not data.get("strokes") or not data.get("medians"):
+            return None
+        return {"strokes": data["strokes"], "medians": data["medians"]}
+    except Exception:
+        return None
+
+
+async def _attach_hanzi_strokes(outline: dict) -> None:
+    """扫描大纲里所有 layout=="stroke_order" 的 slide，把 LLM 填的 hanzi_char 换成真实笔顺数据
+    挂到 sl["hanzi"] 上——跟 _gen_per_page_content_bg() 挂 sl["bg"] 是同一个"LLM 只说要什么，
+    后端拿真实数据挂到具体这一页"的模式（ai_proxy.py 里 sl["bg"] = url 那处）。抓不到（生僻字/
+    网络问题）就把这页 layout 清空，交给前端 resolveLayout() 自己退回 list/cards，不留一个
+    "选了 stroke_order 但没有笔顺数据画不出图"的半吊子状态——跟 _backfill_fraction_data() 抓不到
+    就清空 layout 是同一个哲学。"""
+    for sec in outline.get("sections") or []:
+        for sl in sec.get("slides") or []:
+            if not isinstance(sl, dict) or sl.get("layout") != "stroke_order":
+                continue
+            char = str(sl.get("hanzi_char") or "").strip()
+            char = char[0] if char else ""
+            data = await _fetch_hanzi_strokes(char) if char else None
+            if not data:
+                sl["layout"] = ""
+                continue
+            sl["hanzi"] = {"char": char, "pinyin": str(sl.get("hanzi_pinyin") or "").strip(), **data}
 
 
 def _refund_safely(user_id, ticket):
