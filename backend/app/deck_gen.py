@@ -116,6 +116,7 @@ _FALLBACK = {
     "liti":     ["#5b6b7a", "#8a94a3", "#333a45", "#f4f5f7", "#2b2f36"],
     "dangzheng": ["#9c1d22", "#c9a227", "#5c0e12", "#faf4e8", "#2b1f1a"],
     "ink":      ["#3d5a6c", "#a8342c", "#22333f", "#f3ead8", "#241f1a"],
+    "cartoon":  ["#3c9d6b", "#4fb6e8", "#1d4b37", "#fffdf5", "#3a3a3a"],
     "dark":   ["#e8b04b", "#3f7cc4", "#c8963a", "#1c2230", "#f2f2f2"],
 }
 
@@ -724,6 +725,25 @@ def _closing(t: dict, title: str, bg: str | None) -> dict:
     return {"background": t["paper"], "elements": els, "w": W, "h": H}
 
 
+def _fraction_bullets(d: dict) -> list[str]:
+    """Python 备用路没有画分数圆的能力，把 fraction 数据拼成文字行交给通用 _content() 兜底渲染，
+    不追求还原图形——HTML 路（templates.ts 的 fractionLayout）才是精确画分数圆的那条路。"""
+    items = d.get("items") or []
+    op = d.get("op")
+    bullets = []
+    for it in items:
+        num, den = it.get("value"), it.get("den")
+        label = str(it.get("label") or "").strip()
+        frac = f"{num}/{den}"
+        bullets.append(f"{label}：{frac}" if label else frac)
+    if op and len(items) >= 2:
+        eq = f" {op} ".join(f"{it.get('value')}/{it.get('den')}" for it in items[:-1])
+        last = items[-1]
+        eq += f" = {last.get('value')}/{last.get('den')}"
+        bullets.append(f"算式：{eq}")
+    return bullets
+
+
 def build_deck(outline: dict, theme_key: str = "red", bg: dict | None = None) -> list[dict]:
     """bg = {"cover": url, "content": url, "section": url} 可选（AI 生成的整页背景）。"""
     t = _mk_theme(theme_key, outline.get("palette"))
@@ -764,6 +784,8 @@ def build_deck(outline: dict, theme_key: str = "red", bg: dict | None = None) ->
             elif lay in ("bar", "stats", "rings", "line", "radar", "waterfall", "gauge", "mountain", "ring_tag") and d and d.get("items"):
                 k = "stat" if d.get("kind") == "ring" else "bar"  # python 备用路把 ring/line/radar/waterfall/gauge/mountain/ring_tag 都简化画成 bar
                 slides.append(_chart(t, i, ttl, en, k, d.get("items") or [], page, cbg))
+            elif lay == "fraction" and d and d.get("items"):
+                slides.append(_content(t, i, ttl, en, (sl.get("intro") or "").strip(), _fraction_bullets(d), page, cbg, img, "list"))
             elif lay == "big_number" and bn:
                 slides.append(_big_number(t, i, ttl, en, bn, page, cbg))
             elif lay == "table" and tbl and tbl.get("rows"):
@@ -794,7 +816,7 @@ _CONTENT_LAYOUTS = {
     "compare", "matrix", "swot", "image_text", "spoke", "hive", "cycle", "gallery",
     "tree", "diamond", "bulb", "line", "table", "radar", "waterfall", "gauge",
     "mountain", "hex_chain", "pinwheel",
-    "circle_chain", "serpentine", "half_moon", "arrow_flank", "ring_tag",
+    "circle_chain", "serpentine", "half_moon", "arrow_flank", "ring_tag", "fraction",
 }
 
 
@@ -810,6 +832,11 @@ def resolve_layout(sl: dict) -> str:
         lay = ""
     if lay == "table" and not (isinstance(sl.get("table"), dict) and sl["table"].get("rows")):
         lay = ""
+    if lay == "fraction":
+        items = sl.get("data", {}).get("items") if isinstance(sl.get("data"), dict) else None
+        dens = {it.get("den") for it in (items or []) if isinstance(it, dict) and it.get("den") is not None}
+        if not items or len(dens) > 1:
+            lay = ""
     if lay in (
         "spoke", "hive", "cycle", "bulb", "diamond", "hex_chain", "pinwheel",
         "circle_chain", "serpentine", "half_moon",
@@ -829,6 +856,8 @@ def resolve_layout(sl: dict) -> str:
         return "line"
     if isinstance(sl.get("data"), dict) and sl["data"].get("kind") in ("radar", "waterfall", "gauge", "mountain") and sl["data"].get("items"):
         return sl["data"]["kind"]
+    if isinstance(sl.get("data"), dict) and sl["data"].get("kind") == "fraction" and sl["data"].get("items"):
+        return "fraction"
     # 兜底推断（老数据 / 模型没给 layout）
     if isinstance(sl.get("swot"), dict) and any(sl["swot"].get(k) for k in ("s", "w", "o", "t")):
         return "swot"

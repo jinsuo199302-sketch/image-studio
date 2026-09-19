@@ -34,8 +34,9 @@ export interface DeckTheme {
   /** 'geo' = 纯几何图形装饰风（白底 + 同心圆弧/圆点圈/环形进度，不用 AI 大图）
    * 'liti' = 极简微立体（近乎无色相，柔光内凹外凸投影模拟折纸/浮雕质感，不用 AI 大图）
    * 'dangzheng' = 党政红金（金色五角星+金线装饰，复用 AI 背景图管线，跟 plain 一样能配实景照片）
-   * 'ink' = 水墨中国风（水墨山影+朱红印章+Long Cang 手写标题，不用 AI 大图） */
-  style?: 'plain' | 'geo' | 'liti' | 'dangzheng' | 'ink'
+   * 'ink' = 水墨中国风（水墨山影+朱红印章+Long Cang 手写标题，不用 AI 大图）
+   * 'cartoon' = 手绘卡通课件风（黑板绿+草地花边+卡通人物，复用 AI 背景图管线画手绘插画感背景） */
+  style?: 'plain' | 'geo' | 'liti' | 'dangzheng' | 'ink' | 'cartoon'
 }
 
 /* ── 几何装饰 SVG（geo 风格用，全篇复用同一套母题）────────────── */
@@ -707,6 +708,40 @@ function gaugeChart(t: DeckTheme, value: number, label: string): string {
     <div class="gl">${esc(label)}</div>
   </div></div>`
 }
+/** 分数圆：把一个圆精确等分成 den 份扇形，前 num 份实心涂色、其余留白描边——分数教学要求
+ * "格数=分母、涂色格数=分子"必须精确，不能靠 AI 生图猜，纯 SVG 弧线路径代码画（跟折线图/雷达图
+ * 同一条"精确数据必须代码画"的规矩）。这里只画几何形，不放任何文字，数字统一走 fractionStack()。 */
+function fractionWedge(t: DeckTheme, num: number, den: number, color: string, size = 200): string {
+  const c = size / 2
+  const r = c - 6
+  const n = Math.max(1, Math.round(den))
+  const filled = Math.max(0, Math.min(n, Math.round(num)))
+  if (n === 1) {
+    return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}"><circle cx="${c}" cy="${c}" r="${r}" fill="${
+      filled >= 1 ? color : '#fff'
+    }" stroke="${t.ink}22" stroke-width="2"/></svg>`
+  }
+  const slices = Array.from({ length: n }, (_, i) => {
+    const a0 = (i / n) * 2 * Math.PI - Math.PI / 2
+    const a1 = ((i + 1) / n) * 2 * Math.PI - Math.PI / 2
+    const x0 = (c + r * Math.cos(a0)).toFixed(2)
+    const y0 = (c + r * Math.sin(a0)).toFixed(2)
+    const x1 = (c + r * Math.cos(a1)).toFixed(2)
+    const y1 = (c + r * Math.sin(a1)).toFixed(2)
+    const large = a1 - a0 > Math.PI ? 1 : 0
+    const path = `M ${c} ${c} L ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1} Z`
+    const on = i < filled
+    return `<path d="${path}" fill="${on ? color : '#fff'}" stroke="${on ? '#fff' : t.ink + '2e'}" stroke-width="2"/>`
+  }).join('')
+  return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">${slices}<circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${t.ink}22" stroke-width="2"/></svg>`
+}
+/** 分数竖式：分子/分母上下叠放、中间一条分数线——纯 HTML div（不用 SVG <text>），
+ * measureSlide 按 HTML 文字节点识别，导出 PPTX 后分子分母仍是真实可编辑文本框。 */
+function fractionStack(num: number | string, den: number | string, color: string): string {
+  return `<div class="frstack" style="color:${color}"><div class="frnum">${esc(String(num))}</div><div class="frden">${esc(
+    String(den),
+  )}</div></div>`
+}
 /** 六边形锯齿连接流程图：N 个节点（3~6）水平排开、纵向交替高低走出锯齿状，虚线依次
  * 穿过每个节点；每个节点是一个六边形图标徽标 + 一行短标签。常见的"流程/阶段对比"版式。
  * 标签走 HTML div 叠加（不用 SVG <text>），导出仍是可编辑文本框。 */
@@ -915,6 +950,7 @@ export type DeckLayout =
   | 'mountain'
   | 'hex_chain'
   | 'pinwheel'
+  | 'fraction'
 export interface DeckSlideIn {
   /** LLM 判断的版式类型；缺失时按内容推断 */
   layout?: DeckLayout | string
@@ -925,8 +961,10 @@ export interface DeckSlideIn {
   /** 演讲备注——不在画面上渲染，只挂进导出 PPTX 的"备注"栏供演讲者视图使用 */
   speaker_notes?: string
   data?: {
-    kind: 'bar' | 'stat' | 'ring' | 'line' | 'radar' | 'waterfall' | 'gauge' | 'mountain'
-    items: { label: string; value: string | number }[]
+    kind: 'bar' | 'stat' | 'ring' | 'line' | 'radar' | 'waterfall' | 'gauge' | 'mountain' | 'fraction'
+    items: { label: string; value: string | number; den?: number }[]
+    /** 仅 fraction 用：多项之间的运算符；缺省时最后一项前不显示"="，纯并列对比展示 */
+    op?: '+' | '-'
   }
   /** 数据表格：columns 是表头，rows 每行长度跟 columns 一致 */
   table?: { columns: string[]; rows: string[][] }
@@ -1222,6 +1260,32 @@ function css(t: DeckTheme): string {
   .inkseal{position:absolute;right:56px;top:52px;z-index:1;opacity:.92}
   .s-sec.ink .rule{background:${t.accent};opacity:.4}
 
+  /* 卡通课件风：圆润手写体标题（跟已加载的站酷快乐体配对），无 AI 背景时兜底一片
+     黑板绿渐变+草地波浪；.s-sec 已经默认 primaryDk 深底+白字，不用单独覆盖。 */
+  .cartoon h1,.cartoon h2{font-family:"ZCOOL KuaiLe","Microsoft YaHei",sans-serif;font-weight:400}
+  .s-cover.cartoon{background:linear-gradient(150deg,${t.primaryDk} 0%,${t.primary} 100%)}
+  .s-cover.cartoon h1,.s-cover.cartoon .sub{color:#fff}
+  .s-cover.cartoon .kick{color:${t.accent}}
+  .s-cover.cartoon .tick{background:${t.accent};border-radius:4px}
+  .s-cover.cartoon .meta{color:rgba(255,255,255,.75)}
+  .s-cover.cartoon.on-bg .scrim{background:linear-gradient(90deg,rgba(20,50,35,.82) 46%,rgba(20,50,35,0))}
+  .s-cover.cartoon.on-bg .kick{color:${t.accent}}
+  .cartgrass{position:absolute;left:0;right:0;bottom:0;z-index:0;pointer-events:none;line-height:0}
+  .cartgrass svg{width:100%;height:auto;display:block}
+  .cartgrass.s{opacity:.9}
+  .cartgrass.c{opacity:.75}
+  .s-sec.cartoon .rule{background:${t.accent};opacity:.6;border-radius:3px}
+  /* "粉笔边框卡片"：圆角大、虚线粉笔描边、奇偶交替主色/强调色——跟 ink 屏风分栏同理，
+     平整虚线描边跟 parametricBoxStyle 贴的 inline clip-path/border-radius 冲突，
+     必须 !important 才盖得掉，这里是有意为之，只用在这一处 */
+  .cartoon .cards .card{border:3px dashed ${t.primary}!important;border-radius:26px!important;clip-path:none!important;
+    background:#fff;box-shadow:0 5px 0 ${t.primary}14}
+  .cartoon .cards .card:nth-child(even){border-color:${t.accent}!important;box-shadow:0 5px 0 ${t.accent}14}
+  .cartoon .cards .card .ic{border-radius:50%}
+  .cartoon .row{border:3px dashed ${t.primary}!important;border-radius:20px!important;clip-path:none!important;
+    background:#fff;margin-bottom:10px}
+  .cartoon .row:nth-child(even){border-color:${t.accent}!important}
+
   /* 图文分栏内容页 */
   .imgrow{flex:1;display:flex;gap:54px;margin-top:24px;margin-bottom:12px;align-items:stretch}
   .imgrow.rev{flex-direction:row-reverse}
@@ -1429,6 +1493,15 @@ function css(t: DeckTheme): string {
   .gauge-box .gv{position:absolute;left:50%;top:56%;transform:translate(-50%,-50%);font-size:80px;font-weight:800;color:${t.primaryDk};font-family:"Arial","Microsoft YaHei",sans-serif}
   .gauge-box .gl{position:absolute;left:50%;bottom:2px;transform:translateX(-50%);font-size:22px;color:${t.ink};white-space:nowrap}
 
+  /* 分数图：分数圆(精确扇形涂色)+分数竖式(分子/分母/分数线)，多项间可插运算符 */
+  .frrow{flex:1;display:flex;align-items:center;justify-content:center;gap:28px;margin-top:14px;flex-wrap:wrap}
+  .fritem{display:flex;flex-direction:column;align-items:center;gap:16px}
+  .frstack{display:flex;flex-direction:column;align-items:center;font-family:"Arial","Microsoft YaHei",sans-serif;font-weight:800;line-height:1.15}
+  .frstack .frnum{font-size:36px;padding:0 6px 6px;border-bottom:4px solid currentColor}
+  .frstack .frden{font-size:36px;padding:6px 6px 0}
+  .frcap{font-size:15px;color:${t.ink}99;white-space:nowrap}
+  .frop{font-size:44px;font-weight:800;color:${t.ink}77;align-self:center}
+
   /* 对比页（两栏） */
   .cmp{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:38px;margin-top:30px;margin-bottom:8px;align-content:stretch;grid-auto-rows:1fr}
   .cmp .col{border:1px solid #e2e5ec;border-radius:14px;padding:32px 30px;display:flex;flex-direction:column;gap:16px}
@@ -1488,7 +1561,7 @@ function css(t: DeckTheme): string {
   .closing h1{font-size:58px;font-weight:800;color:${t.primary}}
   .closing .tick{width:96px;height:6px;background:${t.accent}}
   .closing .sub{font-size:17px;color:#8a8a8a;line-height:1.5}
-  .closing.dangzheng,.closing.ink{background:${t.paper}}
+  .closing.dangzheng,.closing.ink,.closing.cartoon{background:${t.paper}}
 
   /* ══ 几何风（style:geo）——白底 + 同心圆弧/圆点圈/环形进度 ══ */
   .geo-d{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden}
@@ -1826,6 +1899,7 @@ const isGeo = (o: DeckOutline) => o.theme.style === 'geo'
 const isLiti = (o: DeckOutline) => o.theme.style === 'liti'
 const isDangzheng = (o: DeckOutline) => o.theme.style === 'dangzheng'
 const isInk = (o: DeckOutline) => o.theme.style === 'ink'
+const isCartoon = (o: DeckOutline) => o.theme.style === 'cartoon'
 
 /** 水墨山水剪影——三层远近山影叠加（远山淡、近山浓），固定构图不做参数化变体，
  * 跟 arcCluster/rayBurst 这些 geo 母题一样是手绘一份、全篇复用，不是每页都要不一样。
@@ -1851,6 +1925,20 @@ function sealStamp(color: string, size = 92): string {
   </svg>`
 }
 
+/** 卡通课件风格：底部波浪草地剪影 + 小花点缀——固定构图不做参数化变体，跟 inkMountains 同一套
+ * "横幅比例、preserveAspectRatio=none 压扁复用"写法，封面/章节/结束页用原比例，内容页页脚
+ * 传一个小很多的 h 压成一条装饰带。抽象几何剪影，不画具体人物/角色，跟 geo/liti/ink 的
+ * 装饰母题保持同一个克制尺度——写实的卡通人物插画交给 AI 背景图去画，这里只管边框氛围。 */
+function grassBorder(green: string, flower: string, w = 1280, h?: number): string {
+  const hh = h ?? 130
+  const flowers = [0.1, 0.26, 0.46, 0.64, 0.82, 0.95]
+    .map((p, i) => `<circle cx="${(p * w).toFixed(0)}" cy="${(hh * (i % 2 ? 0.16 : 0.24)).toFixed(0)}" r="${i % 2 ? 8 : 6}" fill="${flower}"/>`)
+    .join('')
+  return `<svg viewBox="0 0 ${w} ${hh}" width="${w}" height="${hh}" preserveAspectRatio="none">
+    <path d="M0,${(hh * 0.5).toFixed(0)} C ${(w * 0.08).toFixed(0)},${(hh * 0.28).toFixed(0)} ${(w * 0.17).toFixed(0)},${(hh * 0.66).toFixed(0)} ${(w * 0.29).toFixed(0)},${(hh * 0.38).toFixed(0)} C ${(w * 0.41).toFixed(0)},${(hh * 0.1).toFixed(0)} ${(w * 0.51).toFixed(0)},${(hh * 0.58).toFixed(0)} ${(w * 0.64).toFixed(0)},${(hh * 0.33).toFixed(0)} C ${(w * 0.77).toFixed(0)},${(hh * 0.09).toFixed(0)} ${(w * 0.87).toFixed(0)},${(hh * 0.48).toFixed(0)} ${w},${(hh * 0.28).toFixed(0)} L ${w},${hh} L 0,${hh} Z" fill="${green}"/>
+    ${flowers}
+  </svg>`
+}
 /** 五角星 SVG（党政红金母题）——只是个通用几何符号，不是任何机构徽标，
  * 纯装饰用途（角标/分隔符），不代表任何具体组织。外圈 5 个尖角 + 内圈 5 个凹点，
  * 交替连接才是"星形"，只连外圈 5 点画出来的是五边形，不是星。 */
@@ -1988,7 +2076,10 @@ function cover(o: DeckOutline): string {
   const li = isLiti(o)
   const dz = isDangzheng(o)
   const ink = isInk(o)
-  const cls = (b ? 's-cover on-bg' : pic ? 's-cover has-pic' : 's-cover') + (li ? ' liti' : dz ? ' dangzheng' : ink ? ' ink' : '')
+  const ct = isCartoon(o)
+  const cls =
+    (b ? 's-cover on-bg' : pic ? 's-cover has-pic' : 's-cover') +
+    (li ? ' liti' : dz ? ' dangzheng' : ink ? ' ink' : ct ? ' cartoon' : '')
   const deco =
     !b && !pic
       ? li
@@ -1997,7 +2088,9 @@ function cover(o: DeckOutline): string {
           ? `<div class="dzglow"></div><div class="dzs1">${starBadge(o.theme.accent, 200, 0.1)}</div><div class="dzs2">${starBadge(o.theme.accent, 90, 0.16)}</div>`
           : ink
             ? `<div class="inkmt">${inkMountains(`${o.theme.accent}22`, `${o.theme.primary}3d`, `${o.theme.primaryDk}66`, 1280)}</div><div class="inkseal">${sealStamp(o.theme.accent, 90)}</div>`
-            : `<div class="cn3"></div><div class="cn1"></div><div class="cn2"></div><div class="br1"></div><div class="br2"></div>`
+            : ct
+              ? `<div class="cartgrass">${grassBorder(o.theme.primaryDk, o.theme.accent, 1280)}</div>`
+              : `<div class="cn3"></div><div class="cn1"></div><div class="cn2"></div><div class="br1"></div><div class="br2"></div>`
       : ''
   // 党政红金：不管有没有 AI 背景图，标题区都加一排小金星替代普通色块短线——
   // 这是"党政"这个视觉体系最容易辨识的符号，纯色块换成红金配色反而认不出来是这个体系。
@@ -2035,7 +2128,7 @@ function toc(o: DeckOutline): string {
         `<div class="it"><span class="tocic">${icon(pickIcon(s.heading, i), 22)}</span><span class="no">${pad2(i + 1)}</span><span class="h">${esc(s.heading)}</span></div>`,
     )
     .join('')
-  const skin = isGeo(o) ? ' geo' : isLiti(o) ? ' liti' : isDangzheng(o) ? ' dangzheng' : isInk(o) ? ' ink' : ''
+  const skin = isGeo(o) ? ' geo' : isLiti(o) ? ' liti' : isDangzheng(o) ? ' dangzheng' : isInk(o) ? ' ink' : isCartoon(o) ? ' cartoon' : ''
   return `<div class="slide s-toc${skin}">${cbg(o)}<div class="z">
     <h2>目录</h2><div class="en">CONTENTS</div><div class="tick"></div>
     <div class="grid ${two ? 'two' : ''}">${li}</div></div></div>`
@@ -2046,11 +2139,13 @@ function section(s: DeckSection, idx: number, total: number, o: DeckOutline): st
   const withBg = !!o.bg?.section
   const dz = isDangzheng(o)
   const ink = isInk(o)
-  return `<div class="slide s-sec${dz ? ' dangzheng' : ink ? ' ink' : ''}">${bgImg(o.bg?.section)}
+  const ct = isCartoon(o)
+  return `<div class="slide s-sec${dz ? ' dangzheng' : ink ? ' ink' : ct ? ' cartoon' : ''}">${bgImg(o.bg?.section)}
     ${withBg ? '<div class="scrim"></div><div class="sbar"></div>' : '<div class="blk"></div><div class="sbar"></div>'}
     <div class="big">${pad2(idx)}</div>
     ${heroImg(o.heroImage)}
     ${ink && !withBg ? `<div class="inkmt s">${inkMountains(`${o.theme.accent}22`, `${o.theme.primary}30`, `${o.theme.primaryDk}55`, 760)}</div>` : ''}
+    ${ct && !withBg ? `<div class="cartgrass s">${grassBorder(o.theme.primaryDk, o.theme.accent, 760, 90)}</div>` : ''}
     <div class="box">
       ${dz ? `<div class="dzstars">${starBadge(o.theme.accent, 14)}${starBadge(o.theme.accent, 14)}${starBadge(o.theme.accent, 14)}</div>` : ''}
       <div class="part">PART ${pad2(idx)}</div>
@@ -2083,6 +2178,8 @@ const cbg = (o: DeckOutline) => {
   if (isLiti(o)) return `<div class="lbg"><div class="lb1"></div><div class="lb2"></div></div>`
   // 水墨中国风：科技角标的虚线短横是"科技"母题，跟水墨山水完全不搭，换成页脚一条淡淡远山剪影
   if (isInk(o)) return `<div class="inkmt c">${inkMountains(`${o.theme.accent}18`, `${o.theme.primary}28`, `${o.theme.primaryDk}40`, 1280, 70)}</div>`
+  // 卡通课件风：科技角标的虚线短横太"商务科技"，换成页脚一条淡淡草地装饰带；有 AI 底图时不叠加
+  if (isCartoon(o)) return o.bg?.content ? `${bgImg(o.bg.content)}<div class="cwash"></div>` : `<div class="cartgrass c">${grassBorder(`${o.theme.primaryDk}55`, `${o.theme.accent}77`, 1280, 60)}</div>`
   return (
     (o.bg?.content
       ? `${bgImg(o.bg.content)}<div class="cwash"></div>`
@@ -2091,7 +2188,7 @@ const cbg = (o: DeckOutline) => {
 }
 const bodySlide = (o: DeckOutline, inner: string) => {
   const dz = isGeo(o) && o.style_hint?.density === 'packed' ? ' d-packed' : isGeo(o) && o.style_hint?.density === 'airy' ? ' d-airy' : ''
-  const skin = isGeo(o) ? ' geo' : isLiti(o) ? ' liti' : isDangzheng(o) ? ' dangzheng' : isInk(o) ? ' ink' : ''
+  const skin = isGeo(o) ? ' geo' : isLiti(o) ? ' liti' : isDangzheng(o) ? ' dangzheng' : isInk(o) ? ' ink' : isCartoon(o) ? ' cartoon' : ''
   const html = `<div class="slide body${skin}${dz}">${cbg(o)}<div class="z">${inner}</div></div>`
   if (isGeo(o)) _geoIdx++
   return html
@@ -2382,16 +2479,19 @@ function swot(sl: DeckSlideIn, en: string, o: DeckOutline): string {
 function closing(o: DeckOutline): string {
   const dz = isDangzheng(o)
   const ink = isInk(o)
+  const ct = isCartoon(o)
   const deco = isGeo(o)
     ? `<div class="ga" style="position:absolute;right:-160px;bottom:-180px">${arcCluster(o.theme, 520)}</div>`
     : dz && !o.bg?.content
       ? `<div class="dzs2" style="right:-40px;bottom:-40px">${starBadge(o.theme.accent, 260, 0.14)}</div>`
       : ink && !o.bg?.content
         ? `<div class="inkmt">${inkMountains(`${o.theme.accent}22`, `${o.theme.primary}30`, `${o.theme.primaryDk}50`, 1280)}</div><div class="inkseal">${sealStamp(o.theme.accent, 80)}</div>`
-        : o.bg?.content
-          ? ''
-          : '<div class="cn s"></div><div class="cn"></div><div class="cn b"></div>'
-  return `<div class="slide closing${dz ? ' dangzheng' : ink ? ' ink' : ''}">${isGeo(o) ? '' : bgImg(o.bg?.content)}${deco}
+        : ct && !o.bg?.content
+          ? `<div class="cartgrass">${grassBorder(o.theme.primaryDk, o.theme.accent, 1280)}</div>`
+          : o.bg?.content
+            ? ''
+            : '<div class="cn s"></div><div class="cn"></div><div class="cn b"></div>'
+  return `<div class="slide closing${dz ? ' dangzheng' : ink ? ' ink' : ct ? ' cartoon' : ''}">${isGeo(o) ? '' : bgImg(o.bg?.content)}${deco}
     <div class="inner">
       ${dz ? `<div class="dzstars" style="justify-content:center">${starBadge(o.theme.accent, 16)}${starBadge(o.theme.accent, 16)}${starBadge(o.theme.accent, 16)}</div>` : ''}
       <div class="ty">THANK YOU</div><h1>感谢观看</h1><div class="tick"></div>
@@ -2434,6 +2534,7 @@ const CONTENT_LAYOUTS = new Set([
   'half_moon',
   'arrow_flank',
   'ring_tag',
+  'fraction',
 ])
 
 function spokeLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
@@ -2504,6 +2605,28 @@ function arrowFlankLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
   return bodySlide(o, `${head(sl, en, o)}${arrowFlank(items)}`)
 }
 
+/** 分数图：认识分数/同分母分数加减法——每一项 = 分数圆(精确扇形涂色) + 分数竖式(分子/分母/分数线)，
+ * 多项且给了 op 时按运算符连接、最后一项前插入"="（等式）；没给 op 就是纯并列对比展示。
+ * 运算符/等号也是 HTML div，不烧进背景位图，导出后一样可编辑。 */
+function fractionLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
+  const t = o.theme
+  const d = sl.data!
+  const items = (d.items || []).slice(0, 4)
+  const isEq = items.length >= 2 && !!d.op
+  const cells = items
+    .map((it, i) => {
+      const num = Math.max(0, Math.round(Number(it.value) || 0))
+      const den = Math.max(1, Math.round(Number(it.den) || 1))
+      const color = i % 2 ? t.accent : t.primary
+      const opBefore = i === 0 ? '' : isEq ? (i === items.length - 1 ? '=' : d.op!) : ''
+      const opHtml = opBefore ? `<div class="frop">${esc(opBefore)}</div>` : ''
+      const capHtml = it.label ? `<div class="frcap">${esc(short(it.label, 12))}</div>` : ''
+      return `${opHtml}<div class="fritem">${fractionWedge(t, num, den, color)}${fractionStack(num, den, color)}${capHtml}</div>`
+    })
+    .join('')
+  return bodySlide(o, `${head(sl, en, o)}<div class="frrow">${cells}</div>`)
+}
+
 /** 照片墙：2~3 张照片套几何图框 + 每张一句说明 */
 function galleryLayout(sl: DeckSlideIn, en: string, o: DeckOutline): string {
   const pics = (sl.images || []).filter(Boolean).slice(0, 3)
@@ -2537,6 +2660,12 @@ export function resolveLayout(sl: DeckSlideIn): string {
   )
     lay = ''
   if (lay === 'table' && !(sl.table?.columns?.length && sl.table?.rows?.length)) lay = ''
+  // fraction：至少 1 项，且每项分母必须一致（同分母才有精确可画的分数关系）
+  if (lay === 'fraction') {
+    const items = sl.data?.kind === 'fraction' ? sl.data.items : []
+    const dens = new Set((items || []).map((it) => it.den).filter((d) => d != null))
+    if (!items?.length || dens.size > 1) lay = ''
+  }
   // 节点类版式（spoke/hive/cycle/bulb/tree/diamond/hex_chain）的标签是贴在固定大小图形节点上的短语（10~16 字上限），
   // 渲染时会用 short() 硬截断超长文字防止撑破图形——LLM 有时不听话给成整句，截断就会悄悄丢掉后半句。
   // 与其截断丢内容，不如整页直接退回 list/cards（能装下完整句子），交给下面的兜底推断重新选版式。
@@ -2575,6 +2704,7 @@ export function resolveLayout(sl: DeckSlideIn): string {
   if (sl.data?.kind === 'waterfall' && sl.data.items?.length) return 'waterfall'
   if (sl.data?.kind === 'gauge' && sl.data.items?.length) return 'gauge'
   if (sl.data?.kind === 'mountain' && sl.data.items?.length) return 'mountain'
+  if (sl.data?.kind === 'fraction' && sl.data.items?.length) return 'fraction'
   if (sl.swot && (sl.swot.s?.length || sl.swot.w?.length || sl.swot.o?.length || sl.swot.t?.length))
     return 'swot'
   if (sl.matrix?.cells?.length) return 'matrix'
@@ -2623,6 +2753,7 @@ export function composeDeck(o: DeckOutline): { styleTag: string; slides: string[
       else if (lay === 'half_moon') html = halfMoonLayout(sl, en, o)
       else if (lay === 'arrow_flank') html = arrowFlankLayout(sl, en, o)
       else if (lay === 'ring_tag') html = ringTagLayout(sl, en, o)
+      else if (lay === 'fraction') html = fractionLayout(sl, en, o)
       else if (lay === 'table') html = tableLayout(sl, en, o)
       else if (
         lay === 'bar' || lay === 'stats' || lay === 'line' ||

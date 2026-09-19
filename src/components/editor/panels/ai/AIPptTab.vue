@@ -56,6 +56,7 @@ const THEMES = [
   { key: 'geoblue', label: '几何蓝' },
   { key: 'liti', label: '极简微立体' },
   { key: 'ink', label: '水墨中国风' },
+  { key: 'cartoon', label: '卡通课件' },
   { key: 'purple', label: '典雅紫' },
   { key: 'slate', label: '沉稳蓝灰' },
   { key: 'teal', label: '青碧' },
@@ -94,9 +95,12 @@ onMounted(mountPreviews)
 watch(THEME_PREVIEWS, () => nextTick(mountPreviews))
 const aiSource = ref<'topic' | 'material' | 'courseware'>('topic')
 
-// ── 教学课件（第一步：通用教学流程，复用现有引擎，不做卡通视觉/精确数学图形）──
-// 教材版本/学科/年级/学期/课题拼成一句 topic，外加一段固定的"教学环节"要求塞进 extra，
-// 复用 generateDeck 同一条链路，不需要新接口、新组件。
+// ── 教学课件 ──
+// 第一步（6e5f74e）：通用教学流程，复用现有引擎——教材版本/学科/年级/学期/课题拼成一句
+// topic，外加一段固定的"教学环节"要求塞进 extra，不需要新接口、新组件。
+// 第二步：手绘卡通视觉主题（style:'cartoon'，见 CARTOON_THEME_HINT）+ 精确数学图形
+//（layout:'fraction'，分数图，见 CW_EXTRA_FRACTION_NOTE）——本轮只做了数学分数图这一个学科，
+// 物理受力图/化学分子式这类同类缺口留到下一轮单独做。
 const CW_EDITIONS = ['人教版', '北师大版', '苏教版', '西师大版', '青岛版', '冀教版', '通用']
 const CW_SUBJECTS = ['语文', '数学', '英语', '物理', '化学', '生物', '历史', '地理', '道德与法治', '科学', '通用']
 const CW_GRADES = [
@@ -146,6 +150,17 @@ const CW_EXTRA_TEMPLATE =
   '7）作业布置：2~3 条课后作业，可以是课本习题+一条联系生活实际的实践性作业。\n' +
   '整体语言要有课堂讲解的语气（多用"我们来看看""想一想""你能自己试试吗"这类引导性表达），' +
   '不要写成书面说明文；例题和练习题的学科内容必须准确无误、数字必须算对，不能出现知识性错误。'
+/** cartoon 主题的风格提示——_gen_deck_outline() 拿不到 theme，mood/cover_image_prompt 完全是
+ * topic 内容驱动，不是主题风格驱动，光选中"卡通课件"色块不会让 AI 自动写出黑板绿+草地花边这种
+ * prompt，必须像行业 hint 一样塞进 extra 里。不管是不是课件模式，选了这个主题色块都拼上这段。 */
+const CARTOON_THEME_HINT =
+  '视觉风格：手绘卡通教学插画风格，黑板绿背景、草地花朵边框、卡通人物剪影，配色明快亲和，' +
+  '适合中小学课件场景，封面/章节页背景请往这个方向生成。'
+/** 数学分数类课题追加的一句提示——只在"课件模式+数学+课题带分数字样"时拼进 extra，
+ * 不污染 CW_EXTRA_TEMPLATE 本身（保持学科无关）和其它数学课题的 prompt。 */
+const CW_EXTRA_FRACTION_NOTE =
+  '本课涉及分数认识/分数加减法这类需要精确图示的内容时，例题精讲和课堂练习优先用 fraction ' +
+  '版式画精确的分数图（分数圆+分数竖式），不要只用文字描述分数关系。'
 const topic = ref('')
 const sections = ref(4)
 const theme = ref('auto')
@@ -291,9 +306,18 @@ async function genDeck() {
     const cwContextNote = useCourseware
       ? `资料背景：${cwEdition.value}${cwSubject.value}${cwGrade.value}${cwSemester.value}${cwSource.value === 'topic' ? `《${cwLesson.value.trim()}》` : ''}。`
       : ''
+    // 分数认识/分数加减法这类课题追加 fraction 版式提示——只在课件模式+数学+课题带"分数"
+    // 字样时拼进去，不污染其它学科/其它数学课题的 prompt
+    const cwFractionNote =
+      useCourseware && cwSubject.value === '数学' && /分数/.test(cwLesson.value) ? CW_EXTRA_FRACTION_NOTE : ''
+    // 选了"卡通课件"主题色块时追加视觉风格提示——theme 不会传进大纲生成 prompt，
+    // 不主动拼这段的话 AI 写出的 cover_image_prompt 跟选别的颜色没区别
+    const cartoonNote = theme.value === 'cartoon' ? CARTOON_THEME_HINT : ''
     const effExtra = useCourseware
-      ? [cwContextNote, CW_EXTRA_TEMPLATE, cwSourceNote, extra.value.trim()].filter(Boolean).join('；')
-      : [industryPreset?.hint, extra.value.trim()].filter(Boolean).join('；')
+      ? [cwContextNote, CW_EXTRA_TEMPLATE, cwFractionNote, cwSourceNote, cartoonNote, extra.value.trim()]
+          .filter(Boolean)
+          .join('；')
+      : [industryPreset?.hint, cartoonNote, extra.value.trim()].filter(Boolean).join('；')
     const effTopic = useCourseware
       ? `${cwEdition.value}${cwSubject.value}${cwGrade.value}${cwSemester.value}《${cwLesson.value.trim()}》教学课件`
       : topic.value.trim()

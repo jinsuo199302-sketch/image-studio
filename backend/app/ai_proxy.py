@@ -919,10 +919,20 @@ _DECK_JSON_SPEC = (
     "填 bullets(2~4 条,每条一句话,方框内文字区域较宽松,可以正常换行)\n"
     '- "ring_tag"：2~3 个关键百分比指标,想要"环形数据图下面挂一张标签牌"的视觉(区别于 rings 的纯环形一排)。'
     '填 data:{"kind":"ring","items":[{"label":"标签","value":75}]}(value 是 0~100 的数,2~3 项,3 项时中间一项会自动放大突出)\n'
+    '- "fraction"：分数认识/同分母分数加减法这类需要精确图示的数学内容(比如"几分之几是多少"、'
+    "同分母分数加法/减法计算)，想要精确的分数圆形阴影图+分数竖式视觉，不是靠文字描述分数关系。"
+    "选了这个 layout 就必须填 data 字段，不填 bullets(留空数组即可)——这是数字型版式,跟"
+    'spoke/hive 那类短语 bullets 版式不是一回事。填 data:{"kind":"fraction","op":"+","items":['
+    '{"label":"哥哥吃的","value":2,"den":8},{"label":"弟弟吃的","value":1,"den":8},'
+    '{"label":"","value":3,"den":8}]}'
+    "(所有 items 的 den 分母必须一致；op 是 \"+\" 或 \"-\"，只有并列对比展示、不涉及运算时不填 op；"
+    "2~4 项；最后一项通常是运算结果，label 可以留空；数字必须和标题/上下文描述的场景吻合，不能瞎编；"
+    "选了 fraction 但没填 data.items 这一页会直接失效，宁可不选这个版式也不能选了不填数据)\n"
     "cover / section_divider / closing 由系统自动排,不用你选。\n"
     "分布要求:同一份大纲里 layout 至少出现 4 种以上,不要每页都是 cards;"
-    "compare/matrix/swot/big_number/spoke/hive/cycle/tree/diamond/bulb/line/table/radar/waterfall/gauge/hex_chain/pinwheel/mountain/circle_chain/serpentine/half_moon/arrow_flank/ring_tag 各最多 1~2 页,只在真契合时用；"
-    "table/line/radar/waterfall/gauge/mountain 涉及具体数字/结构化对比,内容里有靠谱数据支撑才用,别为了凑版式种类编数字。\n"
+    "compare/matrix/swot/big_number/spoke/hive/cycle/tree/diamond/bulb/line/table/radar/waterfall/gauge/hex_chain/pinwheel/mountain/circle_chain/serpentine/half_moon/arrow_flank/ring_tag/fraction 各最多 1~2 页,只在真契合时用；"
+    "table/line/radar/waterfall/gauge/mountain 涉及具体数字/结构化对比,内容里有靠谱数据支撑才用,别为了凑版式种类编数字；"
+    "fraction 只在内容真的是分数认识/分数计算这类数学题材时用,不要给非数学内容硬凑。\n"
     "版式要跟文字量倒着推,不是先选版式再硬塞文字进去:节点类版式(spoke/hive/tree/diamond/bulb/hex_chain/circle_chain/serpentine)的标签贴在固定大小的图形节点上,"
     "只能放几个字到十几个字的短语,一旦塞进整句话要么被截断丢字、要么系统直接把这页退回 list/cards 重排——内容本来就是完整长句就别选这些;"
     "cards/list 每条要点有独立的文字区域,能装完整句子甚至一小段话,内容多、句子长就应该选它们；"
@@ -1041,7 +1051,59 @@ async def _gen_deck_outline(
         assert isinstance(data.get("sections"), list) and data["sections"]
     except Exception:
         raise HTTPException(status_code=502, detail="大纲解析失败，请重试")
+    _backfill_fraction_data(data)
     return data
+
+
+_FRACTION_RE = re.compile(r"(\d+)\s*/\s*(\d+)")
+
+
+def _backfill_fraction_data(data: dict) -> None:
+    """真实测试踩到的坑：模型经常选中 layout:"fraction"（语义判断对了，intro/speaker_notes 里
+    也老老实实写出"2/5 + 1/5 = ?"这类等式），但结构化的 data.items 字段却漏填——这是"模型选对了
+    版式名字、结构化字段不老实按格式填"这一类通病，跟项目里页码回填/透明背景同一个坑，光靠强化
+    prompt 措辞治标不治本，只能靠确定性代码从已经写出来的文本里兜底抽取，抽不出来就把这页的
+    layout 清空、交给 resolveLayout 自己按 bullets/intro 重新推断，不留一个"选了 fraction 但
+    没有数据画不出图"的半吊子状态。"""
+    for sec in data.get("sections") or []:
+        for sl in sec.get("slides") or []:
+            if not isinstance(sl, dict) or sl.get("layout") != "fraction":
+                continue
+            d = sl.get("data")
+            items = d.get("items") if isinstance(d, dict) else None
+            dens = {it.get("den") for it in items} if items else set()
+            if items and len(dens) == 1 and all(isinstance(it.get("value"), (int, float)) for it in items):
+                continue  # 这次老实填了，不用兜底
+            # 只看 intro/title（简短、大概率是"2/5 + 1/5 = ?"这种规整算式写法），不看 speaker_notes——
+            # 演讲稿是口语化叙述，同一个分数经常重复提好几遍（"2/5加上1/5...结果是3/5"），拿去数第几个
+            # 匹配当"结果"极不可靠；算式结果本来就能从前两个分数+运算符自己精确算出来，没必要冒险信文本
+            text = " ".join(str(sl.get(k) or "") for k in ("intro", "title"))
+            matches = list(_FRACTION_RE.finditer(text))
+            if not matches:
+                sl["layout"] = ""  # 抽不出任何分数，交给 resolveLayout 按 bullets/intro 兜底重排
+                continue
+            den0 = int(matches[0].group(2))
+            same = [(int(mm.group(1)), mm.end(), mm.start()) for mm in matches if int(mm.group(2)) == den0]
+            if not same or any(num > den0 for num, _, _ in same):
+                sl["layout"] = ""
+                continue
+            if len(same) == 1:
+                sl["data"] = {"kind": "fraction", "items": [{"label": "", "value": same[0][0], "den": den0}]}
+            else:
+                a, a_end, _ = same[0]
+                b, _, b_start = same[1]
+                between = text[a_end:b_start]
+                op = "-" if ("-" in between or "减" in between) else "+"
+                result = max(0, min(den0, a - b if op == "-" else a + b))  # 结果永远自己算,不信文本里第三个匹配
+                sl["data"] = {
+                    "kind": "fraction",
+                    "op": op,
+                    "items": [
+                        {"label": "", "value": a, "den": den0},
+                        {"label": "", "value": b, "den": den0},
+                        {"label": "", "value": result, "den": den0},
+                    ],
+                }
 
 
 # 封面/章节页整张设计图（对标优品PPT那种成品封面）——图里的安全与画质约束

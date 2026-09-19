@@ -18,6 +18,9 @@ export const THEME_FALLBACK_PALETTES: Record<string, string[]> = {
   /** 水墨中国风：primary=淡墨青蓝，accent=朱红印泥色，paper=米黄宣纸，标题走 Long Cang
    * 手写体（项目已通过 jsdelivr 加载，见 index.html） */
   ink: ['#3d5a6c', '#a8342c', '#22333f', '#f3ead8', '#241f1a'],
+  /** 手绘卡通课件风：primary=黑板粉笔绿，accent=天蓝点缀（复习导入类小标签常用色），
+   * paper=暖白纸感，标题走已加载的站酷快乐体（见 index.html） */
+  cartoon: ['#3c9d6b', '#4fb6e8', '#1d4b37', '#fffdf5', '#3a3a3a'],
 }
 /** 主题 key → DeckTheme.style 的映射：命中的 key 会走各自专属的背景/卡片/封面装饰
  * （不用 AI 整页大图），没命中的一律是 'plain'（AI 图或代码淡纹通用底）。
@@ -29,6 +32,7 @@ export const STYLE_BY_THEME_KEY: Record<string, string> = {
   liti: 'liti',
   dangzheng: 'dangzheng',
   ink: 'ink',
+  cartoon: 'cartoon',
 }
 /** @deprecated 只保留给还没来得及切换到 STYLE_BY_THEME_KEY 的旧引用用，新代码别用这个 */
 export const GEO_THEME_KEYS = new Set(['geoblue'])
