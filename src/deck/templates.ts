@@ -1671,6 +1671,50 @@ function css(t: DeckTheme): string {
     background:${t.paper};box-shadow:14px 14px 30px rgba(0,0,0,.06),-12px -12px 26px rgba(255,255,255,.85)}
   .lbg .lb2{position:absolute;left:54px;bottom:48px;width:64px;height:64px;border-radius:50%;
     background:${t.paper};box-shadow:inset 5px 5px 10px rgba(0,0,0,.08),inset -5px -5px 10px rgba(255,255,255,.8)}
+
+  /* liti 卡片错落：用 transform 不用 margin——margin 会改变 grid 该行的实际占用高度，
+     4/6 张卡片两行布局时偶数张卡片下移会把行高一起撑高，露出难看的空隙；transform
+     只挪动视觉位置不参与布局计算，兄弟卡片的行高完全不受影响，纯视觉"错落感"。 */
+  .liti .cards .card:nth-child(2n){transform:translateY(16px)}
+  .liti .row:nth-child(2n){margin-left:30px}
+  .liti .row:nth-child(2n+1){margin-right:30px}
+
+  /* 党政红金"编号文件条"：POINT 序号放大成衬线体金色大数字+金线，图标退成小号点缀，
+     像官方文件"第一条/第二条"的条目排版，不是通用信息卡片。 */
+  .dangzheng .cards .card .hd{align-items:baseline;gap:14px;border-bottom:1px solid ${t.accent}55;padding-bottom:12px;margin-bottom:8px;align-self:stretch}
+  .dangzheng .cards .card .num{font-size:32px;font-weight:800;font-family:"Noto Serif SC","Microsoft YaHei",serif;letter-spacing:0;color:${t.accent}}
+  .dangzheng .cards .card .ic{width:26px;height:26px;opacity:.65}
+  /* 清单加一条贯穿的竖向金线把序号连成一条线，序号从方块改成描边圆圈，"会议纪要"条目感；
+     图标徽标在这个构图里退场，圆圈本身就是唯一的行首标记，避免圆圈+图标两个标记并排显得杂乱 */
+  /* 本来想在圆圈之间加一条贯穿竖线做"会议纪要连接感"，试了才发现行不通：.row 用
+     align-items:center 让圆圈垂直居中，每行文字长度不同、是否换行都会撑高各行的实际高度，
+     纯 CSS 没法在不知道下一行实际高度的情况下把线段精确接到下一个圆心——只有 1 条清单时
+     线还会戳出一截孤零零的竖线，明显违和。索性不做连线，金色描边圆圈本身已经比原来的
+     小方块数字更有"编号条目"的识别度，不需要非连成一条线不可。 */
+  .dangzheng .list{padding-left:8px}
+  .dangzheng .row{padding-left:0;gap:16px}
+  .dangzheng .row .ic{display:none}
+  .dangzheng .row .n{width:30px;height:30px;border-radius:50%;border:2px solid ${t.accent};color:${t.accent};
+    background:${t.paper};display:flex;align-items:center;justify-content:center;font-size:13px;flex:none}
+
+  /* 水墨中国风"屏风分栏"：卡片去掉独立描边/投影，只留一条细墨线分隔，连成一片像折叠屏风的隔断，
+     不是一张张独立浮起的卡片——inline clip-path/border-radius 是 parametricBoxStyle 贴的 inline
+     style，优先级高于普通 CSS 规则，必须用 !important 才盖得掉，这里是有意为之的例外，不是滥用：
+     屏风分栏概念要求四四方方的平整隔断，跟参数化斜切角天然冲突，两者不能共存 */
+  .ink .cards{gap:0}
+  .ink .cards .card{border:0!important;border-radius:0!important;clip-path:none!important;
+    background:transparent;filter:none;box-shadow:none;position:relative;padding:20px 28px}
+  .ink .cards .card:nth-child(even){background:transparent}
+  .ink .cards .card:not(:last-child)::after{content:"";position:absolute;right:0;top:12%;bottom:12%;width:1px;background:${t.primary}38}
+  /* 清单放宽留白、去掉序号方块+图标换成一个极简墨点，左侧一条细竖线当"卷轴页边" */
+  .ink .list{gap:22px;padding-left:22px;position:relative}
+  .ink .list::before{content:"";position:absolute;left:0;top:4px;bottom:4px;width:1px;background:${t.primary}30}
+  .ink .row{border:0!important;border-radius:0!important;clip-path:none!important;
+    background:transparent!important;filter:none;box-shadow:none;padding:4px 0;position:relative}
+  .ink .row .ic,.ink .row .n{display:none}
+  .ink .row::before{content:"";position:absolute;left:-18px;top:50%;transform:translateY(-50%);
+    width:7px;height:7px;border-radius:50%;background:${t.accent}}
+
   /* geo 风指标页：环形饼图 */
   .donuts{flex:1;display:flex;align-items:center;justify-content:space-evenly;margin-top:16px;gap:20px}
   .donuts .dn{position:relative;display:flex;flex-direction:column;align-items:center;text-align:center}
@@ -2047,7 +2091,7 @@ const cbg = (o: DeckOutline) => {
 }
 const bodySlide = (o: DeckOutline, inner: string) => {
   const dz = isGeo(o) && o.style_hint?.density === 'packed' ? ' d-packed' : isGeo(o) && o.style_hint?.density === 'airy' ? ' d-airy' : ''
-  const skin = isGeo(o) ? ' geo' : isLiti(o) ? ' liti' : isInk(o) ? ' ink' : ''
+  const skin = isGeo(o) ? ' geo' : isLiti(o) ? ' liti' : isDangzheng(o) ? ' dangzheng' : isInk(o) ? ' ink' : ''
   const html = `<div class="slide body${skin}${dz}">${cbg(o)}<div class="z">${inner}</div></div>`
   if (isGeo(o)) _geoIdx++
   return html
